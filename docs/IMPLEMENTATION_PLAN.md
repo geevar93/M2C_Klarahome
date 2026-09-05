@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** DRAFT — awaiting client sign-off
-> **Last updated:** 2026-09-05
+> **Status:** APPROVED — in execution (Step 1)
+> **Last updated:** 2026-09-05 (Step 1)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -81,8 +81,8 @@ describes *what* to build; this document describes *when* and *in what order*, a
 
 | # | Step | Phase | Status | Completed On | Notes |
 |---|---|---|---|---|---|
-| 0 | Specification review & sign-off | — | ⬜ NOT STARTED | | Awaiting User review of all `docs/` |
-| 1 | Repository & monorepo scaffolding | A | ⬜ NOT STARTED | | |
+| 0 | Specification review & sign-off | — | ✅ DONE | 2026-09-05 | Approved by User: "Proceed with the implementation" |
+| 1 | Repository & monorepo scaffolding | A | ⛔ BLOCKED | partial 2026-09-05 | 6 of 7 deliverables done. **Nx/Angular workspace blocked: Node v20.12.2 < Angular's required ^22.22.3** |
 | 2 | Local containerised dev environment | A | ⬜ NOT STARTED | | |
 | 3 | Backend solution skeleton & cross-cutting concerns | A | ⬜ NOT STARTED | | |
 | 4 | Database foundation, EF Core & migration pipeline | A | ⬜ NOT STARTED | | |
@@ -135,7 +135,14 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
     email provider, logistics aggregator, domain, VPS).
 - **Acceptance criteria:** User states the specification is approved (or approved with the
   recorded amendments applied).
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.** User approved the specification set with
+  "Proceed with the implementation" — no amendments requested. Docs `01`–`10` accepted as
+  written.
+  **Carried forward as an open risk:** the third-party account list
+  (`08-integrations.md` §7) is still empty. Razorpay, logistics aggregator, SMS/DLT, email,
+  VPS and domain accounts remain unprovisioned. This does not block Steps 1–14, but
+  **Step 15 (Payments) cannot start without Razorpay sandbox credentials**, and Step 16
+  without logistics credentials. Flagged again here so it is not discovered late.
 
 ---
 
@@ -154,7 +161,65 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Commit message convention (Conventional Commits) + PR template.
 - **Acceptance criteria:** `git log` shows an initial commit; folder tree matches the spec;
   `dotnet --version` and `npx nx --version` both resolve from the repo.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ⛔ **BLOCKED — 6 of 7 deliverables complete (2026-09-05).**
+
+  **Delivered** — commit `a61acf9` on `main`, 61 files, working tree clean:
+  - Git repository initialised (`main`). Branch strategy documented in `CONTRIBUTING.md`.
+  - Repository tree created per `01-architecture.md` §4.1 and §8: `src/backend`
+    (`host/` × 3, `shared/` × 3, `modules/` × 17, `tests/` × 4), `src/frontend/{apps,libs}`,
+    `infra/{docker,compose,traefik,observability,scripts}`, `tools/`, `.github/workflows/`,
+    `docs/adr/`. Empty directories tracked via `.gitkeep`.
+  - `global.json` pinning SDK **10.0.203**, `rollForward: latestFeature`. Verified:
+    `dotnet --version` → `10.0.203` from the repo root.
+  - `src/backend/Directory.Build.props` — `net10.0`, nullable, implicit usings, NET analyzers
+    at `latest-recommended`, `EnforceCodeStyleInBuild`, deterministic builds, lock files.
+    `TreatWarningsAsErrors` is conditioned on `ContinuousIntegrationBuild` so analyzers are
+    errors in CI (Step 5) without blocking local development.
+  - `src/backend/Directory.Packages.props` — central package management enabled with
+    transitive pinning. **Deliberately no speculative version pins**: entries are added when a
+    package is first genuinely needed and its version verified against the feed. The
+    MediatR/AutoMapper licensing guard from ADR-009 is written into the file itself, where it
+    will actually be seen.
+  - `.editorconfig` (88 lines) encoding the C# conventions the architecture assumes:
+    file-scoped namespaces as an error, `_camelCase` private fields, `Async` suffix rule,
+    accessibility modifiers required.
+  - `.gitignore` with secrets listed **first** (`.env*`, `*.pfx`, `*.key`, `*.pem`,
+    `appsettings.Local.json`), plus .NET, Node/Angular/Nx, Docker and IDE sections.
+  - `.gitattributes` — LF normalisation, binary declarations, generated API client marked
+    `linguist-generated` so it stays out of diffs and language stats.
+  - Conventional Commits enforced by `.githooks/commit-msg`, a **POSIX shell hook with no Node
+    dependency** (deliberate: husky/commitlint would have been unusable given the Node
+    blocker below). Verified against three cases — invalid subject rejected, valid accepted,
+    `!` without a `BREAKING CHANGE:` footer rejected — and it validated the initial commit.
+    Enabled per clone with `git config core.hooksPath .githooks`.
+  - `.gitmessage` commit template wired via `git config commit.template`.
+  - `CONTRIBUTING.md` — step protocol restated first, branch strategy, commit convention with
+    the module scope list, code conventions per stack, secrets policy.
+  - `.github/pull_request_template.md` whose checklist **is** the Definition of Done from
+    `09-nfr-testing-observability.md` §2.4, plus an explicit scope check against step creep.
+  - Root `README.md` with layout, prerequisites (actual verified versions) and next steps.
+
+  **⛔ Blocker — Nx/Angular workspace not generated.**
+  `@angular/core` currently requires Node `^22.22.3 || ^24.15.0 || >=26.0.0`; this machine has
+  **Node v20.12.2**. Running `create-nx-workspace` would either fail mid-install or silently
+  pin an outdated Angular, contradicting `05-frontend-architecture.md` §2 (standalone, signals,
+  zoneless, modern SSR). No install was attempted, so the tree is clean rather than
+  half-provisioned. `src/frontend/apps` and `libs` exist as placeholders so the tree matches
+  the spec, and `src/frontend/README.md` records the blocker, the fix, and the exact structure
+  and Nx boundary tags to generate.
+
+  **Acceptance criteria status:** `git log` initial commit ✅ · folder tree matches spec ✅ ·
+  `dotnet --version` resolves ✅ · `npx nx --version` resolves ❌ (blocked).
+
+  **Resolution required from the User** — one of:
+  1. Upgrade to Node 22 LTS (`nvm install 22.22.3`), after which the workspace is generated
+     and Step 1 closes. **Recommended**; ~10 minutes.
+  2. Authorise proceeding to Step 2 with Step 1 left open. Steps 2–21 are backend and
+     infrastructure only and do not need Node; the workspace is not actually required until
+     **Step 22**. Low risk, but Step 1 stays `⛔ BLOCKED` until closed.
+
+  Environment verified at this step: .NET SDK 10.0.203, Git 2.46.1, Docker 29.4.0,
+  Node v20.12.2 (insufficient), npm 10.5.0.
 
 ---
 
@@ -759,7 +824,10 @@ with the User at the step boundary. Do not act on these items without explicit a
 
 | Date | Raised during | Item | Decision |
 |---|---|---|---|
-| | | | |
+| 2026-09-05 | Step 1 | **Node.js v20.12.2 is below Angular's supported range** (`^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0`). Blocks Nx/Angular workspace generation. | ⏳ Awaiting User: upgrade Node now, or defer the workspace (not needed until Step 22) |
+| 2026-09-05 | Step 1 | Legacy .NET SDKs 2.1.526 and 8.0.200 are also installed on this machine. Harmless — `global.json` pins 10.0.203 — but worth knowing if a build ever resolves unexpectedly. | ℹ️ No action; recorded for diagnostics |
+| 2026-09-05 | Step 1 | `NODE_OPTIONS` carries a VS Code JS-debugger bootloader, which attaches a debugger to every `node`/`npm` invocation and pollutes stdout. | ℹ️ No action now; **must be cleared in CI** (Step 5) so it cannot corrupt scripted npm output |
+| 2026-09-05 | Step 1 | Third-party accounts from `08-integrations.md` §7 are still unprovisioned. | ⏳ Not blocking until **Step 15** (Razorpay) / **Step 16** (logistics) |
 
 ---
 
@@ -768,6 +836,8 @@ with the User at the step boundary. Do not act on these items without explicit a
 | Date | Step | Document(s) changed | Reason | Approved by |
 |---|---|---|---|---|
 | 2026-09-05 | — | All | Initial specification set created | Pending |
+| 2026-09-05 | 0 | — | Specification approved by User; no amendments | User |
+| 2026-09-05 | 1 | `IMPLEMENTATION_PLAN.md` | Step 0 closed; Step 1 recorded as BLOCKED with outcome notes and Parking Lot entries. No specification change | — |
 
 ---
 
