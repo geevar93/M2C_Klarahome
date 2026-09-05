@@ -42,12 +42,7 @@ export default [
             },
             {
               sourceTag: 'type:data-access',
-              onlyDependOnLibsWithTags: [
-                'type:data-access',
-                'type:data-access-api',
-                'type:domain',
-                'type:util',
-              ],
+              onlyDependOnLibsWithTags: ['type:data-access', 'type:data-access-api', 'type:domain', 'type:util'],
             },
             {
               sourceTag: 'type:data-access-api',

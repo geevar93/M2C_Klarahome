@@ -301,6 +301,22 @@ dotnet test --project tests/KlaraHome.IntegrationTests/KlaraHome.IntegrationTest
 
 With no Docker daemon they skip rather than fail.
 
+**Run the quality gates CI runs** — the same script CI calls, so a CI failure reproduces locally in
+seconds instead of by pushing another commit:
+
+```bash
+./tools/ci.sh                     # everything except the container images
+./tools/ci.sh format test         # the two a code change usually trips
+./tools/ci.sh package             # docker build of both images, then a Trivy scan
+./tools/ci.sh --skip-integration  # no Docker: skip those suites, coverage becomes advisory
+./tools/ci.ps1 -Stage format,test # Windows
+```
+
+The backend suites are run **as executables**, not through `dotnet test`, and each asserts a
+minimum test count — which is what makes the `Zero tests ran` problem in §7 impossible to mistake
+for a pass. Coverage must hold **70 %** line coverage over our own assemblies.
+Full detail: [`ci-pipeline.md`](ci-pipeline.md).
+
 **Start clean**
 
 ```bash
@@ -334,6 +350,11 @@ A reset drops the database, so run the migrator again before expecting the API t
 | Migrator exits 1 with `password authentication failed` | `.env` credentials differ from the ones the Postgres volume was initialised with | Credentials are only applied to an **empty** data directory: `dev reset`, then `up`, then migrate |
 | `The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions` | Retry-on-failure is enabled, so EF will not let you open a transaction it cannot re-run | Use `KlaraHomeDbContext.ExecuteInTransactionAsync(...)` instead of `BeginTransactionAsync`. It wraps the transaction in the execution strategy, which is the required order |
 | A query returns nothing though the rows are visible in `psql` | The global tenant and soft-delete filters | Expected. `IgnoreQueryFilters()` in a query, deliberately and locally, or check `tenant_id` and `deleted_at` on the row |
+| `dotnet format` reports thousands of `ENDOFLINE` errors, only on Windows | Stale CRLF in the working tree. `.gitattributes` normalises `*.cs` to LF in the repository, so a file written with CRLF and then committed is clean in git but still CRLF on disk | Re-checkout the files: `git ls-files -z '*.cs' \| xargs -0 rm -f && git checkout -- '*.cs'`. Verify with `dotnet format --verify-no-changes` |
+| `dotnet format` fails with `CHARSET` on a file under `Migrations/` | `dotnet ef` writes the migration with a UTF-8 BOM and the Designer/snapshot without one, and neither is configurable | Already handled: `.editorconfig` sets `charset = unset` for `**/Migrations/*.cs`. If it reappears, that section was lost |
+| Coverage numbers look wrong, and the log says `Coverage settings file is not a valid file` | `src/backend/coverage.settings.xml` is invalid XML, most often a `--` inside a comment, which XML forbids. The tool warns once and then measures with default filters | Fix the XML. Re-run with `--log-level Verbose --log-file <path>` and check that warning is gone |
+| npm or Nx output is interleaved with debugger chatter | `NODE_OPTIONS` carries the VS Code JS-debugger bootloader | `tools/ci.ps1` and the CI workflow clear it. In your own shell: `NODE_OPTIONS= npx ...` |
+| `tools/ci.sh` cannot find `ci.ps1`, showing a `/c/work/...` path | Git Bash handed a POSIX path to a native Windows `pwsh` | Already handled by `cygpath` in the wrapper. If it reappears, run `tools/ci.ps1` directly |
 
 ---
 

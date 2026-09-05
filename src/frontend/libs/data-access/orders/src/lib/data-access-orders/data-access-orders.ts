@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-data-access-orders',
   imports: [],
   templateUrl: './data-access-orders.html',
-  styleUrl: './data-access-orders.scss'
+  styleUrl: './data-access-orders.scss',
 })
 export class DataAccessOrders {}

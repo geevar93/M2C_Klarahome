@@ -7,7 +7,7 @@ describe('DataAccessCart', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DataAccessCart]
+      imports: [DataAccessCart],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataAccessCart);

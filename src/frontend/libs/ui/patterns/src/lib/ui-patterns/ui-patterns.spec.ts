@@ -7,7 +7,7 @@ describe('UiPatterns', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UiPatterns]
+      imports: [UiPatterns],
     }).compileComponents();
 
     fixture = TestBed.createComponent(UiPatterns);

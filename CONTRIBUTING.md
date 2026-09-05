@@ -77,6 +77,21 @@ git config core.hooksPath .githooks
 - At least one review. Anything touching money, stock, auth or personal data needs a reviewer
   who did not write it.
 
+**Run the gates before you push.** They are one script, and it is the same one CI calls, so there
+is no reason to learn a CI failure from a queue:
+
+```bash
+./tools/ci.sh                       # everything except the container images
+./tools/ci.sh format test           # the two a change usually trips
+./tools/ci.ps1 -Stage format,test   # Windows
+```
+
+What they enforce, and what to do when one fails:
+[`docs/ci-pipeline.md`](docs/ci-pipeline.md). The short version: zero analyzer warnings, formatted
+code, every suite passing **and reporting at least its expected number of tests**, ≥ 70 % line
+coverage, no ESLint or module-boundary violations, no high or critical dependency advisories, and
+no fixable high or critical CVE in either container image.
+
 **Definition of Done** for every change is in
 [`docs/09-nfr-testing-observability.md`](docs/09-nfr-testing-observability.md) §2.4.
 

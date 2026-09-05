@@ -7,7 +7,7 @@ describe('DataAccessApi', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DataAccessApi]
+      imports: [DataAccessApi],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataAccessApi);

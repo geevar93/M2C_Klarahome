@@ -4,16 +4,11 @@
   "sourceRoot": "libs/data-access/catalog/src",
   "prefix": "kh",
   "projectType": "library",
-  "tags": [
-    "type:data-access",
-    "scope:shared"
-  ],
+  "tags": ["type:data-access", "scope:shared"],
   "targets": {
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/{projectRoot}"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
       "options": {
         "jestConfig": "libs/data-access/catalog/jest.config.cts",
         "tsConfig": "libs/data-access/catalog/tsconfig.spec.json"

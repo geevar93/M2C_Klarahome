@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-data-access-content',
   imports: [],
   templateUrl: './data-access-content.html',
-  styleUrl: './data-access-content.scss'
+  styleUrl: './data-access-content.scss',
 })
 export class DataAccessContent {}

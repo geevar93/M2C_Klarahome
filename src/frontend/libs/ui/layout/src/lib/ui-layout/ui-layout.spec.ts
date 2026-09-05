@@ -7,7 +7,7 @@ describe('UiLayout', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UiLayout]
+      imports: [UiLayout],
     }).compileComponents();
 
     fixture = TestBed.createComponent(UiLayout);

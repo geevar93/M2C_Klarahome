@@ -7,7 +7,7 @@ describe('DataAccessContent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DataAccessContent]
+      imports: [DataAccessContent],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DataAccessContent);

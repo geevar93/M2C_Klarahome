@@ -1,0 +1,167 @@
+# =================================================================================================
+# Klara Home - dependency update automation (Step 5)
+# =================================================================================================
+# The "dependency update automation" deliverable of Step 5. Dependabot opens the pull requests; the
+# CI workflow decides whether they are safe, which is the only reason automated updates are
+# tolerable at all.
+#
+# Two shaping decisions, both deliberate:
+#
+#   1. WEEKLY, NOT DAILY, and grouped. A stream of one-package PRs is noise, and noise is how a
+#      genuinely important security update gets closed unread. One grouped PR per ecosystem per
+#      week is a review someone will actually do.
+#
+#   2. MAJOR VERSIONS ARE IGNORED for the framework families. Angular and .NET majors are migration
+#      projects with their own `nx migrate` / SDK story, not a dependency bump - Step 1 has the
+#      scars. They are done as deliberate work, not by merging a bot's PR.
+#
+# Security updates ignore the grouping and the schedule; GitHub raises those immediately and on
+# their own, which is what we want.
+# =================================================================================================
+
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------------------------
+  # Backend - NuGet, through central package management (src/backend/Directory.Packages.props).
+  # Dependabot edits the PackageVersion entries there, which is the single place versions live.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: nuget
+    directory: /src/backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels: [dependencies, backend]
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    groups:
+      # The Microsoft.* and Npgsql packages move together with the runtime; splitting them across
+      # PRs produces combinations that were never tested as a set.
+      dotnet-runtime:
+        patterns:
+          - 'Microsoft.AspNetCore.*'
+          - 'Microsoft.EntityFrameworkCore*'
+          - 'Microsoft.Extensions.*'
+          - 'Npgsql*'
+          - 'EFCore.*'
+        update-types: [minor, patch]
+      observability:
+        patterns:
+          - 'OpenTelemetry*'
+          - 'Serilog*'
+          - 'AspNetCore.HealthChecks.*'
+        update-types: [minor, patch]
+      testing:
+        patterns:
+          - 'xunit*'
+          - 'NSubstitute'
+          - 'NetArchTest.*'
+          - 'Testcontainers*'
+        update-types: [minor, patch]
+    ignore:
+      # A .NET major is an SDK migration; global.json pins the band and Step 29/31 owns the move.
+      - dependency-name: 'Microsoft.*'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'Npgsql*'
+        update-types: [version-update:semver-major]
+
+  # ---------------------------------------------------------------------------------------------
+  # Frontend - npm.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /src/frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    groups:
+      angular:
+        patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
+          - '@schematics/*'
+        update-types: [minor, patch]
+      nx:
+        patterns:
+          - 'nx'
+          - '@nx/*'
+        update-types: [minor, patch]
+      tooling:
+        patterns:
+          - 'eslint*'
+          - 'typescript-eslint'
+          - 'prettier'
+          - 'jest*'
+          - 'vitest'
+          - '@playwright/*'
+          - 'ts-jest'
+          - '@swc/*'
+        update-types: [minor, patch]
+    ignore:
+      # An Angular major is `ng update` plus a migration pass, and an Nx major reintroduces the
+      # generated AI-agent scaffolding Step 1 had to strip out (see the Parking Lot). Both are
+      # deliberate pieces of work.
+      - dependency-name: '@angular/*'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'nx'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@nx/*'
+        update-types: [version-update:semver-major]
+      # Pinned to the Node version the workspace targets; it moves when Node does, not on its own.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  # ---------------------------------------------------------------------------------------------
+  # The workflows themselves. A pinned action is a supply-chain dependency like any other, and an
+  # abandoned one is how a pipeline quietly stops enforcing what it claims to.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 3
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: 'ci(deps)'
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # ---------------------------------------------------------------------------------------------
+  # Base images. These carry the OS CVEs that Trivy reports, so they are the updates most likely to
+  # matter in practice.
+  # ---------------------------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directories:
+      - /infra/docker
+      - /infra/compose
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels: [dependencies, infra]
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    ignore:
+      # PostgreSQL and Redis majors are data migrations with their own runbook, not image bumps.
+      - dependency-name: 'postgres'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'redis'
+        update-types: [version-update:semver-major]

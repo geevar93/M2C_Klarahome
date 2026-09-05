@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-ui-patterns',
   imports: [],
   templateUrl: './ui-patterns.html',
-  styleUrl: './ui-patterns.scss'
+  styleUrl: './ui-patterns.scss',
 })
 export class UiPatterns {}

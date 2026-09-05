@@ -31,6 +31,7 @@ Written as the corresponding step lands, not up front.
 | Guide | Added at | What it covers |
 |---|---|---|
 | [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting. Extended at Step 3 with the API container |
+| [ci-pipeline.md](ci-pipeline.md) | Step 5 | The quality gates: what each one checks, running them locally with `tools/ci.sh`, how coverage is measured and enforced, the GitHub branch-protection setup they need, and what is deliberately deferred to a later step |
 
 ### Architecture decision records
 

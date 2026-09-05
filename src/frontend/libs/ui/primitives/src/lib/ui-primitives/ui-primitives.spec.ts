@@ -7,7 +7,7 @@ describe('UiPrimitives', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UiPrimitives]
+      imports: [UiPrimitives],
     }).compileComponents();
 
     fixture = TestBed.createComponent(UiPrimitives);

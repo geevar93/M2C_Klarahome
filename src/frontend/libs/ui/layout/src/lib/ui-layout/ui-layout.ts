@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-ui-layout',
   imports: [],
   templateUrl: './ui-layout.html',
-  styleUrl: './ui-layout.scss'
+  styleUrl: './ui-layout.scss',
 })
 export class UiLayout {}

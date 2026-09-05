@@ -1,0 +1,66 @@
+# =================================================================================================
+# Klara Home - secret scanning configuration (Step 5)
+# =================================================================================================
+# Consumed by the `security` job in .github/workflows/ci.yml, which runs gitleaks over the full
+# history rather than the diff: a credential committed and later deleted is still a leaked
+# credential, and only a history scan finds it.
+#
+# This file starts from the upstream rule set and then narrows the FALSE POSITIVES - nothing else.
+# The allowlist below is short on purpose. A scanner people have learned to ignore protects
+# nothing, and every entry here is a place a real secret could hide, so each one names what it
+# covers and why that is safe.
+#
+# If this ever fires on a real credential: rotate the credential first. Removing the commit does
+# not un-leak it - it is in the clone every CI run and every developer already made.
+# =================================================================================================
+
+title = 'Klara Home secret scanning'
+
+[extend]
+# Every upstream rule (AWS keys, private keys, GitHub/Slack/Stripe tokens, JWTs, and the rest).
+# Razorpay, the SMS/DLT provider and the logistics aggregator arrive at Steps 15 and 16; their key
+# formats get explicit rules then, when there is a real key shape to match.
+useDefault = true
+
+[allowlist]
+description = 'Paths and values that are known-safe, each justified individually.'
+regexTarget = 'match'
+
+paths = [
+  # Lock files: hashes and integrity digests that look like high-entropy secrets and are not.
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)packages\.lock\.json$''',
+
+  # The dev stack's credentials. They are `klarahome_dev_password` and its siblings: published in
+  # the compose file, bound to 127.0.0.1, and worthless anywhere else. The real `.env` is
+  # git-ignored, and production secrets are Docker secrets mounted by path (the `*__File`
+  # convention) - neither is ever in a file this scanner can see.
+  '''^\.env\.example$''',
+  '''^infra/compose/docker-compose\.dev\.yml$''',
+  '''^docs/dev-setup\.md$''',
+
+  # Traefik's self-signed dev certificate material, and the placeholder that documents its shape.
+  '''^infra/traefik/dynamic/certs\.yml\.example$''',
+  '''^infra/traefik/certs/''',
+
+  # Generated frontend artefacts and dependencies.
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.angular/''',
+]
+
+regexes = [
+  # The dev password itself, wherever it appears. Spelled out rather than allowlisting whole files,
+  # so a genuine secret sitting next to it in the same file is still caught.
+  '''klarahome_dev_password''',
+
+  # Documentation placeholders. These are the literal strings the docs use to mark "your value
+  # goes here"; a scanner that shouts about them teaches people to ignore it.
+  '''(?i)(your|example|placeholder|changeme|change-me|dummy|sample|redacted|xxx+)[-_]?(secret|password|token|key)''',
+  '''(?i)<(your|the)[-_ ][a-z0-9_ -]*(secret|password|token|key)>''',
+  '''rzp_test_[A-Za-z0-9]{0,14}$''',
+]
+
+# Commits reviewed and cleared. Empty, and it should stay that way: an entry here is a permanent
+# exemption for a specific commit, and it needs a reason written next to it.
+commits = []

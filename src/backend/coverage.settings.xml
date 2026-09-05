@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <CodeCoverage>
+            <!--
+              Klara Home - code coverage collection filters (Step 5).
+
+              Consumed by `dotnet-coverage collect` via its settings option, which is how CI and
+              tools/ci.ps1 measure the backend suites. What gets measured is deliberately narrow,
+              because a coverage number is only worth gating on if it moves when our code changes:
+
+                * our own assemblies only. An untouched third-party package would otherwise
+                  dominate the denominator; FluentValidation alone contributes 8,757 branches,
+                  none of them ours.
+                * test assemblies excluded. A suite covering itself is circular.
+                * EF Core migrations excluded. `dotnet ef` writes them, and they run against a
+                  database no unit test has.
+                * compiler and source-generator output excluded.
+
+              THREE TRAPS, all found the hard way and all SILENT in the same way: the tool logs
+              "Coverage settings file is not a valid file. Using default settings." at WARNING and
+              then reports coverage anyway. It is not wrong, it is measuring something else. Run
+              with a verbose log file if a filter ever appears to do nothing.
+
+                1. The RunSettings wrapper is mandatory. A bare CodeCoverage root element is
+                   ignored, which looks exactly like a filter that matched nothing.
+                2. No XML comment may contain a double hyphen. That is illegal XML, so the whole
+                   file is rejected. It is easy to hit: the tool's own option names begin with
+                   one, and writing them here is what first broke this file.
+                3. ModulePath patterns match the FULL PATH of the module, not its file name. Every
+                   assembly under test lives in tests/KlaraHome.*Tests/bin/..., so the intuitive
+                   pattern `.*KlaraHome\..*\.dll$` matches every third-party DLL sitting in that
+                   directory too. Hence the `[\/]` anchor below: the assembly name has to start
+                   immediately after a path separator.
+
+              Verified by asserting that FluentValidation and the xunit assemblies are absent from
+              the report, and that Modules.Platform's complexity drops from 239 to 7 once the
+              generated migrations are filtered out.
+
+              The threshold itself lives in tools/ci.ps1 (CoverageMinimum): this file decides what
+              is measured, that one decides what is acceptable.
+            -->
+
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*[\/]KlaraHome\.[^\/]*\.dll$</ModulePath>
+              </Include>
+              <Exclude>
+                <ModulePath>.*[\/]KlaraHome\.[^\/]*Tests\.dll$</ModulePath>
+              </Exclude>
+            </ModulePaths>
+
+            <Sources>
+              <Exclude>
+                <Source>.*[\/]Migrations[\/].*</Source>
+                <Source>.*[\/]obj[\/].*</Source>
+              </Exclude>
+            </Sources>
+
+            <Attributes>
+              <Exclude>
+                <Attribute>^System\.Diagnostics\.DebuggerHiddenAttribute$</Attribute>
+                <Attribute>^System\.Diagnostics\.DebuggerNonUserCodeAttribute$</Attribute>
+                <Attribute>^System\.Runtime\.CompilerServices\.CompilerGeneratedAttribute$</Attribute>
+                <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+                <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
+              </Exclude>
+            </Attributes>
+
+            <CollectFromChildProcesses>True</CollectFromChildProcesses>
+
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

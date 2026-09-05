@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-ui-primitives',
   imports: [],
   templateUrl: './ui-primitives.html',
-  styleUrl: './ui-primitives.scss'
+  styleUrl: './ui-primitives.scss',
 })
 export class UiPrimitives {}

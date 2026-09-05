@@ -43,7 +43,9 @@ dotnet_style_readonly_field = true:warning
 dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
 csharp_prefer_static_local_function = true:warning
 
-# Naming: private fields _camelCase
+# Naming: private fields _camelCase.
+# Constants and static readonly fields are deliberately NOT covered by this rule (Step 5): the
+# .NET convention is PascalCase for both, and the more specific rules below win over it.
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_camel
 dotnet_naming_rule.private_fields_underscore.severity = warning
@@ -51,6 +53,26 @@ dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.underscore_camel.capitalization = camel_case
 dotnet_naming_style.underscore_camel.required_prefix = _
+
+# Naming: private constants PascalCase. More specific than private_fields (it requires `const`),
+# so it takes precedence over the underscore rule.
+dotnet_naming_rule.private_constants_pascal.symbols = private_constants
+dotnet_naming_rule.private_constants_pascal.style = pascal
+dotnet_naming_rule.private_constants_pascal.severity = warning
+dotnet_naming_symbols.private_constants.applicable_kinds = field
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private, protected, internal, protected_internal, private_protected
+dotnet_naming_symbols.private_constants.required_modifiers = const
+
+# Naming: private static readonly fields PascalCase. They are immutable shared values and read
+# as constants at every call site; `_camelCase` implies mutable per-instance state.
+dotnet_naming_rule.private_static_readonly_pascal.symbols = private_static_readonly
+dotnet_naming_rule.private_static_readonly_pascal.style = pascal
+dotnet_naming_rule.private_static_readonly_pascal.severity = warning
+dotnet_naming_symbols.private_static_readonly.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly.applicable_accessibilities = private, protected, internal, protected_internal, private_protected
+dotnet_naming_symbols.private_static_readonly.required_modifiers = static, readonly
+
+dotnet_naming_style.pascal.capitalization = pascal_case
 
 # Async methods must end in Async
 dotnet_naming_rule.async_methods_async_suffix.symbols = async_methods
@@ -104,6 +126,10 @@ dotnet_diagnostic.CA1716.severity = none
 # hand-written style rules means either editing every migration after generating it, or watching
 # CI fail on code nobody typed. The correctness analyzers still apply; only style does not.
 [**/Migrations/*.cs]
+# `dotnet ef` writes the migration itself with a UTF-8 BOM and the Designer/snapshot without one.
+# Neither is configurable, so the charset requirement is lifted here rather than hand-edited back
+# after every generation (Step 5 — it is what `dotnet format --verify-no-changes` fails on).
+charset = unset
 dotnet_diagnostic.IDE0161.severity = none
 dotnet_diagnostic.IDE0055.severity = none
 dotnet_diagnostic.IDE0300.severity = none
@@ -111,3 +137,13 @@ dotnet_diagnostic.IDE0301.severity = none
 dotnet_diagnostic.SA1601.severity = none
 dotnet_diagnostic.CA1861.severity = none
 dotnet_diagnostic.CA1062.severity = none
+
+# -----------------------------------------------------------------------------
+# Test projects (Step 5)
+# -----------------------------------------------------------------------------
+# Test methods are named as sentences — `Probes_are_never_cached` — because that name is what a
+# failure report prints. Appending `Async` to the async ones would say nothing about the test and
+# split the naming of one suite in two. Production code keeps the rule, exactly as CA1707 is
+# relaxed here (Directory.Build.props) and enforced everywhere else.
+[src/backend/tests/**/*.cs]
+dotnet_naming_rule.async_methods_async_suffix.severity = none

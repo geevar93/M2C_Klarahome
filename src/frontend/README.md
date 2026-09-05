@@ -7,30 +7,30 @@ Generated at Step 1. Feature work belongs to Steps 22–28 — see
 
 ## Projects
 
-| Project | Path | Notes |
-|---|---|---|
-| `storefront` | `apps/storefront` | **SSR** (`src/server.ts`), hydration with event replay. Customer-facing, mobile-first, SEO-critical |
-| `storefront-e2e` | `apps/storefront-e2e` | Playwright |
-| `admin` | `apps/admin` | SPA, **no SSR** (correct: authenticated, non-indexable). Platform staff + vendors, role-scoped |
-| `admin-e2e` | `apps/admin-e2e` | Playwright |
+| Project          | Path                  | Notes                                                                                               |
+| ---------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| `storefront`     | `apps/storefront`     | **SSR** (`src/server.ts`), hydration with event replay. Customer-facing, mobile-first, SEO-critical |
+| `storefront-e2e` | `apps/storefront-e2e` | Playwright                                                                                          |
+| `admin`          | `apps/admin`          | SPA, **no SSR** (correct: authenticated, non-indexable). Platform staff + vendors, role-scoped      |
+| `admin-e2e`      | `apps/admin-e2e`      | Playwright                                                                                          |
 
 ## Libraries
 
-| Library | Import path | Tags |
-|---|---|---|
-| `data-access-api` | `@klarahome/data-access-api` | `type:data-access-api` — **generated** from OpenAPI at Step 22; never hand-edit |
-| `data-access-auth` | `@klarahome/data-access-auth` | `type:data-access` |
-| `data-access-cart` | `@klarahome/data-access-cart` | `type:data-access` |
-| `data-access-catalog` | `@klarahome/data-access-catalog` | `type:data-access` |
-| `data-access-orders` | `@klarahome/data-access-orders` | `type:data-access` |
-| `data-access-content` | `@klarahome/data-access-content` | `type:data-access` |
-| `ui-primitives` | `@klarahome/ui-primitives` | `type:ui` |
-| `ui-patterns` | `@klarahome/ui-patterns` | `type:ui` |
-| `ui-layout` | `@klarahome/ui-layout` | `type:ui` |
-| `domain` | `@klarahome/domain` | `type:domain` — framework-free models, money/GST helpers |
-| `util` | `@klarahome/util` | `type:util` |
-| `i18n` | `@klarahome/i18n` | `type:util` |
-| `testing` | `@klarahome/testing` | `type:util` |
+| Library               | Import path                      | Tags                                                                            |
+| --------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| `data-access-api`     | `@klarahome/data-access-api`     | `type:data-access-api` — **generated** from OpenAPI at Step 22; never hand-edit |
+| `data-access-auth`    | `@klarahome/data-access-auth`    | `type:data-access`                                                              |
+| `data-access-cart`    | `@klarahome/data-access-cart`    | `type:data-access`                                                              |
+| `data-access-catalog` | `@klarahome/data-access-catalog` | `type:data-access`                                                              |
+| `data-access-orders`  | `@klarahome/data-access-orders`  | `type:data-access`                                                              |
+| `data-access-content` | `@klarahome/data-access-content` | `type:data-access`                                                              |
+| `ui-primitives`       | `@klarahome/ui-primitives`       | `type:ui`                                                                       |
+| `ui-patterns`         | `@klarahome/ui-patterns`         | `type:ui`                                                                       |
+| `ui-layout`           | `@klarahome/ui-layout`           | `type:ui`                                                                       |
+| `domain`              | `@klarahome/domain`              | `type:domain` — framework-free models, money/GST helpers                        |
+| `util`                | `@klarahome/util`                | `type:util`                                                                     |
+| `i18n`                | `@klarahome/i18n`                | `type:util`                                                                     |
+| `testing`             | `@klarahome/testing`             | `type:util`                                                                     |
 
 All libraries are **empty placeholders**. They exist so the dependency graph and its
 constraints are enforceable from the first line of feature code.

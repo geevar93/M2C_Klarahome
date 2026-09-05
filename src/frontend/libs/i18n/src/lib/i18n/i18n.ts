@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-i18n',
   imports: [],
   templateUrl: './i18n.html',
-  styleUrl: './i18n.scss'
+  styleUrl: './i18n.scss',
 })
 export class I18n {}

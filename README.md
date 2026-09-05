@@ -37,6 +37,7 @@ Start with [`docs/README.md`](docs/README.md). The specification set:
 | [09 NFR & testing](docs/09-nfr-testing-observability.md) | Targets, test strategy, alerting |
 | [10 Design placeholder](docs/10-design-system-placeholder.md) | Neutral tokens until Step 30 |
 | [Dev setup](docs/dev-setup.md) | Running the local containerised environment |
+| [CI pipeline](docs/ci-pipeline.md) | Quality gates, running them locally, branch protection |
 | [ADRs](docs/adr/README.md) | Architecture decision records |
 
 ---
@@ -52,7 +53,7 @@ src/backend/           .NET 10 modular monolith
   tests/               Unit, Integration, Architecture, Load
 src/frontend/          Nx workspace (Angular storefront + admin)
 infra/                 Dockerfiles, compose, Traefik, observability, scripts
-tools/                 Codegen and database tooling
+tools/                 CI gates (ci.ps1 / ci.sh), codegen and database tooling
 .githooks/             Conventional Commit enforcement
 ```
 
@@ -103,17 +104,16 @@ Full details, credentials, TLS notes and troubleshooting: **[`docs/dev-setup.md`
 
 ```bash
 cd src/backend
-dotnet tool restore                        # once per clone: brings in dotnet-ef
+dotnet tool restore                        # once per clone: dotnet-ef and dotnet-coverage
 dotnet build KlaraHome.sln                 # zero warnings is the standard
 dotnet test --project tests/KlaraHome.UnitTests/KlaraHome.UnitTests.csproj
-dotnet test --project tests/KlaraHome.IntegrationTests/KlaraHome.IntegrationTests.csproj
-dotnet test --project tests/KlaraHome.ArchitectureTests/KlaraHome.ArchitectureTests.csproj
 ```
 
 The integration tests start a throwaway PostgreSQL container, so **Docker must be running**.
 Without it the database tests skip rather than fail. If `dotnet test` reports `Zero tests ran`
 while the suites clearly contain tests, see the troubleshooting table in
-[`docs/dev-setup.md`](docs/dev-setup.md).
+[`docs/dev-setup.md`](docs/dev-setup.md) — and prefer the runner below, which does not depend on
+the orchestrator that causes it.
 
 Run the API outside Docker against the containerised backing services:
 
@@ -126,6 +126,25 @@ Rebuild and restart just the API container:
 ```bash
 docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d --build api
 ```
+
+### Quality gates — run what CI runs
+
+Every gate CI enforces is one script, so a failure can be reproduced in seconds without a push.
+
+```bash
+./tools/ci.sh                     # restore, build, format, test+coverage, lint, audit, builds
+./tools/ci.sh format test         # just the two a code change usually trips
+./tools/ci.sh package             # container images + Trivy scan
+./tools/ci.ps1 -Stage format,test # Windows
+```
+
+Backend suites are run as executables rather than through `dotnet test`, and each asserts a
+**minimum test count** so a suite that discovers nothing fails instead of passing. The line
+coverage floor is **70 %** (`docs/09-nfr-testing-observability.md` §1.4); it is enforced inside the
+script, so it holds locally as well as in CI.
+
+Full detail, including the GitHub branch-protection setup the gates need in order to actually block
+a merge: **[`docs/ci-pipeline.md`](docs/ci-pipeline.md)**.
 
 ### Database and migrations
 

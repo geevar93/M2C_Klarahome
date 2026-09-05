@@ -1,0 +1,330 @@
+# =================================================================================================
+# Klara Home - continuous integration (Step 5)
+# =================================================================================================
+# The gate that stands between a pull request and `develop` / `main`. Its shape follows
+# docs/06-infrastructure-devops.md section 6:
+#
+#   lint + format -> build -> unit -> integration (Testcontainers) -> architecture
+#                 -> Angular build -> frontend tests -> image build + Trivy
+#
+# Deployment (staging on `develop`, production on a `main` tag) is deliberately NOT here. It is
+# Step 32's, and it needs a VPS, a registry and secrets that do not exist yet. This workflow stops
+# at a verified, scanned image.
+#
+# ONE RULE THIS FILE FOLLOWS: it does not restate the commands. Every gate is `tools/ci.ps1
+# -Stage <name>`, the same script a developer runs, so "it passes locally" and "it passes in CI"
+# cannot drift apart. Only the things that are genuinely CI-shaped - the runner matrix, caching,
+# artefact upload, SARIF - live here.
+# =================================================================================================
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  merge_group:
+  workflow_dispatch:
+
+# A second push to the same PR cancels the first: the older answer is not worth the runner minutes.
+# `main` and `develop` are excluded because every commit there must have its own recorded verdict.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # Cleared explicitly: a bootloader injected here (a debugger, an APM agent) writes to stdout and
+  # corrupts anything that parses npm or Nx output.
+  NODE_OPTIONS: ''
+
+jobs:
+  # -----------------------------------------------------------------------------------------------
+  # Backend: build with analyzers as errors, then all three suites with coverage.
+  #
+  # ubuntu-latest, not windows: it is what the VPS runs, it is where the chiseled images are built,
+  # and Testcontainers gets a native Docker daemon rather than a virtualised one.
+  # -----------------------------------------------------------------------------------------------
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      # Keyed on the lock files Step 1 turned on (RestorePackagesWithLockFile). A dependency change
+      # invalidates the cache; nothing else does.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/backend/**/packages.lock.json', 'src/backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: pwsh ./tools/ci.ps1 -Stage restore
+
+      - name: Build
+        run: pwsh ./tools/ci.ps1 -Stage build
+
+      - name: Format and code style
+        run: pwsh ./tools/ci.ps1 -Stage format
+
+      # Unit + architecture + integration, each run as its own executable rather than through
+      # `dotnet test`, with a minimum test count asserted per suite. See tools/ci.ps1 and
+      # docs/dev-setup.md section 7 for why the orchestrator is not trusted to report a count.
+      # The Testcontainers suites use the runner's own Docker daemon.
+      - name: Test with coverage
+        run: pwsh ./tools/ci.ps1 -Stage test
+
+      # `always()`: a failing run is exactly when someone wants to read the results.
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            artifacts/test-results/*.trx
+            artifacts/coverage/merged.cobertura.xml
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Publish coverage summary
+        if: always()
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: artifacts/coverage/merged.cobertura.xml
+          badge: true
+          format: markdown
+          output: both
+          # Advisory only. The build-failing threshold is enforced inside tools/ci.ps1, so it holds
+          # locally as well and is not something a workflow edit can quietly drop.
+          thresholds: '70 85'
+          fail_below_min: false
+
+  # -----------------------------------------------------------------------------------------------
+  # Frontend: lint (module boundaries included), unit tests, and both production builds.
+  # Split from the backend job so the two run in parallel and a failure names its own half.
+  # -----------------------------------------------------------------------------------------------
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          # The version Step 1 settled on, and the one the Angular 22 engine range requires.
+          node-version: '24.20.0'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Format check
+        working-directory: src/frontend
+        run: npx prettier --check .
+
+      - name: Lint
+        run: pwsh ./tools/ci.ps1 -Stage lint
+
+      - name: Unit tests
+        working-directory: src/frontend
+        run: npx nx run-many --target=test --all --configuration=ci
+
+      - name: Production builds
+        run: pwsh ./tools/ci.ps1 -Stage frontend
+
+      - name: Upload build output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-logs
+          path: src/frontend/dist
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -----------------------------------------------------------------------------------------------
+  # Dependency and secret scanning.
+  #
+  # Separate from the build jobs on purpose: a leaked credential is not a build failure, it is an
+  # incident, and it should be visible without reading a build log.
+  # -----------------------------------------------------------------------------------------------
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Gitleaks scans history, not just the diff: a secret committed and then removed in a
+          # later commit is still a leaked secret.
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.20.0'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Restore backend
+        working-directory: src/backend
+        run: dotnet restore --locked-mode
+
+      # npm advisories and NuGet advisories. High and critical fail; moderates are reported and
+      # triaged at a step boundary, which is the wording of the Definition of Done in
+      # docs/09-nfr-testing-observability.md section 2.4.
+      - name: Dependency advisories
+        run: pwsh ./tools/ci.ps1 -Stage audit
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # -----------------------------------------------------------------------------------------------
+  # Container images: build exactly what would be deployed, then scan it.
+  #
+  # Images are built but NOT pushed. There is no registry yet - Step 32 provisions it and adds the
+  # push and deploy. Building here still earns its minutes: the Dockerfiles compile with
+  # warnings-as-errors, so a broken image build is caught on the PR that breaks it.
+  # -----------------------------------------------------------------------------------------------
+  containers:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [backend]
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: infra/docker/api.Dockerfile
+          - image: migrator
+            dockerfile: infra/docker/migrator.Dockerfile
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.image }} image
+        uses: docker/build-push-action@v6
+        with:
+          # The repository root: the Dockerfiles need global.json, .editorconfig and all of
+          # src/backend.
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: klarahome/${{ matrix.image }}:${{ github.sha }}
+          push: false
+          load: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # --ignore-unfixed: an advisory with no available fix is not something this PR can act on.
+      # It still reaches the Security tab through the SARIF upload below, so nothing is hidden -
+      # it simply does not block a change that has nothing to do with it.
+      - name: Scan ${{ matrix.image }} image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: klarahome/${{ matrix.image }}:${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Upload scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+      # The SARIF upload records; this fails. Two steps because a scan that only records is not a
+      # gate, and a gate that does not record leaves nothing to look at afterwards.
+      - name: Fail on high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: klarahome/${{ matrix.image }}:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+  # -----------------------------------------------------------------------------------------------
+  # The single status check to protect the branch with.
+  #
+  # Branch protection asks for check names, and a matrix job's names change whenever the matrix
+  # does. This job's name never changes, so the rule set is configured once and stays correct.
+  # -----------------------------------------------------------------------------------------------
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [backend, frontend, security, containers]
+
+    steps:
+      - name: Check results
+        run: |
+          echo "backend    : ${{ needs.backend.result }}"
+          echo "frontend   : ${{ needs.frontend.result }}"
+          echo "security   : ${{ needs.security.result }}"
+          echo "containers : ${{ needs.containers.result }}"
+
+          # `!= success` rather than `== failure`: a cancelled or skipped required job is not a
+          # pass either, and treating it as one is how a green tick comes to mean nothing.
+          failed=0
+          for result in \
+            "${{ needs.backend.result }}" \
+            "${{ needs.frontend.result }}" \
+            "${{ needs.security.result }}" \
+            "${{ needs.containers.result }}"; do
+            if [ "$result" != "success" ]; then failed=1; fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::One or more required jobs did not succeed."
+            exit 1
+          fi
+
+          echo "All required jobs succeeded."

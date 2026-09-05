@@ -4,6 +4,6 @@ import { Component } from '@angular/core';
   selector: 'kh-testing',
   imports: [],
   templateUrl: './testing.html',
-  styleUrl: './testing.scss'
+  styleUrl: './testing.scss',
 })
 export class Testing {}

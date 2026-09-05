@@ -7,7 +7,7 @@ describe('I18n', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [I18n]
+      imports: [I18n],
     }).compileComponents();
 
     fixture = TestBed.createComponent(I18n);
