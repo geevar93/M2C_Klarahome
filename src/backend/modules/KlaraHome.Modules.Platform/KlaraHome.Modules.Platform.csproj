@@ -24,6 +24,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      A module maps its own minimal-API endpoints and reads HttpContext, so it depends on ASP.NET
+      Core in its own right rather than on whatever KlaraHome.Infrastructure happens to expose.
+    -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
     <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
     <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />

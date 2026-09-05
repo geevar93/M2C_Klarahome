@@ -1,4 +1,5 @@
 using System.Reflection;
+using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Caching;
 using KlaraHome.Infrastructure.Configuration;
 using KlaraHome.Infrastructure.Correlation;
@@ -52,6 +53,14 @@ public static class InfrastructureExtensions
         builder.Services.TryAddSingleton<IClock>(SystemClock.Instance);
         builder.Services.TryAddScoped<ICorrelationContext, CorrelationContext>();
 
+        // Enums cross the wire as their names, never as their ordinals. A client that switches on
+        // 4 is a client that breaks the day a value is inserted into the middle of an enum, and
+        // "actorType": 4 tells a support engineer reading an audit entry nothing at all
+        // (docs/04-api-specification.md §1).
+        builder.Services.ConfigureHttpJsonOptions(options =>
+            options.SerializerOptions.Converters.Add(
+                new System.Text.Json.Serialization.JsonStringEnumConverter()));
+
         builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails =
             context => context.ProblemDetails.Enrich(context.HttpContext));
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -71,6 +80,11 @@ public static class InfrastructureExtensions
             options.Providers.Add<BrotliCompressionProvider>();
             options.Providers.Add<GzipCompressionProvider>();
         });
+
+        // Refuses to start a non-Development host whose endpoints declare permissions nothing can
+        // enforce yet. Registered here rather than by a module, so one guard covers every module's
+        // surface (see PermissionEndpoints).
+        builder.Services.AddPermissionGuard();
 
         builder.Services.AddKlaraHomeOutputCache();
         builder.Services.AddKlaraHomeRateLimiting();
@@ -121,7 +135,9 @@ public static class InfrastructureExtensions
     private static void AddKlaraHomeOptions(this WebApplicationBuilder builder)
     {
         builder.Services.AddValidatedOptions<ApiOptions>(builder.Configuration, ApiOptions.SectionName);
-        builder.Services.AddValidatedOptions<TenantOptions>(builder.Configuration, TenantOptions.SectionName);
+        // TenantOptions is bound by AddKlaraHomePersistence, which every host that writes a row
+        // calls - see the note there. Binding it twice would be harmless but would also suggest
+        // there are two answers to which tenant this deployment is.
         builder.Services.AddValidatedOptions<CorsOptions>(builder.Configuration, CorsOptions.SectionName);
         builder.Services.AddValidatedOptions<RateLimitingOptions>(
             builder.Configuration,

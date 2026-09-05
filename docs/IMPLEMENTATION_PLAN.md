@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 5)
-> **Last updated:** 2026-09-05 (Step 5 complete)
+> **Status:** APPROVED — in execution (Step 6)
+> **Last updated:** 2026-09-05 (Step 6 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -87,7 +87,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 3 | Backend solution skeleton & cross-cutting concerns | A | ✅ DONE | 2026-09-05 | API container builds, runs and is healthy behind Traefik; 112 tests green; all four criteria met |
 | 4 | Database foundation, EF Core & migration pipeline | A | ✅ DONE | 2026-09-05 | Migrator container applies the schema and re-runs clean; idempotent SQL verified twice against a fresh database; 179 tests green; all three criteria met |
 | 5 | CI pipeline & quality gates | A | ✅ DONE | 2026-09-05 | Every gate built, run and proven to fail correctly; 179 tests, 88.81% line coverage, both images scan clean. **One half of the acceptance criterion is not demonstrable yet:** there is no GitHub remote, so nothing can block a merge. Configuration documented in `ci-pipeline.md` §6 |
-| 6 | Platform module — tenancy, settings, branding, audit | B | ⬜ NOT STARTED | | |
+| 6 | Platform module — tenancy, settings, branding, audit | B | ✅ DONE | 2026-09-05 | Tenant, typed settings store, feature flags, partitioned append-only audit trail and Indian reference data; 7 endpoints; 252 tests green, 92.44% line coverage. All three criteria met and demonstrated against the running stack. **Admin endpoints declare their permissions but nothing enforces them until Step 7** — the host refuses to start outside Development while that is true |
 | 7 | Identity & Access module | B | ⬜ NOT STARTED | | |
 | 8 | Media, file storage & Notifications module | B | ⬜ NOT STARTED | | |
 | 9 | Vendor / Seller module | C | ⬜ NOT STARTED | | |
@@ -937,7 +937,161 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Reference data: Indian states + union territories, PIN code metadata, HSN chapters.
 - **Acceptance criteria:** All branding/legal strings resolve from configuration; an audit
   entry is written for a settings change; a feature flag toggles observable behaviour.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.**
+
+  **Every deliverable is built, and all three acceptance criteria were demonstrated against the
+  running dev stack rather than only in tests.** 46 files added, 17 changed, 2 migrations,
+  7 endpoints, 73 new tests.
+
+  #### Acceptance criteria - verified against the running containers
+
+  | Criterion | Evidence |
+  |---|---|
+  | All branding/legal strings resolve from configuration | `GET /api/v1/store/config` returns branding, legal, support, localization and commerce as data. A fresh database seeds the store name from `TENANT_NAME` and the locale/timezone from `TENANT_DEFAULT_*`. Nothing about Klara Home is compiled into a code path |
+  | An audit entry is written for a settings change | `PUT /api/v1/admin/settings/branding` then `GET /api/v1/admin/audit-logs?entityType=StoreSetting&entityId=branding` returned the entry with the real before/after documents, the client IP, the user agent and the request's correlation id |
+  | A feature flag toggles observable behaviour | `PUT /api/v1/admin/feature-flags/platform.public-store-config {"enabled":false}` then the next `GET /api/v1/store/config` answered **404 `FEATURE_DISABLED`**; turning it back on returned **200**. No deploy, no restart |
+
+  #### What was built
+
+  **Tenancy.** `platform.tenants` (code unique, name, status), seeded from configuration by
+  `TenantSeeder`. **Configuration remains the source of the tenant's identity, deliberately** - see
+  deviation 1 below. `ConfiguredTenantContext` is unchanged, so the query filters and the auditing
+  interceptor from Step 4 needed no edit at all; that indirection did its job.
+
+  **Store settings.** `platform.store_settings` (`tenant_id`, `key`, `value jsonb`, `is_public`,
+  unique on `(tenant_id, key)`), read through a typed section contract in `KlaraHome.Contracts`:
+  `BrandingSettings`, `LegalSettings`, `SupportSettings`, `LocalizationSettings`,
+  `CommerceSettings`. A section carries its own key, its own visibility and its own defaults as
+  static interface members, so one place answers "what is this called, may the storefront see it,
+  and what does it hold before anyone edits it". Adding a section is a record in Contracts plus one
+  line in `SettingsCatalog`; the seeder, the admin surface, the public document and the typed
+  reader all follow from that list.
+
+  Inbound documents are parsed with `UnmappedMemberHandling.Disallow`, so a misspelled field in a
+  settings `PUT` is a **422 naming the field** rather than a silent no-op that leaves an operator
+  believing they changed something. Every section has a FluentValidation validator: GSTIN, PAN and
+  CIN formats, E.164 phone numbers, hex colours, ISO currency and country codes, and the statutory
+  48-hour / one-month grievance SLAs from `07-security-compliance.md` §6. Every rule permits an
+  *empty* value and rejects only a value that is present and wrong, because a fresh install has to
+  be configurable in whatever order the operator works.
+
+  **Feature flags.** `platform.feature_flags` (`key`, `enabled`, `rollout jsonb`, `description`)
+  with an evaluator supporting a master switch, an explicit user allow-list, named segments and a
+  percentage rollout bucketed by SHA-256 over `(key, userId)` - stable per user, and different per
+  flag so two 10 % rollouts do not land on the same tenth of the audience. An unknown key is
+  **off**, so a typo hides a feature rather than exposing an unfinished one. Flags are *declared in
+  code* by the module that reads them and then seeded; the admin surface reconfigures them but
+  cannot invent one, because a flag nothing is wired to looks exactly like a flag that does not
+  work.
+
+  **Audit trail.** `platform.audit_logs` is the one table EF does not generate, and its migration
+  is hand-written for three reasons EF cannot express:
+
+  - it is `PARTITION BY RANGE (occurred_at)` with **26 monthly partitions** created from the month
+    before the deploy (`03-database-design.md` §8), plus
+    `platform.ensure_audit_log_partition(date)` to create more;
+  - it is **append-only, enforced by a trigger** that rejects `UPDATE` and `DELETE` outright, so
+    the guarantee holds against `psql` and not only against our own code
+    (`07-security-compliance.md` §7). Retention stays possible: dropping a partition is DDL;
+  - it carries a **`DEFAULT` partition**, so an insert can never fail because nobody created next
+    month's - an audit write that threw would take the operation it is recording down with it.
+
+  `IAuditLogger` in Contracts is what other modules will use. An entry is written in **its own
+  scope and its own transaction**, after the change it describes has committed: the caller's
+  context may be carrying unsaved work, and an audit call that quietly committed it would be a bug
+  nobody would look for there. Actor, IP, user agent, correlation id, tenant and timestamp are read
+  from ambient context, never passed by the caller.
+
+  The query API is keyset-paginated on `(occurred_at, id)` descending - the table's own partition
+  and index order - filtered by entity type, entity id, actor, action and time range. No `total`:
+  counting years of append-only history would cost more than the page, which is exactly what
+  `04-api-specification.md` §1.1 allows a collection to say.
+
+  **Reference data.** 28 states and 8 union territories with their **GST state codes**, and the 99
+  HSN chapters. Both are compiled in and seeded, because a wrong GST state code is a wrong tax on
+  every invoice for that state. Codes 25 and 28 are deliberately absent - GSTN retains them only so
+  historic returns parse. Reference tables carry **no `tenant_id`**: they are identical in every
+  deployment and nobody edits them.
+
+  **Endpoints** (`04-api-specification.md` §3.6, §4):
+
+  | Method | Route | Notes |
+  |---|---|---|
+  | `GET` | `/api/v1/store/config` | Public settings and feature flags. Gated by `platform.public-store-config` |
+  | `GET` | `/api/v1/store/states` | Output-cached with the reference-data policy |
+  | `GET` | `/api/v1/store/pincodes/{pincode}` | Gated by `platform.pincode-lookup`. Serviceability is Step 16 |
+  | `GET` | `/api/v1/admin/settings` | All sections with their current values |
+  | `PUT` | `/api/v1/admin/settings/{key}` | Replaces a section as a whole; audited |
+  | `GET` / `PUT` | `/api/v1/admin/feature-flags[/{key}]` | Audited |
+  | `GET` | `/api/v1/admin/audit-logs` | Keyset-paginated search |
+
+  #### The Step 7 gap, held open on purpose
+
+  The admin surface exists before the authorisation that protects it does. Rather than leave that
+  to be noticed later, it is made impossible to deploy:
+
+  - every admin endpoint declares its permission with
+    `.RequirePermission("platform.settings.manage")`;
+  - `UnsecuredEndpointGuard` **refuses to start any non-Development host** while endpoints declare
+    permissions and no authentication scheme is registered. Development logs a warning on every
+    start instead;
+  - an integration test fails if an endpoint under `/api/v1/admin` stops declaring one, so the list
+    cannot grow silently.
+
+  Step 7 registers the scheme and turns these declarations into policies; the guard then goes quiet
+  on its own.
+
+  #### Two real defects found and fixed along the way
+
+  1. **`TenantOptions` was never bound in the worker or the migrator.** Both call
+     `AddKlaraHomePersistence` but not `AddKlaraHomeInfrastructure`, so `IOptions<TenantOptions>`
+     fell back to its built-in defaults. It had gone unnoticed because the default code happens to
+     be `klarahome`; set `TENANT_CODE=acme` and the migrator would have seeded a *different tenant*
+     from the one the API serves, silently. Binding moved into `AddKlaraHomePersistence`, where the
+     ambient tenant is registered.
+  2. **The connection string was captured at registration time** in `AddModuleDbContext`. A host
+     whose configuration is completed after registration - which is exactly what
+     `WebApplicationFactory` does - registered every context against an empty string. It is now
+     resolved from the container when the context is built.
+
+  Neither was reachable before this step; both are the kind that surface as "the deployment is
+  mysteriously empty" rather than as an error.
+
+  #### Deviations from the specification
+
+  | # | Deviation | Why |
+  |---|---|---|
+  | 1 | **Configuration, not the database, is the source of the tenant's identity.** The Step 4 Parking Lot anticipated "a database-backed tenant"; the row is seeded *from* configuration instead | v1 is single-tenant-per-deployment (§6 defers real multi-tenant SaaS), and this step's objective is that a second business is onboarded *by configuration alone*. A tenant id also has to exist before any table can be written to, including the tenants table itself. The risk that entry recorded - changing `Tenant:Code` strands every row - is closed instead by a **`platform-tenant` readiness check**, so a replica that would serve an empty catalogue is *not ready* rather than quietly wrong |
+  | 2 | **`tenants.settings jsonb` from `03-database-design.md` §4.1 is not created** | It would be a second, untyped, unaudited place to put settings alongside `store_settings`, which is typed, audited and admin-editable. One of the two had to win |
+  | 3 | **`hsn_codes` is seeded at chapter level with `default_gst_rate` null** | GST rates are notified at four, six and eight digits. A plausible-looking chapter rate is exactly the kind of wrong number that reaches an invoice. Step 12 attaches real rates to real tariff items |
+  | 4 | **`pincodes` ships empty**; the dataset is mounted, not built in | Roughly 19,000 rows that change without notice from India Post. A stale copy inside a container is worse than an empty table an operator knows to fill. `infra/seed/README.md` documents the format, `PINCODE_DATA_PATH` points at it, and the `platform.pincode-lookup` flag exists so the endpoint can stay off until the import has run |
+  | 5 | **Enums are serialised as their names across the whole API** (`JsonStringEnumConverter`) | `"actorType": 4` breaks the day a value is inserted into the middle of an enum, and tells a support engineer nothing. Not a specification change - §1 does not say either way - but it is an API-wide convention, recorded so it is not rediscovered |
+  | 6 | **`IAppendOnly` added to the SharedKernel**, excusing an entity from the `xmin` concurrency token | PostgreSQL refuses to return a system column from a partitioned table: `INSERT ... RETURNING xmin` fails with `0A000`. An append-only table has no lost update to detect either, so the marker is honest rather than a workaround |
+  | 7 | **`CacheReferenceData()` wraps `CacheOutput()` in `KlaraHome.Infrastructure`** | `Microsoft.AspNetCore.OutputCaching` is not on a module project's compile reference set even with an explicit `FrameworkReference`, though `KlaraHome.Infrastructure` resolves it. Wrapping it there is better anyway: the policy name now lives next to the policy |
+  | 8 | **The `store_settings` and `feature_flags` caches are in-process** | Exact for the single-replica deployment this ships as; eventually-consistent within the TTL (5 min and 1 min) the moment there are two. Redis-backed `HybridCache` is the fix already deferred from Step 3 |
+
+  #### Tests and coverage
+
+  **252 backend tests green** (was 179): 139 unit, 99 integration, 14 architecture. The integration
+  suite gained a migrated-and-seeded PostgreSQL fixture and drives the real host over HTTP against
+  it, so a settings change that is not stored, or a flag that does not reach an endpoint, fails
+  rather than passing against a stub.
+
+  | Assembly | Line % | Branch % |
+  |---|--:|--:|
+  | KlaraHome.Api | 98.0 | 84.8 |
+  | KlaraHome.Contracts | 98.1 | 100.0 |
+  | KlaraHome.Modules.Platform | 94.2 | 77.5 |
+  | KlaraHome.Infrastructure | 92.4 | 75.3 |
+  | KlaraHome.SharedKernel | 70.6 | 61.8 |
+  | **Total** | **92.44** | **75.54** |
+
+  Every assembly is now above the 70 % line floor, which the Step 5 Parking Lot recorded as the
+  reason a per-assembly gate could not be turned on. Turning it on is still a Step 29 decision, but
+  nothing is standing in its way.
+
+  `tools/ci.ps1 all` passes end to end: format, 252 tests, coverage, lint, `dotnet list package
+  --vulnerable` clean, and both Angular production builds.
 
 ---
 
@@ -1480,13 +1634,13 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 4 | **`dotnet test` reports `Zero tests ran` on this machine**, intermittently and then persistently, while the test executables run all 179 tests correctly. The Microsoft.Testing.Platform orchestrator reaches the host over a loopback JSON-RPC connection and reports zero rather than an error when that connection is refused — most likely an endpoint-security agent. | ⏳ **Step 5 must not depend on `dotnet test` alone.** Workaround documented in `docs/dev-setup.md` §7: run the test executable directly. CI should assert a **non-zero test count**, so a silent zero can never be mistaken for a pass |
 | 2026-09-05 | Step 4 | `KlaraHome.Infrastructure` carries a `FrameworkReference` to `Microsoft.AspNetCore.App`, so the migrator — which serves no HTTP — must run on the `aspnet` base image rather than `runtime`. | ⏳ Splitting persistence/hosting out of Infrastructure would shrink the job image and sharpen the layering. Not urgent; revisit at **Step 29/31** unless another non-HTTP host appears first |
 | 2026-09-05 | Step 4 | `pg_stat_statements` (required by `03-database-design.md` §1) is **not** installed: it needs `shared_preload_libraries`, a server setting rather than a migration. | ⏳ Belongs to the Postgres container configuration at **Step 31**, with the rest of the observability work |
-| 2026-09-05 | Step 4 | Table partitioning from `03-database-design.md` §8 (`audit_logs`, `stock_ledger_entries`, `tracking_events`, `notification_messages`, `search_queries`) is not implemented. | ℹ️ Correct — none of those tables exists yet, and a partitioned table is created partitioned rather than converted later. Each owning step creates its own |
+| 2026-09-05 | Step 4 | Table partitioning from `03-database-design.md` §8 (`audit_logs`, `stock_ledger_entries`, `tracking_events`, `notification_messages`, `search_queries`) is not implemented. | 🔵 **`audit_logs` done at Step 6** — `PARTITION BY RANGE (occurred_at)`, monthly, hand-written SQL because EF cannot express it, with a `DEFAULT` partition as the safety net. The other four are still owned by the steps that create them |
 | 2026-09-05 | Step 4 | Dapper, which `01-architecture.md` §4.3 pairs with EF for hot read paths, is not referenced. | ℹ️ No hot path exists. Add it when a specific query needs it, not before |
 | 2026-09-05 | Step 4 | `platform.idempotency_keys` (`03-database-design.md` §4.1) is not created. | ⏳ It serves the `Idempotency-Key` header contract from `01-architecture.md` §6, which no step has built yet. Created by the step that enforces it — **Step 13/14** at the latest |
 | 2026-09-05 | Step 4 | The outbox has no stored retry backoff: attempts are spaced by the poll interval and capped by `MaxAttempts`. A dead-lettered message stays in the table with `processed_at` NULL and needs a human. | ⏳ Adequate for v1. If dead letters become routine, revisit at **Step 31** with an alert rather than a schema change |
 | 2026-09-05 | Step 4 | EF logs the "does the history table exist?" probe as an **Error** on a first migration against an empty database, which looks alarming in a deploy log although it is expected. | ℹ️ EF behaviour, first run only. Noted so it is not chased |
 | 2026-09-05 | Step 4 | `Cannot load library libgssapi_krb5.so.2` is printed by Npgsql on every migrator run: the chiseled image has no krb5, so the Kerberos probe fails and authentication proceeds over SCRAM. The `-extra` chiseled variant does not carry krb5 either. | ℹ️ Harmless. Documented in `docs/dev-setup.md` §7 rather than paid for with a larger image |
-| 2026-09-05 | Step 4 | `Tenant:Id` falls back to a value derived from `Tenant:Code` when unset. Stable across restarts, but changing the code would strand every row written under the old derived id. | ⏳ **Step 6** replaces this with a database-backed tenant. Until then `.env.example` and `docs/dev-setup.md` §8 both say to set it explicitly on any deployment that holds data |
+| 2026-09-05 | Step 4 | `Tenant:Id` falls back to a value derived from `Tenant:Code` when unset. Stable across restarts, but changing the code would strand every row written under the old derived id. | ✅ **RESOLVED at Step 6, differently than planned.** Configuration stays the source of the tenant's identity — v1 is single-tenant-per-deployment and the objective is onboarding by configuration alone — so the risk is closed by detection rather than by moving the id into the database: the `platform-tenant` readiness check compares the configured tenant against `platform.tenants` and reports **Unhealthy** when the row is missing. A deployment that would serve an empty catalogue is now not ready instead of quietly wrong. Reasoning in the Step 6 card, deviation 1 |
 | 2026-09-05 | Step 4 | Generated EF migrations are exempted from the `.editorconfig` style rules and from the "a module exposes nothing publicly" architecture rule, because `dotnet ef` emits them as `public partial` and offers no way to change that. | ℹ️ Narrow and compensated: a new architecture rule asserts the module `DbContext` itself is internal. No action |
 | 2026-09-05 | Step 5 | **No GitHub remote exists** (`git remote -v` is empty), so the acceptance criterion "a pull request triggers the pipeline and blocks merge on failure" cannot be demonstrated. The workflow is `actionlint`-clean and every gate it calls was run locally. | ⛔ **Open — needs the User.** Create the remote and apply the ruleset in `docs/ci-pipeline.md` §6. Nothing else in the plan is blocked by it, but until then CI is a script rather than a gate |
 | 2026-09-05 | Step 5 | `.editorconfig` amended again (a Step 1 artefact): private `const` and `static readonly` fields moved to PascalCase, and the `Async` suffix rule relaxed for `src/backend/tests/**`. 178 IDE1006 violations that `dotnet build` never reported. | ℹ️ Rule defects, not code defects; both justified in the Step 5 outcome notes. No specification impact |
@@ -1494,11 +1648,25 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 5 | 115 Nx-generated frontend files were reformatted by Prettier in one pass so `--check` could become a gate. | ℹ️ Scaffolding only, no logic. Lint, tests and both production builds re-verified afterwards |
 | 2026-09-05 | Step 5 | `express` 4 stays, with `"overrides": { "qs": "^6.16.0" }` closing its three moderate advisories. Express 5 changes route-pattern syntax, and `app.use('/**', ...)` in the SSR server would have to be rewritten. | ⏳ **Step 23** owns the SSR server. Move to Express 5 there, and drop the override when it lands |
 | 2026-09-05 | Step 5 | `@angular-devkit/build-angular` removed from `package.json`. It was an unused optional peer of `@nx/angular`; our apps use `@angular/build`. | ✅ **RESOLVED** — also closes the Step 1 note about the deprecated Webpack builder warning |
-| 2026-09-05 | Step 5 | Coverage is gated on the **total** line rate, not per assembly. `SharedKernel` (62.2 %) and `Modules.Platform` (62.1 %) individually sit below 70 %, carried by `Api` at 98 % and `Infrastructure` at 91.6 %. | ⏳ A per-assembly floor is the stronger gate but would fail today. Revisit at **Step 29** (test hardening), when those two have the coverage to sustain it |
+| 2026-09-05 | Step 5 | Coverage is gated on the **total** line rate, not per assembly. `SharedKernel` (62.2 %) and `Modules.Platform` (62.1 %) individually sit below 70 %, carried by `Api` at 98 % and `Infrastructure` at 91.6 %. | 🔵 **Unblocked at Step 6:** every assembly is now above the floor (`SharedKernel` 70.6 %, `Modules.Platform` 94.2 %, total 92.39 %). Turning the per-assembly gate on is still a **Step 29** decision, but nothing stands in its way now |
 | 2026-09-05 | Step 5 | No SAST beyond the .NET analyzers and ESLint. `09-nfr-testing-observability.md` §2.1 lists SAST as continuous; CodeQL would be the obvious fit and is not in the Step 5 deliverables. | ⏳ Needs the User's decision. Cheap to add (one workflow, C# + TypeScript), but it is scope beyond the step card |
 | 2026-09-05 | Step 5 | `src/frontend/.gitignore` still duplicates rules from the root file (raised at Step 1 as "consolidate at Step 5 if it causes confusion"). | ℹ️ It has caused none, and Nx regenerates it. Left alone deliberately |
 | 2026-09-05 | Step 5 | Nx caching is local only; the CI jobs get no cross-run Nx cache, so lint, test and build re-run from scratch every time. | ℹ️ Frontend job runs in well under its timeout today. Nx Cloud or a self-hosted cache is a cost/latency decision, not a correctness one. Revisit if the job becomes slow |
 | 2026-09-05 | Step 5 | The `containers` job builds images but pushes nothing, and there is no registry. | ℹ️ Correct — **Step 32** provisions the registry and adds push plus deploy. Recorded so the missing push is not read as an omission |
+
+| 2026-09-05 | Step 6 | **`TenantOptions` was never bound in the worker or the migrator.** Both call `AddKlaraHomePersistence` but not `AddKlaraHomeInfrastructure`, so the ambient tenant fell back to its built-in defaults. Invisible only because the default code happens to be `klarahome`. | ✅ **RESOLVED** — binding moved into `AddKlaraHomePersistence`, where the ambient tenant is registered. Any host that writes a row now reads the tenant the same way |
+| 2026-09-05 | Step 6 | **The connection string was captured at registration time** in `AddModuleDbContext`, so a host whose configuration completes after registration (`WebApplicationFactory`) registered every context against an empty string. | ✅ **RESOLVED** — resolved from the container when the context is built |
+| 2026-09-05 | Step 6 | The audit-log partitions cover **24 months from the deploy date**. After that, rows land in the `DEFAULT` partition: everything keeps working but queries stop being pruned, and creating that month's partition then fails while its rows sit in the default. | ⏳ Scheduled partition maintenance belongs to **Step 31** with the rest of the operational jobs. `platform.ensure_audit_log_partition(date)` exists for it to call; the draining procedure is noted in the migration's own comment |
+| 2026-09-05 | Step 6 | An audit entry is written in **its own transaction**, after the change it describes has committed. A crash in the window between them loses the entry. | ℹ️ Deliberate. The alternative — joining the caller's transaction — means an audit call can commit a caller's unsaved work, which is a far worse failure. Revisit only if a compliance review demands the stronger guarantee |
+| 2026-09-05 | Step 6 | **The admin surface is unprotected.** Every endpoint under `/api/v1/admin` declares its permission, but no authentication scheme exists until Step 7. | ⏳ Held open on purpose: `UnsecuredEndpointGuard` **refuses to start any non-Development host** while that is true, and an integration test fails if an admin endpoint stops declaring a permission. **Step 7** turns the declarations into policies |
+| 2026-09-05 | Step 6 | `FeatureRollout.Segments` cannot be used yet: nothing assigns a caller to a cohort until roles exist. | ℹ️ The evaluator handles it; the Identity module supplies the value at **Step 7**. Percentage and allow-list rollout both work today |
+| 2026-09-05 | Step 6 | `PagedResult.PrevCursor` is always null — the audit search pages forward only. | ℹ️ The UI keeps the cursors it has already seen. Backwards paging is a real feature, not a gap in this one; add it when a screen needs it |
+| 2026-09-05 | Step 6 | `Microsoft.AspNetCore.OutputCaching` is **not on a module project's compile reference set** even with an explicit `FrameworkReference`, though `KlaraHome.Infrastructure` resolves it fine. | ℹ️ Worked around by wrapping `CacheOutput()` as `CacheReferenceData()` in Infrastructure, which is the better home for the policy name anyway. Recorded so the next module that reaches for an ASP.NET Core optional assembly knows what it will hit |
+| 2026-09-05 | Step 6 | `platform.idempotency_keys` (`03-database-design.md` §4.1) is still not created, although the schema it belongs to now exists. | ⏳ Unchanged from Step 4: it serves the `Idempotency-Key` contract, and it is created by the step that enforces it — **Step 13/14** at the latest |
+| 2026-09-05 | Step 6 | The `platform.pincodes` table ships **empty**; the India Post dataset is mounted from `infra/seed/`, not built into the image. | ⏳ Needs the client to supply the dataset before the address form can autofill. Documented in `infra/seed/README.md` and `docs/dev-setup.md` §6; the `platform.pincode-lookup` flag keeps the endpoint off meanwhile |
+| 2026-09-05 | Step 6 | `hsn_codes` holds the 99 chapters with **no default GST rate**. | ⏳ Correct today — rates are notified at four to eight digits. **Step 12** (Pricing, Tax & Promotions) attaches real rates to real tariff items |
+| 2026-09-05 | Step 6 | Reference tables (`states`, `pincodes`, `hsn_codes`) carry **no `tenant_id`**, a deliberate exception to the tenancy convention in `03-database-design.md` §1. | ℹ️ §1 governs *business* tables. These are identical in every deployment and nobody edits them; giving them a tenant would mean an address form that empties itself under a different tenant |
+| 2026-09-05 | Step 6 | Settings and feature-flag caches are **in-process**, invalidated by the writer. | ⏳ Exact at one replica, eventually-consistent within the TTL at two. Folded into the existing Redis/`HybridCache` item from Step 3 |
 
 ---
 
@@ -1515,6 +1683,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 3 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.editorconfig`, `global.json` | Step 3 closed as DONE; API endpoints, backend build/test commands and the container rebuild loop documented; five deviations and eight Parking Lot items recorded. No change to docs `01`–`10` | — |
 | 2026-09-05 | 4 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.editorconfig`, `docs/adr/` | Step 4 closed as DONE; migration workflow, `tools/ef.*`, the `migrate` compose profile and six new troubleshooting rows documented; **ADR-013** added (one outbox in the `platform` schema); four deviations and eleven Parking Lot items recorded. No change to docs `01`–`10` | — |
 | 2026-09-05 | 5 | `IMPLEMENTATION_PLAN.md`, `README.md`, `CONTRIBUTING.md`, `docs/README.md`, `docs/dev-setup.md`, `.editorconfig`, `.config/dotnet-tools.json`, `src/frontend/package.json` | Step 5 closed as DONE. `docs/ci-pipeline.md` added and indexed; quality gates documented in the README, CONTRIBUTING and dev-setup; five new troubleshooting rows. `.editorconfig` amended for two naming-rule defects and generated-migration charset. `dotnet-coverage` added to the tool manifest. Frontend dependency changes brought `npm audit` to zero. **Acceptance criterion only half met** — branch protection needs a GitHub remote. No change to docs `01`–`10` | — |
+| 2026-09-05 | 6 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.gitignore`, `infra/compose/docker-compose.dev.yml`, `infra/seed/README.md` (new) | Step 6 closed as DONE. The Platform module built: tenancy, typed settings store, feature flags, partitioned append-only audit trail, Indian reference data, and 7 endpoints. White-labelling documented in the README and in `dev-setup.md` §4/§6; `TENANT_NAME`, `TENANT_ID` and `PINCODE_DATA_PATH` added to the environment and wired through compose; four new troubleshooting rows. **Eight deviations and thirteen Parking Lot items recorded**, and three carried-forward items closed or unblocked. Two latent defects found and fixed (`TenantOptions` unbound in the worker and migrator; the connection string captured at registration). No change to docs `01`-`10` | — |
 
 ---
 

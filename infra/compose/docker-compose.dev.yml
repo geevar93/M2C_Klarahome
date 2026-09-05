@@ -304,6 +304,8 @@ services:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-klarahome};Username=${POSTGRES_USER:-klarahome};Password=${POSTGRES_PASSWORD:-klarahome_dev_password}
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:-klarahome_dev_password}
       Tenant__Code: ${TENANT_CODE:-klarahome}
+      Tenant__Name: ${TENANT_NAME:-Klara Home}
+      Tenant__Id: ${TENANT_ID:-}
       Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
       Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
       Database__MigrateOnStartup: ${DATABASE_MIGRATE_ON_STARTUP:-false}
@@ -371,10 +373,22 @@ services:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       APP_ROLE: migrator
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-klarahome};Username=${POSTGRES_USER:-klarahome};Password=${POSTGRES_PASSWORD:-klarahome_dev_password}
+      # The migrator seeds the tenant row and the initial settings, so it needs the whole
+      # white-label identity, not just the code it stamps on a log line.
       Tenant__Code: ${TENANT_CODE:-klarahome}
+      Tenant__Name: ${TENANT_NAME:-Klara Home}
+      Tenant__Id: ${TENANT_ID:-}
+      Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
+      Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
+      Platform__PincodeDataPath: ${PINCODE_DATA_PATH:-}
       Database__RunSeeders: ${DATABASE_RUN_SEEDERS:-true}
       Observability__ServiceName: klarahome-migrator
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
+    volumes:
+      # Reference data an operator supplies rather than the product shipping: the India Post PIN
+      # code CSV. Read-only, and empty until somebody puts a file there - the import is skipped
+      # when PINCODE_DATA_PATH points at nothing.
+      - ../seed:/app/seed:ro
     networks:
       - data
     deploy:

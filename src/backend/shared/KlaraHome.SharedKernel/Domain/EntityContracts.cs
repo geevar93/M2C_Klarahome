@@ -55,3 +55,22 @@ public interface ISoftDeletable
     /// <summary>The user who retired it, when the operation had a principal.</summary>
     Guid? DeletedBy { get; }
 }
+
+/// <summary>
+/// A row that is written once and never changed. Marks an entity out of the optimistic-concurrency
+/// convention: there is no lost update to detect when nothing ever updates.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The audit trail is the first of these, and it is also why the marker has to exist rather than
+/// simply being a rule nobody breaks. Its table is partitioned by month, and PostgreSQL refuses to
+/// return a system column from a partitioned table — so an <c>INSERT ... RETURNING xmin</c>, which
+/// is what mapping <c>xmin</c> as a concurrency token produces, fails outright with
+/// <c>0A000: cannot retrieve a system column in this context</c>.
+/// </para>
+/// <para>
+/// Applying this to a row that <em>is</em> updated would silently remove its protection against a
+/// lost update, so it is a deliberate declaration and never a default.
+/// </para>
+/// </remarks>
+public interface IAppendOnly;

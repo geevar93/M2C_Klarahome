@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KlaraHome.Infrastructure.Caching;
@@ -32,4 +34,19 @@ public static class OutputCacheExtensions
 
         return services;
     }
+
+    /// <summary>Caches a public read with the long-TTL reference-data policy.</summary>
+    /// <remarks>
+    /// A named helper rather than <c>CacheOutput("reference-data")</c> at the call site, so an
+    /// endpoint opts into caching by saying what it is. It also keeps
+    /// <c>Microsoft.AspNetCore.OutputCaching</c> a dependency of this project alone: it is not on a
+    /// module project's compile reference set, even with an explicit <c>FrameworkReference</c>.
+    /// The short-TTL sibling for <see cref="OutputCachePolicies.PublicRead"/> arrives with the
+    /// first catalogue endpoint that needs it.
+    /// </remarks>
+    /// <typeparam name="TBuilder">The endpoint convention builder type.</typeparam>
+    /// <param name="builder">The endpoint being built.</param>
+    public static TBuilder CacheReferenceData<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+        => builder.CacheOutput(OutputCachePolicies.ReferenceData);
 }

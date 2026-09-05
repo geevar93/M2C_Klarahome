@@ -57,7 +57,20 @@ public static class PersistenceExtensions
             options => options.MaxRetryDelaySeconds >= 1,
             "Database:MaxRetryDelaySeconds must be at least 1 second.");
 
+        // Bound here rather than only in the API's cross-cutting registration, because the ambient
+        // tenant decides what tenant_id every row is written under - and the worker and the migrator
+        // write rows without ever calling AddKlaraHomeInfrastructure. Unbound, they would fall back
+        // to the built-in defaults and seed a deployment under a different tenant than the one the
+        // API serves, silently.
+        services.AddValidatedOptions<TenantOptions>(configuration, TenantOptions.SectionName);
+
         services.TryAddSingleton<ITenantContext, ConfiguredTenantContext>();
+
+        // Anything that writes carries the correlation id of whatever caused it: the outbox stamps
+        // it on every queued event and the audit trail on every entry. That makes it a persistence
+        // dependency rather than an HTTP one - the worker and the migrator write too, and outside a
+        // request the context simply mints a fresh id, which is the right answer for a job.
+        services.TryAddScoped<Correlation.ICorrelationContext, Correlation.CorrelationContext>();
 
         if (httpContextAvailable)
         {
@@ -116,10 +129,15 @@ public static class PersistenceExtensions
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(module);
 
-        var connectionString = configuration.GetConnectionString(ConnectionStringName);
-
+        // The connection string is read from the container rather than captured here. A host whose
+        // configuration is completed after registration - WebApplicationFactory does exactly that -
+        // would otherwise register every context against whatever the string was at startup, which
+        // is usually nothing.
         services.AddDbContext<TContext>((provider, builder) =>
-            builder.ConfigureKlaraHome(provider, connectionString, module.Schema));
+            builder.ConfigureKlaraHome(
+                provider,
+                provider.GetRequiredService<IConfiguration>().GetConnectionString(ConnectionStringName),
+                module.Schema));
 
         services.AddSingleton(new ModuleDbContextDescriptor(
             module.Name,

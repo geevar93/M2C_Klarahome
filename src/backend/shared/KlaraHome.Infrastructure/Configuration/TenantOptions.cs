@@ -17,6 +17,13 @@ public sealed class TenantOptions
     public string Code { get; set; } = "klarahome";
 
     /// <summary>
+    /// Display name of the business. Seeded into <c>platform.tenants</c> and used as the initial
+    /// store name in the branding settings, so a fresh deployment is already branded before anyone
+    /// opens the admin UI. Falls back to <see cref="Code"/> when unset.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
     /// The tenant's primary key, written into <c>tenant_id</c> on every row. Set this explicitly
     /// on any deployment that holds data. Left unset it is derived deterministically from
     /// <see cref="Code"/>, which survives a restart but not a change of code — see

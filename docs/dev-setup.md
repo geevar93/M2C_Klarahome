@@ -129,6 +129,26 @@ POSTGRES_PORT=5433
 Other useful ones: `COMPOSE_PROJECT_NAME` (run two isolated stacks side by side),
 `BIND_ADDRESS=0.0.0.0` (reach the stack from a phone on the same network), `DEV_DOMAIN`.
 
+### What is configuration and what is data
+
+From Step 6 the line is drawn deliberately, because it is what makes the product
+re-distributable:
+
+| | Lives in | Changed by |
+|---|---|---|
+| Which business this deployment is | `.env`: `TENANT_CODE`, `TENANT_NAME`, `TENANT_ID`, `TENANT_DEFAULT_LOCALE`, `TENANT_DEFAULT_TIMEZONE` | A redeploy |
+| Everything that business would want to change | `platform.store_settings` | `PUT /api/v1/admin/settings/{key}`, audited |
+| Whether a feature is on | `platform.feature_flags` | `PUT /api/v1/admin/feature-flags/{key}`, audited |
+
+Branding, legal entity, GSTIN, PAN, CIN, addresses, support and grievance contacts, locale,
+currency, timezone, return window, COD cap, free-shipping threshold and colours are all in the
+second row. None of them is a variable, and none of them is compiled in.
+
+> **`TENANT_ID` matters.** Left blank it is derived from `TENANT_CODE`, which survives a restart
+> but not a change of code — every row already written keeps the old id and becomes invisible.
+> Set it explicitly on anything holding data. The `platform-tenant` readiness check reports that
+> mismatch rather than letting the API serve an empty catalogue.
+
 ---
 
 ## 5. Hostnames and TLS
@@ -180,6 +200,49 @@ psql "postgresql://klarahome:klarahome_dev_password@127.0.0.1:5432/klarahome"
 The database is created with the ICU locale provider and the `en-IN` locale, so collation and
 sort order match the VPS exactly. The server timezone is **UTC**; India-local rendering is the
 application's job.
+
+**Read or change the store settings**
+
+```bash
+# The public document the storefront renders from.
+curl -sk https://api.klarahome.localhost/api/v1/store/config | jq
+
+# Every section, including the private ones.
+curl -sk https://api.klarahome.localhost/api/v1/admin/settings | jq
+
+# Replace one section. A section is edited as a whole: fields you omit go back to their defaults.
+curl -sk -X PUT https://api.klarahome.localhost/api/v1/admin/settings/support   -H 'Content-Type: application/json'   -d '{"email":"help@example.in","phone":"+919876543210"}'
+
+# What changed, and what it looked like before.
+curl -sk 'https://api.klarahome.localhost/api/v1/admin/audit-logs?entityType=StoreSetting' | jq
+```
+
+**Turn a feature off without a deploy**
+
+```bash
+curl -sk -X PUT https://api.klarahome.localhost/api/v1/admin/feature-flags/platform.public-store-config   -H 'Content-Type: application/json' -d '{"enabled":false}'
+```
+
+The next request to `/api/v1/store/config` answers `404 FEATURE_DISABLED`. The flag set is cached
+in-process for a minute, and the write invalidates it, so a single replica changes immediately.
+
+**Import the PIN code dataset**
+
+`platform.pincodes` ships empty: the India Post dataset is roughly nineteen thousand rows and
+changes without notice, so it is mounted rather than built into the image. Drop `pincodes.csv`
+into `infra/seed/` (format in [`infra/seed/README.md`](../infra/seed/README.md)), then:
+
+```ini
+# .env
+PINCODE_DATA_PATH=/app/seed/pincodes.csv
+```
+
+```bash
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env   --profile migrate run --rm migrator
+```
+
+The import is idempotent — matched on the PIN code and updated in place. Until it has run, keep the
+`platform.pincode-lookup` flag off, or every valid code answers `PINCODE_NOT_FOUND`.
 
 **Inspect Redis**
 
@@ -350,6 +413,10 @@ A reset drops the database, so run the migrator again before expecting the API t
 | Migrator exits 1 with `password authentication failed` | `.env` credentials differ from the ones the Postgres volume was initialised with | Credentials are only applied to an **empty** data directory: `dev reset`, then `up`, then migrate |
 | `The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions` | Retry-on-failure is enabled, so EF will not let you open a transaction it cannot re-run | Use `KlaraHomeDbContext.ExecuteInTransactionAsync(...)` instead of `BeginTransactionAsync`. It wraps the transaction in the execution strategy, which is the required order |
 | A query returns nothing though the rows are visible in `psql` | The global tenant and soft-delete filters | Expected. `IgnoreQueryFilters()` in a query, deliberately and locally, or check `tenant_id` and `deleted_at` on the row |
+| `/health/ready` reports `platform-tenant` as `Unhealthy` after changing `TENANT_CODE` | The tenant id is derived from the code when `TENANT_ID` is blank, so a new code is a new tenant and every existing row belongs to the old one | Put the old code back, or set `TENANT_ID` to the id the data was written under (`select id from platform.tenants`) and keep it pinned from then on |
+| `cannot retrieve a system column in this context` when inserting | An entity mapped to a **partitioned** table picked up the `xmin` concurrency token, and PostgreSQL will not return a system column from one | Mark the entity `IAppendOnly`. That is what it is for, and an append-only table has no lost update to detect anyway |
+| `platform.audit_logs is append-only; UPDATE is not permitted` | A trigger enforcing docs/07-security-compliance.md §7 | Working as intended. Retention is `DROP` of a monthly partition, never `DELETE` |
+| An audit insert fails with `no partition of relation "audit_logs" found` | The migration created two years of monthly partitions and the default partition was dropped | Recreate it, or create the month: `select platform.ensure_audit_log_partition(current_date);` |
 | `dotnet format` reports thousands of `ENDOFLINE` errors, only on Windows | Stale CRLF in the working tree. `.gitattributes` normalises `*.cs` to LF in the repository, so a file written with CRLF and then committed is clean in git but still CRLF on disk | Re-checkout the files: `git ls-files -z '*.cs' \| xargs -0 rm -f && git checkout -- '*.cs'`. Verify with `dotnet format --verify-no-changes` |
 | `dotnet format` fails with `CHARSET` on a file under `Migrations/` | `dotnet ef` writes the migration with a UTF-8 BOM and the Designer/snapshot without one, and neither is configurable | Already handled: `.editorconfig` sets `charset = unset` for `**/Migrations/*.cs`. If it reappears, that section was lost |
 | Coverage numbers look wrong, and the log says `Coverage settings file is not a valid file` | `src/backend/coverage.settings.xml` is invalid XML, most often a `--` inside a comment, which XML forbids. The tool warns once and then measures with default filters | Fix the XML. Re-run with `--log-level Verbose --log-file <path>` and check that warning is gone |

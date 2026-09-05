@@ -171,5 +171,56 @@ cd src/backend
 ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=klarahome;Username=klarahome;Password=..."   dotnet run --project host/KlaraHome.Migrator
 ```
 
+### White-labelling this deployment
+
+Nothing about the business this instance is deployed for is compiled in. A second client is a
+second installation with different values, not a fork.
+
+**Configuration decides the deployment's identity** — `.env`, and only this much:
+
+| Variable | Meaning |
+|---|---|
+| `TENANT_CODE` | Short lowercase code. Stamped on every log line, seeded into `platform.tenants` |
+| `TENANT_NAME` | Display name. Becomes the initial store name in the branding settings |
+| `TENANT_ID` | The `tenant_id` written on every row. Blank in dev: derived from the code |
+| `TENANT_DEFAULT_LOCALE`, `TENANT_DEFAULT_TIMEZONE` | Seeded into the localization settings |
+
+> Set `TENANT_ID` explicitly on anything that holds data. Left blank it is derived from
+> `TENANT_CODE`, so **changing the code changes the id** and hides every row already written. The
+> `platform-tenant` readiness check reports exactly that rather than letting a replica serve an
+> empty catalogue.
+
+**Everything else is data**, in `platform.store_settings`: legal entity, GSTIN, PAN, CIN,
+addresses, support and grievance contacts, locale, currency, timezone, return window, COD cap,
+free-shipping threshold, colours and logo references. It is editable at runtime and every change is
+audited.
+
+```bash
+# The whole public configuration document the storefront renders from.
+GET  /api/v1/store/config
+
+# Read and replace settings. A section is edited as a whole.
+GET  /api/v1/admin/settings
+PUT  /api/v1/admin/settings/{branding|legal|support|localization|commerce}
+
+# Feature switches, toggled without a deploy.
+GET  /api/v1/admin/feature-flags
+PUT  /api/v1/admin/feature-flags/{key}          { "enabled": false }
+
+# The immutable audit trail: who changed what, before and after.
+GET  /api/v1/admin/audit-logs?entityType=StoreSetting&entityId=branding
+
+# Reference data.
+GET  /api/v1/store/states                       # 28 states + 8 UTs, with GST state codes
+GET  /api/v1/store/pincodes/{pincode}           # city/district/state autofill
+```
+
+The admin endpoints declare the permission they will require and are **not yet protected** — the
+Identity module supplies authentication at Step 7. Until it does, the host refuses to start outside
+Development, and an integration test fails if any admin endpoint stops declaring a permission.
+
+The India Post PIN code dataset is mounted rather than shipped: drop `pincodes.csv` in
+[`infra/seed/`](infra/seed/README.md), point `PINCODE_DATA_PATH` at it and re-run the migrator.
+
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

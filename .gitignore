@@ -62,6 +62,13 @@ Thumbs.db
 desktop.ini
 *.swp
 
+# ---------- Operator-supplied reference data ----------
+# Datasets an operator mounts rather than the product shipping: the India Post PIN codes are
+# ~19,000 rows that change without notice, so a copy in the repository is stale the week it lands.
+# infra/seed/README.md documents the format and stays committed.
+infra/seed/*
+!infra/seed/README.md
+
 # ---------- Generated ----------
 src/frontend/libs/data-access/api/generated/
 openapi.json

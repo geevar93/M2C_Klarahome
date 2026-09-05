@@ -1,5 +1,7 @@
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Tenancy;
+using KlaraHome.Modules.Platform.Domain;
+using KlaraHome.Modules.Platform.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace KlaraHome.Modules.Platform.Infrastructure.Persistence;
@@ -17,9 +19,9 @@ namespace KlaraHome.Modules.Platform.Infrastructure.Persistence;
 /// migrations, so the queue is created once and appended to by all.
 /// </para>
 /// <para>
-/// The Platform module's own tables — tenants, settings, feature flags, audit log, reference data
-/// — arrive at Step 6. This context exists at Step 4 so the data-access conventions and the
-/// migration pipeline are exercised end to end by a real module rather than by a fixture.
+/// From Step 6 it also owns the module's own tables: the tenant, the settings store, the feature
+/// flags, the audit trail, and the reference data every other module looks Indian states, PIN codes
+/// and HSN chapters up in.
 /// </para>
 /// </remarks>
 /// <param name="options">Provider options supplied by DI or by the design-time factory.</param>
@@ -32,6 +34,27 @@ internal sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> opti
 
     /// <inheritdoc />
     public override bool OwnsMessagingTables => true;
+
+    /// <summary>The businesses this deployment serves. One row, in the v1 redistribution model.</summary>
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    /// <summary>Store configuration, one row per section.</summary>
+    public DbSet<StoreSetting> StoreSettings => Set<StoreSetting>();
+
+    /// <summary>Feature switches an operator can throw without a deploy.</summary>
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
+    /// <summary>The append-only audit trail.</summary>
+    public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
+
+    /// <summary>Indian states and union territories, with their GST codes.</summary>
+    public DbSet<StateOrUnionTerritory> States => Set<StateOrUnionTerritory>();
+
+    /// <summary>PIN codes and the places they identify.</summary>
+    public DbSet<Pincode> Pincodes => Set<Pincode>();
+
+    /// <summary>HSN chapters and codes.</summary>
+    public DbSet<HsnCode> HsnCodes => Set<HsnCode>();
 
     /// <inheritdoc />
     protected override void ConfigureModule(ModelBuilder modelBuilder)
@@ -54,8 +77,12 @@ internal sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> opti
         modelBuilder.HasPostgresExtension("unaccent");
         modelBuilder.HasPostgresExtension("btree_gin");
 
-        // Step 6 maps tenants, store_settings, feature_flags, audit_logs and the reference tables
-        // here. Nothing else is mapped yet, deliberately: the outbox and inbox come from the base
-        // context and are the whole of this schema at Step 4.
+        modelBuilder.ApplyConfiguration(new TenantConfiguration());
+        modelBuilder.ApplyConfiguration(new StoreSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new FeatureFlagConfiguration());
+        modelBuilder.ApplyConfiguration(new AuditLogEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new StateConfiguration());
+        modelBuilder.ApplyConfiguration(new PincodeConfiguration());
+        modelBuilder.ApplyConfiguration(new HsnCodeConfiguration());
     }
 }

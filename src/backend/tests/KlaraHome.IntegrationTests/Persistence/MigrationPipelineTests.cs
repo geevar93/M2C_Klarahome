@@ -90,7 +90,10 @@ public sealed class MigrationPipelineTests : IAsyncLifetime
             .RunAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.ContextsInspected);
-        Assert.Equal(1, result.MigrationsApplied);
+
+        // Counted rather than pinned: a module gains migrations as it gains features, and a test
+        // that has to be edited for every one of them stops being read.
+        Assert.True(result.MigrationsApplied > 0, "No migrations were applied to an empty database.");
 
         var tables = await ReadAsync(
             provider,
@@ -186,7 +189,9 @@ public sealed class MigrationPipelineTests : IAsyncLifetime
         var result = await provider.GetRequiredService<MigrationRunner>()
             .RunAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, result.SeedersRun);
+        // The Platform module registers its own seeders too; what this asserts is that the extra
+        // one was reached, not how many the platform happens to have.
+        Assert.True(result.SeedersRun >= 1);
         Assert.Equal(1, seeder.Runs);
     }
 
