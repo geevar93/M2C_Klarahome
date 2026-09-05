@@ -44,6 +44,7 @@ $ErrorActionPreference = 'Stop'
 # module -> context type. One line per module.
 $Contexts = @{
     'Platform' = 'PlatformDbContext'
+    'Identity' = 'IdentityDbContext'
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

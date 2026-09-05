@@ -74,3 +74,27 @@ public interface ISoftDeletable
 /// </para>
 /// </remarks>
 public interface IAppendOnly;
+
+/// <summary>
+/// A row that belongs to exactly one seller. Vendor staff may only ever read and write their own
+/// vendor's rows (docs/07-security-compliance.md §2), and that is enforced by a global query
+/// filter in the data layer rather than by a check in each handler — a developer who forgets the
+/// filter gets no data instead of everyone's.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The filter is a no-op for a caller with no vendor scope: platform staff and background work
+/// see every vendor's rows, which is the whole point of the distinction. The nullable column
+/// exists because some vendor-scoped tables also hold platform-wide rows — a staff role
+/// assignment carries no vendor.
+/// </para>
+/// <para>
+/// Like <see cref="ITenantScoped"/> this is deliberately persistence-agnostic: a module's Domain
+/// layer must not see EF Core.
+/// </para>
+/// </remarks>
+public interface IVendorScoped
+{
+    /// <summary>The owning seller, or null for a row that belongs to the platform itself.</summary>
+    Guid? VendorId { get; }
+}

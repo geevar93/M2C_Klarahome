@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Identity & Access (Step 7): authentication for customers, vendor staff and platform staff;
+    the permission catalogue and the roles that bundle it; sessions and refresh-token rotation;
+    customer profiles and Indian addresses.
+
+    This is the module that closes the gap Step 6 deliberately held open: every endpoint that
+    declared a required permission is now behind a policy that checks it.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Identity</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The JWT bearer handler and the Argon2id KDF. Both belong to this module rather than to
+      KlaraHome.Infrastructure: the shared layer knows what a permission is, not what credential
+      this system accepts or how a secret is stored.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

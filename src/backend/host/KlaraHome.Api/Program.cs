@@ -61,8 +61,9 @@ try
     {
         app.MapOpenApi(OpenApiExtensions.DocumentRoute).AllowAnonymous();
         app.MapScalarApiReference(api.ApiReferencePath, options => options
-            .WithTitle("Klara Home API")
-            .AddDocument(api.Version));
+                .WithTitle("Klara Home API")
+                .AddDocument(api.Version))
+            .AllowAnonymous();
     }
 
     await app.RunAsync().ConfigureAwait(false);

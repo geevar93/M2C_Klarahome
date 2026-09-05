@@ -69,7 +69,7 @@ public sealed class CrossCuttingTests(KlaraHomeApiFactory factory) : IClassFixtu
     {
         var registry = factory.Services.GetRequiredService<ModuleRegistry>();
 
-        Assert.Equal(["Platform"], registry.Modules.Select(module => module.Name));
+        Assert.Equal(["Platform", "Identity"], registry.Modules.Select(module => module.Name));
         Assert.Distinct(registry.Modules.Select(module => module.Schema));
     }
 

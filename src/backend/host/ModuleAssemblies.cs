@@ -25,5 +25,6 @@ internal static class ModuleAssemblies
     public static readonly Assembly[] All =
     [
         typeof(Modules.Platform.PlatformModule).Assembly,
+        typeof(Modules.Identity.IdentityModule).Assembly,
     ];
 }

@@ -29,6 +29,9 @@ internal static class DiagnosticsEndpoints
         var group = endpoints
             .MapGroup("/diagnostics")
             .WithTags("Diagnostics")
+            // Said out loud, because the fallback policy closes anything that declares nothing.
+            // These endpoints exist to be called without a token, and only ever in Development.
+            .AllowAnonymous()
             .ExcludeFromDescription();
 
         group.MapPost("/echo", async (EchoCommand command, IDispatcher dispatcher, HttpContext context) =>

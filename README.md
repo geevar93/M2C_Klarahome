@@ -215,12 +215,62 @@ GET  /api/v1/store/states                       # 28 states + 8 UTs, with GST st
 GET  /api/v1/store/pincodes/{pincode}           # city/district/state autofill
 ```
 
-The admin endpoints declare the permission they will require and are **not yet protected** — the
-Identity module supplies authentication at Step 7. Until it does, the host refuses to start outside
-Development, and an integration test fails if any admin endpoint stops declaring a permission.
-
 The India Post PIN code dataset is mounted rather than shipped: drop `pincodes.csv` in
 [`infra/seed/`](infra/seed/README.md), point `PINCODE_DATA_PATH` at it and re-run the migrator.
+
+### Signing in
+
+Three actor classes, one set of endpoints, mapped under both `/store` and `/admin`
+(`docs/07-security-compliance.md` §1).
+
+| Actor | Primary credential | Second factor |
+|---|---|---|
+| Customer | Mobile number + 6-digit OTP | Optional |
+| Vendor staff | Email + password | **Mandatory for `vendor-owner`** |
+| Platform staff | Email + password | **Mandatory for `platform-admin`** |
+
+```bash
+# Customers: the code is the credential, and verifying it registers a new number.
+POST /api/v1/store/auth/otp/request             { "mobile": "9876543210" }
+POST /api/v1/store/auth/otp/verify              { "mobile": "...", "code": "123456" }
+
+# Staff and vendors. A correct password may answer with a challenge rather than a session.
+POST /api/v1/admin/auth/login                   { "email": "...", "password": "..." }
+POST /api/v1/admin/auth/2fa/enrol               { "challengeToken": "..." }   -> secret + QR URI
+POST /api/v1/admin/auth/2fa/verify              { "challengeToken": "...", "code": "123456" }
+
+# The refresh token lives in an HttpOnly cookie and is rotated on every use.
+POST /api/v1/admin/auth/refresh
+POST /api/v1/admin/auth/logout
+
+# Self-service, on both surfaces.
+GET  /api/v1/store/me                           # identity, roles, permissions, profile
+GET  /api/v1/store/me/sessions                  # signed-in devices; DELETE one, or all
+GET/POST/PUT/DELETE /api/v1/store/me/addresses  # Indian address model, GSTIN per address
+
+# Users and roles. A vendor caller is scoped to their own seller by their token.
+GET/POST /api/v1/admin/users                    PUT /api/v1/admin/users/{id}/roles|status
+GET/POST /api/v1/admin/roles                    GET /api/v1/admin/permissions
+```
+
+**Authorisation is permission-based and deny-by-default.** An endpoint asks for a permission with
+`RequirePermission("platform.settings.manage")`, which both records it and attaches the policy that
+checks it; an endpoint that declares nothing is closed by the fallback policy rather than opened.
+Roles are editable data — a deployment can define its own — and enforcement is never on a role.
+
+**Vendor scope is enforced in the data layer.** A row that belongs to one seller implements
+`IVendorScoped`, and a global query filter compares it to the `vendor_id` claim: a vendor user who
+asks for another seller's data gets no rows rather than someone else's, and a `{id}` route answers
+404 rather than 403 so existence is not leaked.
+
+**The first administrator** is created once, from `AUTH_BOOTSTRAP_EMAIL` and
+`AUTH_BOOTSTRAP_PASSWORD`, on a deployment that has none. There is no default credential. Their
+first sign-in enrols a second factor before it issues a session. Accounts an administrator creates
+afterwards get no password at all — the new user sets their own from an emailed link.
+
+> **Until Step 8 there is no SMS or email transport.** One-time codes and reset links are written
+> to the API log by `LoggingOtpDispatcher`, which is how you sign in locally and is exactly what
+> `docs/07-security-compliance.md` §3 forbids in production. The Notifications module replaces it.
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

@@ -308,6 +308,18 @@ services:
       Tenant__Id: ${TENANT_ID:-}
       Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
       Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
+      # Identity (Step 7). Blank signing keys are tolerated only here, in Development: the host
+      # mints an ephemeral RSA key and warns on every start. Any other environment refuses to boot.
+      Auth__Tokens__SigningKeys__0__KeyId: ${AUTH_SIGNING_KEY_ID:-}
+      Auth__Tokens__SigningKeys__0__PrivateKeyPem: ${AUTH_SIGNING_KEY_PEM:-}
+      Auth__Encryption__CurrentKeyId: ${AUTH_ENCRYPTION_KEY_ID:-dev}
+      Auth__Encryption__Keys__dev: ${AUTH_ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
+      # False because the dev stack is reachable over plain http through Traefik's local
+      # certificate; a browser will not return a Secure cookie over http and sign-in would appear
+      # to fail silently. Never false in staging or production.
+      Auth__Tokens__RefreshCookieSecure: ${AUTH_REFRESH_COOKIE_SECURE:-false}
+      Auth__Bootstrap__Email: ${AUTH_BOOTSTRAP_EMAIL:-}
+      Auth__Bootstrap__Password: ${AUTH_BOOTSTRAP_PASSWORD:-}
       Database__MigrateOnStartup: ${DATABASE_MIGRATE_ON_STARTUP:-false}
       Database__EnableSensitiveDataLogging: ${DATABASE_SENSITIVE_LOGGING:-false}
       Observability__ServiceName: klarahome-api
@@ -381,6 +393,13 @@ services:
       Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
       Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
       Platform__PincodeDataPath: ${PINCODE_DATA_PATH:-}
+      # The migrator runs the seeder that creates the first platform administrator, so it needs
+      # the credential and the key their authenticator secret will be protected with. It does
+      # nothing at all once any administrator exists.
+      Auth__Bootstrap__Email: ${AUTH_BOOTSTRAP_EMAIL:-}
+      Auth__Bootstrap__Password: ${AUTH_BOOTSTRAP_PASSWORD:-}
+      Auth__Encryption__CurrentKeyId: ${AUTH_ENCRYPTION_KEY_ID:-dev}
+      Auth__Encryption__Keys__dev: ${AUTH_ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
       Database__RunSeeders: ${DATABASE_RUN_SEEDERS:-true}
       Observability__ServiceName: klarahome-migrator
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}

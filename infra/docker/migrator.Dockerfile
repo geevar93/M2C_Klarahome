@@ -32,6 +32,7 @@ COPY src/backend/shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj    
 COPY src/backend/shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj          src/backend/shared/KlaraHome.Contracts/
 COPY src/backend/shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj src/backend/shared/KlaraHome.Infrastructure/
 COPY src/backend/modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj src/backend/modules/KlaraHome.Modules.Platform/
+COPY src/backend/modules/KlaraHome.Modules.Identity/KlaraHome.Modules.Identity.csproj src/backend/modules/KlaraHome.Modules.Identity/
 COPY src/backend/host/KlaraHome.Migrator/KlaraHome.Migrator.csproj              src/backend/host/KlaraHome.Migrator/
 
 RUN dotnet restore src/backend/host/KlaraHome.Migrator/KlaraHome.Migrator.csproj \

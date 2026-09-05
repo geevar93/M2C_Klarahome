@@ -1,4 +1,4 @@
-using KlaraHome.Infrastructure.Observability.Enrichers;
+using KlaraHome.Infrastructure.Authorization;
 using Microsoft.AspNetCore.Http;
 
 namespace KlaraHome.Infrastructure.Tenancy;
@@ -19,7 +19,7 @@ internal sealed class ClaimsUserContext(IHttpContextAccessor accessor) : IUserCo
                 return null;
             }
 
-            return Guid.TryParse(principal.FindFirst(PrincipalEnricher.UserIdClaim)?.Value, out var id)
+            return Guid.TryParse(principal.FindFirst(KlaraHomeClaims.UserId)?.Value, out var id)
                 ? id
                 : null;
         }

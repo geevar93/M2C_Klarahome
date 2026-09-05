@@ -16,6 +16,7 @@ set -euo pipefail
 context_for() {
     case "$1" in
         Platform) echo "PlatformDbContext" ;;
+        Identity) echo "IdentityDbContext" ;;
         *) return 1 ;;
     esac
 }

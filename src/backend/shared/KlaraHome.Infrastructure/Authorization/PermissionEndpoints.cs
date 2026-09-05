@@ -1,16 +1,18 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace KlaraHome.Infrastructure.Authorization;
 
 /// <summary>
-/// Declares the permission an endpoint requires. Attached as endpoint metadata rather than as a
-/// policy, because the permission is known now and the authorisation that enforces it arrives with
-/// the Identity module at Step 7.
+/// Declares the permission an endpoint requires. Kept as endpoint metadata alongside the policy
+/// it produces, because the declaration is what the authorisation matrix test enumerates: a policy
+/// alone is not readable from outside the request that evaluates it.
 /// </summary>
 /// <remarks>
 /// The metadata is not decoration. <see cref="UnsecuredEndpointGuard"/> refuses to start a
@@ -18,16 +20,17 @@ namespace KlaraHome.Infrastructure.Authorization;
 /// registered, so the window between "the endpoint exists" and "the endpoint is protected" cannot
 /// be closed by forgetting about it.
 /// </remarks>
-/// <param name="Permission">
-/// The granular permission, as a dotted noun-verb: <c>platform.settings.manage</c>. Step 7 turns
-/// these into the permission catalogue and the policies that check them.
-/// </param>
+/// <param name="Permission">The granular permission, as a dotted noun-verb: <c>platform.settings.manage</c>.</param>
 public sealed record RequiredPermissionMetadata(string Permission);
 
 /// <summary>Endpoint-builder helpers for the permission convention.</summary>
 public static class PermissionEndpoints
 {
-    /// <summary>Records the permission this endpoint will require.</summary>
+    /// <summary>
+    /// Requires the permission, and records it so it can be enumerated. Both, in one call:
+    /// declaring a permission that nothing checks is the failure mode this convention exists to
+    /// prevent.
+    /// </summary>
     /// <typeparam name="TBuilder">The endpoint convention builder type.</typeparam>
     /// <param name="builder">The endpoint or group being built.</param>
     /// <param name="permission">The granular permission, for example <c>platform.settings.manage</c>.</param>
@@ -38,6 +41,8 @@ public static class PermissionEndpoints
         ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         builder.WithMetadata(new RequiredPermissionMetadata(permission));
+        builder.RequireAuthorization(PermissionPolicy.NameFor(permission));
+
         return builder;
     }
 
@@ -48,6 +53,64 @@ public static class PermissionEndpoints
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddHostedService<UnsecuredEndpointGuard>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers permission-based authorisation: the dynamic policy provider, the handler that
+    /// checks the claim, and the caller context handlers read the request's identity from.
+    /// </summary>
+    /// <remarks>
+    /// The authentication <em>scheme</em> is not registered here. Which credentials this system
+    /// accepts, and the keys that validate them, belong to the Identity module; the shared layer
+    /// only knows what a permission is and how an endpoint asks for one.
+    /// </remarks>
+    /// <param name="services">The container.</param>
+    /// <param name="httpContextAvailable">
+    /// Whether the host serves HTTP. A background host has no principal, and its caller context
+    /// says so rather than reaching for an <c>HttpContext</c> that will never exist.
+    /// </param>
+    public static IServiceCollection AddKlaraHomeAuthorization(
+        this IServiceCollection services,
+        bool httpContextAvailable = true)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddAuthorization();
+
+        // Replace, not TryAdd. AddAuthorization registers the framework's provider with a TryAdd of
+        // its own, so a TryAdd here would silently lose and every perm: policy would come back
+        // "not found" at the first request rather than at startup.
+        services.Replace(ServiceDescriptor.Singleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>());
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IAuthorizationHandler, PermissionAuthorizationHandler>());
+
+        return services.AddKlaraHomeAuthorizationContext(httpContextAvailable);
+    }
+
+    /// <summary>
+    /// Registers only <see cref="ICallerContext"/>. Split out because the vendor query filter
+    /// needs it in hosts that never register a policy or serve a request.
+    /// </summary>
+    /// <param name="services">The container.</param>
+    /// <param name="httpContextAvailable">Whether the host serves HTTP.</param>
+    public static IServiceCollection AddKlaraHomeAuthorizationContext(
+        this IServiceCollection services,
+        bool httpContextAvailable)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (httpContextAvailable)
+        {
+            services.AddHttpContextAccessor();
+            services.TryAddScoped<ICallerContext, ClaimsCallerContext>();
+        }
+        else
+        {
+            services.TryAddSingleton<ICallerContext, SystemCallerContext>();
+        }
+
         return services;
     }
 }

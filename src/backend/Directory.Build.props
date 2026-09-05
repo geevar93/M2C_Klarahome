@@ -48,8 +48,13 @@
     <!--
       CA1707: Underscored_test_names are the convention here and read far better in a failure
       report than PascalCase run together. Production code keeps the rule.
+
+      CA1861: hoisting a request payload's inline array to a static readonly field is an
+      allocation optimisation for a hot path. A test that posts { roleCodes: ["vendor-owner"] }
+      once is not one, and the field would put the payload further from the assertion that reads
+      it. Production code keeps the rule.
     -->
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1861</NoWarn>
   </PropertyGroup>
 
 </Project>

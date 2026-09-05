@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Configuration;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
@@ -71,6 +72,11 @@ public static class PersistenceExtensions
         // dependency rather than an HTTP one - the worker and the migrator write too, and outside a
         // request the context simply mints a fresh id, which is the right answer for a job.
         services.TryAddScoped<Correlation.ICorrelationContext, Correlation.CorrelationContext>();
+
+        // Registered here alongside the tenant for the same reason: the vendor query filter is a
+        // persistence concern, and a host that writes rows without ever calling
+        // AddKlaraHomeInfrastructure still has to know that it has no vendor scope.
+        services.AddKlaraHomeAuthorizationContext(httpContextAvailable);
 
         if (httpContextAvailable)
         {

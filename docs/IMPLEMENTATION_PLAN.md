@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 6)
-> **Last updated:** 2026-09-05 (Step 6 complete)
+> **Status:** APPROVED — in execution (Step 7)
+> **Last updated:** 2026-09-05 (Step 7 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -88,7 +88,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 4 | Database foundation, EF Core & migration pipeline | A | ✅ DONE | 2026-09-05 | Migrator container applies the schema and re-runs clean; idempotent SQL verified twice against a fresh database; 179 tests green; all three criteria met |
 | 5 | CI pipeline & quality gates | A | ✅ DONE | 2026-09-05 | Every gate built, run and proven to fail correctly; 179 tests, 88.81% line coverage, both images scan clean. **One half of the acceptance criterion is not demonstrable yet:** there is no GitHub remote, so nothing can block a merge. Configuration documented in `ci-pipeline.md` §6 |
 | 6 | Platform module — tenancy, settings, branding, audit | B | ✅ DONE | 2026-09-05 | Tenant, typed settings store, feature flags, partitioned append-only audit trail and Indian reference data; 7 endpoints; 252 tests green, 92.44% line coverage. All three criteria met and demonstrated against the running stack. **Admin endpoints declare their permissions but nothing enforces them until Step 7** — the host refuses to start outside Development while that is true |
-| 7 | Identity & Access module | B | ⬜ NOT STARTED | | |
+| 7 | Identity & Access module | B | ✅ DONE | 2026-09-05 | Customer OTP, staff/vendor password + mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope in the data layer, profiles and Indian addresses; 50 routes across the two surfaces; 421 tests green, 89.06% line / 80.58% branch coverage. All three acceptance criteria met and demonstrated against a containerised stack. **Closes the Step 6 gap:** every admin endpoint that declared a permission is now behind a policy that checks it |
 | 8 | Media, file storage & Notifications module | B | ⬜ NOT STARTED | | |
 | 9 | Vendor / Seller module | C | ⬜ NOT STARTED | | |
 | 10 | Catalog module | C | ⬜ NOT STARTED | | |
@@ -1111,7 +1111,138 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Customer profile, saved addresses (Indian address model), GSTIN for B2B invoices.
 - **Acceptance criteria:** All three actor types can authenticate; a vendor user is provably
   denied access to another vendor's data; refresh-token rotation and revocation verified.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.** All three criteria met, each proved by a test that
+  goes over HTTP against the real database rather than by inspection.
+
+  **What was built.** A new `KlaraHome.Modules.Identity`, owning the `identity` schema: eleven
+  tables, one migration, three seeders. The module registers the JWT bearer scheme, which is what
+  makes `UnsecuredEndpointGuard` go quiet — the seven admin endpoints Step 6 left declaring
+  permissions nothing enforced are now behind policies that check them.
+
+  **Authentication.** Three actor classes, one set of endpoints mapped under both `/store` and
+  `/admin`, because the flows are identical and writing them twice would mean fixing the next
+  authentication bug twice. Customers present a mobile number and a six-digit code; verifying a
+  code for an unknown number *registers* the customer, which is what makes mobile-OTP the primary
+  credential rather than a convenience layered over an account somebody had to create first. Staff
+  and vendor users present an email and a password, hashed with Argon2id at OWASP's first
+  recommended cost. The stored value is a PHC string carrying its own parameters, so raising the
+  cost next year verifies every existing password and re-hashes it on the owner's next sign-in
+  instead of invalidating the lot.
+
+  **Second factor.** TOTP, RFC 6238, implemented rather than taken from a package: it is forty
+  lines of HMAC and truncation, both RFCs publish test vectors, and it is now asserted against all
+  six of them. Mandatory for `platform-admin` and `vendor-owner`. A correct password for an account
+  that owes a second factor answers with a challenge rather than a session — either `two-factor` or
+  `two-factor-enrolment` — and the enrolment path completes the sign-in in the same round trip,
+  because "enable it, now sign in again" is where a mandatory 2FA rollout gets abandoned. Secrets
+  are AES-256-GCM encrypted at rest under a key id that travels in the envelope, so the key can be
+  rotated with an overlapping window.
+
+  **Sessions.** An access token is a 15-minute RS256 JWT carrying `sub`, `tenant_id`, `user_type`,
+  `vendor_id?`, `session_id`, `jti` and one claim per permission. The refresh token is 256 bits of
+  opacity in an `HttpOnly; Secure; SameSite=Lax` cookie, rotated on every use. Presenting a rotated
+  token again revokes the whole session rather than that token: two parties hold the same secret and
+  there is no way to tell which is which, so the only outcome that does not leave the thief with a
+  working session is to end it for both. `GET /me/sessions` lists devices with masked addresses; one
+  or all can be revoked, and a password reset revokes every one.
+
+  **Authorisation.** Permission-based and deny-by-default.
+  `RequirePermission("platform.settings.manage")` now both records the permission as metadata and
+  attaches the policy that enforces it — one call, so a declaration without a check is not
+  expressible. A dynamic policy provider manufactures every `perm:` policy from its name, so adding
+  an endpoint never means remembering to register a policy somewhere else; a fallback policy closes
+  any endpoint that declares nothing. Roles are data in `identity.roles`, enforcement is never on a
+  role, and nine system roles are seeded from the actor list in `02-domain-model.md` §1 — several
+  deliberately empty until the steps that build the endpoints they would grant.
+
+  **Vendor scope.** `IVendorScoped` joins `ITenantScoped` in the SharedKernel, and `ModelConventions`
+  gives it a global query filter comparing the row's `vendor_id` to the caller's claim: open for a
+  caller with no vendor scope, closed for one with it. `user_roles` is the first table to carry it,
+  which is what makes `GET /admin/users` a real proof rather than a promise — a vendor owner listing
+  "their" users cannot discover that another seller's staff exist at all. A `{id}` route answers 404
+  rather than 403, and a vendor owner holding `identity.role.assign` is refused when they try to
+  grant themselves a platform role: the classic escalation path through a delegated user-management
+  screen.
+
+  **Abuse resistance.** Progressive lockout that doubles and is capped rather than permanent, so an
+  attacker cannot lock any account for ever by guessing at it. Per-destination OTP throttling in the
+  module *and* per-IP limiting at the edge, because each is useless against what the other catches.
+  Login answers identically for a wrong password, an unknown address and a disabled account, and
+  performs a decoy Argon2id verification for an unknown one so the timing does not answer either.
+  Every sign-in, failure, role change, status change and two-factor event is audited.
+
+  **Endpoints** (`04-api-specification.md` §3.1, §4):
+
+  | Method | Route | Notes |
+  |---|---|---|
+  | `POST` | `/{store,admin}/auth/login` | Email + password. May answer with a challenge |
+  | `POST` | `/store/auth/otp/request`, `/otp/verify` | Mobile + code; verifying registers a new number |
+  | `POST` | `/store/auth/register` | Email + password, with unbundled marketing consent |
+  | `POST` | `/{store,admin}/auth/refresh`, `/logout` | Cookie in, rotated cookie out |
+  | `POST` | `/{store,admin}/auth/password/forgot`, `/reset` | Uniform response; a reset revokes every session |
+  | `POST` | `/{store,admin}/auth/2fa/enrol`, `/2fa/verify` | Completes a challenged sign-in |
+  | `GET`, `PATCH` | `/{store,admin}/me` | Identity, roles, permissions, shopper profile |
+  | `GET`, `DELETE` | `/{store,admin}/me/sessions[/{id}]` | Device list and revocation |
+  | `POST` | `/{store,admin}/me/2fa/setup`, `/enable`, `/disable` | Disable is refused for mandatory roles |
+  | `POST` | `/{store,admin}/me/verify/request`, `/confirm` | Proves an email address or mobile number |
+  | `GET`, `POST`, `PUT`, `DELETE` | `/store/me/addresses[/{id}]` | Indian address model, GSTIN per address |
+  | `GET`, `POST` | `/admin/users` | Keyset-paginated; vendor-scoped by the caller's token |
+  | `GET`, `PUT` | `/admin/users/{id}`, `/roles`, `/status` | 404 outside scope; a role change ends the sessions |
+  | `GET`, `POST`, `PUT` | `/admin/roles[/{id}]` | System roles are read-only, because they are reseeded |
+  | `GET` | `/admin/permissions` | The catalogue, served from code rather than from the table |
+
+  **Deviations from the specification, and why**
+
+  1. **ASP.NET Core Identity is not used.** The framework's implementation is built around a
+     cookie-first, `UserManager`-shaped model that does not fit mobile-OTP as the primary
+     credential, vendor-scoped data filtering, or permission-based rather than role-based
+     enforcement. Adapting it would have been more code than the parts we actually need.
+
+  2. **An unrouted path stays a 404.** ASP.NET Core applies the fallback authorisation policy to
+     requests that matched no endpoint as well as to endpoints, which turned every unknown URL into
+     a 401 — contradicting `04-api-specification.md` §1.2, telling a client nothing it can act on,
+     and hiding nothing, since the route table *is* the published API. One middleware answers 404
+     before authorisation runs.
+
+  3. **Registration says why it refused.** `07-security-compliance.md` §3 requires uniform responses
+     on login, OTP and forgot-password, and all three comply. A registration form cannot: somebody
+     whose address is already taken has to be told, or they cannot proceed. The same fact is
+     reachable by simply trying to register, which is what an attacker would do anyway — unlike a
+     login form, where the leak costs nothing to close.
+
+  4. **The breached-password check is a compiled-in list, not the HIBP range API.** That call is
+     outbound HTTP on the registration path and needs the §3 SSRF allow-list, a timeout policy, a
+     decision about what to do when it is down, and tests that do not depend on the internet. The
+     offline list covers the top of every credential dump plus the entries this deployment invites —
+     `klarahome123` is in no public breach list at all. Parked for the step that builds the outbound
+     HTTP policy.
+
+  5. **`StateResponse` now carries the state's id.** An address stores `state_id`, and the storefront
+     form could not supply one from a document that published only the GST code. A one-field addition
+     to a Step 6 endpoint, plus a new `IReferenceData` contract so a module that stores a `state_id`
+     can validate it without reading the `platform` schema.
+
+  6. **Two shared-layer additions.** `IVendorScoped` with its query filter, and `ICallerContext`.
+     Both are cross-cutting by nature — the filter has to run inside the data layer, and every module
+     from Step 9 onward needs the caller's scope — so neither could live in this module.
+
+  7. **`AdminSurfaceTests` was rewritten rather than deleted.** Before Step 7 it held a gap open:
+     every admin endpoint declares a permission nothing enforces. It now asserts the enforcement,
+     plus two rules that keep the surface honest — an endpoint under `/admin` outside `/auth` and
+     `/me` must declare a permission, and every declared permission must exist in the catalogue,
+     because one that does not is an endpoint no role can ever reach.
+
+  8. **The test fixture migrates every module, not one.** `PlatformSchemaFixture` became
+     `KlaraHomeSchemaFixture`: the API host these tests point at composes every module, and a
+     database carrying only some of their schemas is not a database the product ever runs against.
+
+  #### The Step 8 gap, stated rather than hidden
+
+  There is no SMS or email transport until the Notifications module, so `LoggingOtpDispatcher` writes
+  one-time codes and reset links to the log — which is exactly what §3's logging hygiene forbids. It
+  is registered unconditionally, because a host with no dispatcher at all would fail at the moment
+  somebody tried to sign in rather than at startup, and the class itself says loudly on every code
+  that it is not a production arrangement. Step 8 replaces the registration, not the seam.
 
 ---
 
@@ -1658,8 +1789,8 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 6 | **The connection string was captured at registration time** in `AddModuleDbContext`, so a host whose configuration completes after registration (`WebApplicationFactory`) registered every context against an empty string. | ✅ **RESOLVED** — resolved from the container when the context is built |
 | 2026-09-05 | Step 6 | The audit-log partitions cover **24 months from the deploy date**. After that, rows land in the `DEFAULT` partition: everything keeps working but queries stop being pruned, and creating that month's partition then fails while its rows sit in the default. | ⏳ Scheduled partition maintenance belongs to **Step 31** with the rest of the operational jobs. `platform.ensure_audit_log_partition(date)` exists for it to call; the draining procedure is noted in the migration's own comment |
 | 2026-09-05 | Step 6 | An audit entry is written in **its own transaction**, after the change it describes has committed. A crash in the window between them loses the entry. | ℹ️ Deliberate. The alternative — joining the caller's transaction — means an audit call can commit a caller's unsaved work, which is a far worse failure. Revisit only if a compliance review demands the stronger guarantee |
-| 2026-09-05 | Step 6 | **The admin surface is unprotected.** Every endpoint under `/api/v1/admin` declares its permission, but no authentication scheme exists until Step 7. | ⏳ Held open on purpose: `UnsecuredEndpointGuard` **refuses to start any non-Development host** while that is true, and an integration test fails if an admin endpoint stops declaring a permission. **Step 7** turns the declarations into policies |
-| 2026-09-05 | Step 6 | `FeatureRollout.Segments` cannot be used yet: nothing assigns a caller to a cohort until roles exist. | ℹ️ The evaluator handles it; the Identity module supplies the value at **Step 7**. Percentage and allow-list rollout both work today |
+| 2026-09-05 | Step 6 | **The admin surface is unprotected.** Every endpoint under `/api/v1/admin` declares its permission, but no authentication scheme exists until Step 7. | ✅ **RESOLVED at Step 7.** `RequirePermission` now attaches the policy as well as the metadata, a dynamic provider manufactures every `perm:` policy, and a fallback policy closes anything that declares nothing. `UnsecuredEndpointGuard` is quiet because the Identity module registers the scheme; `AdminSurfaceTests` was rewritten to assert the enforcement rather than hold the gap open |
+| 2026-09-05 | Step 6 | `FeatureRollout.Segments` cannot be used yet: nothing assigns a caller to a cohort until roles exist. | 🔵 **Half done at Step 7:** `ICallerContext.Segment` reads a `segment` claim and the evaluator handles it, but nothing yet defines what a cohort is or assigns one. Carried forward as its own Step 7 row |
 | 2026-09-05 | Step 6 | `PagedResult.PrevCursor` is always null — the audit search pages forward only. | ℹ️ The UI keeps the cursors it has already seen. Backwards paging is a real feature, not a gap in this one; add it when a screen needs it |
 | 2026-09-05 | Step 6 | `Microsoft.AspNetCore.OutputCaching` is **not on a module project's compile reference set** even with an explicit `FrameworkReference`, though `KlaraHome.Infrastructure` resolves it fine. | ℹ️ Worked around by wrapping `CacheOutput()` as `CacheReferenceData()` in Infrastructure, which is the better home for the policy name anyway. Recorded so the next module that reaches for an ASP.NET Core optional assembly knows what it will hit |
 | 2026-09-05 | Step 6 | `platform.idempotency_keys` (`03-database-design.md` §4.1) is still not created, although the schema it belongs to now exists. | ⏳ Unchanged from Step 4: it serves the `Idempotency-Key` contract, and it is created by the step that enforces it — **Step 13/14** at the latest |
@@ -1667,6 +1798,27 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 6 | `hsn_codes` holds the 99 chapters with **no default GST rate**. | ⏳ Correct today — rates are notified at four to eight digits. **Step 12** (Pricing, Tax & Promotions) attaches real rates to real tariff items |
 | 2026-09-05 | Step 6 | Reference tables (`states`, `pincodes`, `hsn_codes`) carry **no `tenant_id`**, a deliberate exception to the tenancy convention in `03-database-design.md` §1. | ℹ️ §1 governs *business* tables. These are identical in every deployment and nobody edits them; giving them a tenant would mean an address form that empties itself under a different tenant |
 | 2026-09-05 | Step 6 | Settings and feature-flag caches are **in-process**, invalidated by the writer. | ⏳ Exact at one replica, eventually-consistent within the TTL at two. Folded into the existing Redis/`HybridCache` item from Step 3 |
+
+| 2026-09-05 | Step 7 | **One-time codes and reset links are written to the API log.** `LoggingOtpDispatcher` is the only implementation of `IOtpDispatcher`, and logging an OTP is what `07-security-compliance.md` §3 forbids outright. | ⏳ **Step 8** replaces the registration. The seam, the throttle, the hashing and the attempt budget are all real; only delivery is missing. Unlike the Step 6 admin gap this cannot be made to refuse startup — a host with no dispatcher fails when somebody signs in, not at boot — so it is loud in the log instead |
+| 2026-09-05 | Step 7 | **The breached-password check is a compiled-in list of ~60 entries, not the Have I Been Pwned range API.** | ⏳ Needs the SSRF allow-list from §3, a timeout policy and a decision about what to do when the API is down. Belongs to the step that builds the outbound HTTP policy; the offline list stays as the floor underneath it |
+| 2026-09-05 | Step 7 | **Impersonation is not built.** `07-security-compliance.md` §2 requires time-boxed, reason-carrying, audited support impersonation. It is not in the Step 7 deliverables. | ⏳ Needs a support workflow to hang off. Revisit when the admin app has one — **Step 26/27** at the earliest |
+| 2026-09-05 | Step 7 | **DPDP data export and erasure are not built.** `04-api-specification.md` §3.1 lists `POST /store/me/data-export` and `/delete-request`; §5 requires both. Not in the Step 7 deliverables, and erasure has to anonymise across schemas that do not exist yet. | ⏳ Cannot be finished before the modules holding the data exist. Belongs at **Step 29/31**, and is a launch-checklist item at Step 33 |
+| 2026-09-05 | Step 7 | **`GET /store/me/notification-preferences` is not built**, though §3.1 lists it under the account surface. | ℹ️ Correct: preferences belong to the Notifications module at **Step 8**, which owns the channels they select between |
+| 2026-09-05 | Step 7 | **A vendor user is confined to exactly one seller.** The token carries a single `vendor_id` and the filter compares that one value, so a user with grants in two sellers would silently see only the lowest-numbered. | ℹ️ Deliberate. One person across two sellers means a second account, which is also what an access review expects to find. The resolver orders deterministically rather than taking whichever row came back first |
+| 2026-09-05 | Step 7 | **Permissions are read from the access token, not the database, on every request.** A permission taken away therefore survives for up to one access-token lifetime unless something also ends the session. | ℹ️ Deliberate, and the reason the token is fifteen minutes. The paths that matter — a role change and a status change — revoke the sessions explicitly, so "revoked" means now for those |
+| 2026-09-05 | Step 7 | **An unrouted path is answered 404 by a middleware placed before `UseAuthorization`.** ASP.NET Core applies the fallback policy to non-endpoint requests, which would otherwise make every unknown URL a 401. | ℹ️ Recorded because it is a non-obvious framework behaviour, and because anyone reordering the pipeline would reintroduce it. `ErrorContractTests` fails if it comes back |
+| 2026-09-05 | Step 7 | **`Auth:Tokens:SigningKeys` is empty in Development, so the host mints an ephemeral RSA key per process.** Every access token dies with the container. | ℹ️ Warned about on every start, and refused outright outside Development. **Step 32** supplies the real key as a Docker secret |
+| 2026-09-05 | Step 7 | The **compose dev stack ships a fixed `AUTH_ENCRYPTION_KEY`**, which is worthless as a secret because it is in `.env.example`. | ⏳ Fine for a dev database with no real enrolments. **Step 32** must supply a generated key per environment, and the `.env.example` comment says so |
+| 2026-09-05 | Step 7 | **`identity.permissions` is a projection, and the seeder deletes rows whose codes leave the catalogue** — but the `role_permissions` rows referencing a retired code are left alone and become visibly stale. | ℹ️ Deliberate: a role losing a permission silently is worse than one showing an entry an operator can see and remove. Nothing reads either table to decide an authorisation |
+| 2026-09-05 | Step 7 | **The refresh-token rotation chain is never pruned.** Every rotation leaves a spent row, so a long-lived session accumulates one per refresh. | ⏳ The rows are what makes reuse detection possible, so they cannot simply be deleted on rotation. A retention job — drop rows whose session ended more than N days ago — belongs to **Step 31** with the other operational jobs |
+| 2026-09-05 | Step 7 | **`otp_challenges` is never pruned either**, and it is kept deliberately: the throttle counts recent rows, so deleting them resets the throttle. | ⏳ Same owner as the row above, **Step 31**. Neither table has an index that degrades before then |
+| 2026-09-05 | Step 7 | **No authorisation matrix test (every endpoint × every role).** `07-security-compliance.md` §8 lists one as running on every CI run, and it is a Step 29 acceptance criterion. | ⏳ **Step 29** owns it. The declarations it would enumerate now exist and are asserted to be complete, which is the half that had to be true first |
+| 2026-09-05 | Step 7 | **Rate-limit buckets partition per IP for auth, not per account.** `04-api-specification.md` §6 specifies "10/min per IP" for auth, which is what is implemented, but a distributed attempt against one account is only caught by the account lockout. | ℹ️ As specified. The lockout is the per-account control and it is progressive; recorded so the division of labour is not mistaken for a gap |
+| 2026-09-05 | Step 7 | `AUTH_REFRESH_COOKIE_SECURE=false` in the dev compose file, because a browser will not return a `Secure` cookie over the plain-http dev stack. | ⏳ **Step 32** must ensure it is true in every deployed environment. A startup refusal like the signing key's would be the stronger guard; not added because the setting is legitimate under a proxy that terminates TLS elsewhere |
+| 2026-09-05 | Step 7 | **`docker-compose.dev.yml` recreates `postgres` when the file changes**, and on this machine a native `postgresql-x64-18` service now owns port 5432, so the container cannot rebind. | ⛔ **Needs the User.** Stop the Windows service, or set `POSTGRES_PORT=5433` in `.env` (already documented in `dev-setup.md` §4 and §7). Step 7 was verified against a throwaway container on the same Docker network instead |
+| 2026-09-05 | Step 7 | `.editorconfig`/`Directory.Build.props` amended again: **CA1861 silenced for test projects**. Hoisting a request payload's inline array to a static field is a hot-path allocation optimisation, and a test that posts one payload once is not a hot path. | ℹ️ Rule defect, not a code defect; production code keeps the rule. Same shape as the CA1707 exemption already there |
+| 2026-09-05 | Step 7 | **`FeatureRollout.Segments` is still unusable**, though Step 6 expected this step to supply the value. `ICallerContext.Segment` reads a `segment` claim, but nothing assigns a cohort to a user. | ⏳ The plumbing is in place and the claim is read; what is missing is a definition of what a cohort *is*, which belongs to whichever step first needs one. Percentage and allow-list rollout both work today |
+| 2026-09-05 | Step 7 | **`platform.idempotency_keys` is still not created.** Unchanged from Steps 4 and 6. | ⏳ Created by the step that enforces the `Idempotency-Key` contract — **Step 13/14** at the latest |
 
 ---
 
@@ -1684,6 +1836,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 4 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.editorconfig`, `docs/adr/` | Step 4 closed as DONE; migration workflow, `tools/ef.*`, the `migrate` compose profile and six new troubleshooting rows documented; **ADR-013** added (one outbox in the `platform` schema); four deviations and eleven Parking Lot items recorded. No change to docs `01`–`10` | — |
 | 2026-09-05 | 5 | `IMPLEMENTATION_PLAN.md`, `README.md`, `CONTRIBUTING.md`, `docs/README.md`, `docs/dev-setup.md`, `.editorconfig`, `.config/dotnet-tools.json`, `src/frontend/package.json` | Step 5 closed as DONE. `docs/ci-pipeline.md` added and indexed; quality gates documented in the README, CONTRIBUTING and dev-setup; five new troubleshooting rows. `.editorconfig` amended for two naming-rule defects and generated-migration charset. `dotnet-coverage` added to the tool manifest. Frontend dependency changes brought `npm audit` to zero. **Acceptance criterion only half met** — branch protection needs a GitHub remote. No change to docs `01`–`10` | — |
 | 2026-09-05 | 6 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.gitignore`, `infra/compose/docker-compose.dev.yml`, `infra/seed/README.md` (new) | Step 6 closed as DONE. The Platform module built: tenancy, typed settings store, feature flags, partitioned append-only audit trail, Indian reference data, and 7 endpoints. White-labelling documented in the README and in `dev-setup.md` §4/§6; `TENANT_NAME`, `TENANT_ID` and `PINCODE_DATA_PATH` added to the environment and wired through compose; four new troubleshooting rows. **Eight deviations and thirteen Parking Lot items recorded**, and three carried-forward items closed or unblocked. Two latent defects found and fixed (`TenantOptions` unbound in the worker and migrator; the connection string captured at registration). No change to docs `01`-`10` | — |
+| 2026-09-05 | 7 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `src/backend/Directory.Build.props`, `infra/compose/docker-compose.dev.yml`, `infra/docker/*.Dockerfile`, `tools/ef.ps1`, `tools/ef.sh` | Step 7 closed as DONE. The Identity module built: authentication for all three actor classes, mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope enforced in the data layer, customer profiles and Indian addresses. Sign-in, the bootstrap administrator and the Step 8 OTP-delivery gap documented in the README and `dev-setup.md`; `AUTH_*` added to the environment and wired through compose; eight new troubleshooting rows. **Eight deviations and nineteen Parking Lot items recorded**, and two carried-forward Step 6 items closed or advanced. Two packages added (`Microsoft.AspNetCore.Authentication.JwtBearer`, `Konscious.Security.Cryptography.Argon2`); `Directory.Build.props` silences CA1861 in test projects. One Step 6 endpoint changed: `GET /store/states` now returns each state's id, which an address needs. No change to docs `01`-`10` | — |
 
 ---
 

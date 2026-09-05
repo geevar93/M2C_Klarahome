@@ -28,6 +28,20 @@
     <PackageVersion Include="Scalar.AspNetCore" Version="2.17.2" />
   </ItemGroup>
 
+  <ItemGroup Label="Identity">
+    <!--
+      JWT bearer validation. Ships out of band from the shared framework but versions in lockstep
+      with it, so it tracks the ASP.NET Core 10.0.11 pinned above. MIT, by Microsoft.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+    <!--
+      Argon2id password hashing (docs/07-security-compliance.md 1). MIT, pure managed, no native
+      dependency. .NET has PBKDF2 built in and no memory-hard KDF at all, and the specification
+      names Argon2id rather than a family - a GPU-parallel KDF is exactly what it rules out.
+    -->
+    <PackageVersion Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Persistence">
     <!--
       EF Core 10.0.11 tracks the ASP.NET Core 10.0.11 already pinned above; the Npgsql provider

@@ -71,6 +71,11 @@ public sealed class PlatformModule : IModule
 
         services.AddScoped<IAuditLogger, AuditLogger>();
 
+        // The jurisdiction list, published so a module that stores a state_id can check it without
+        // reading this schema. Step 7 is the first caller; Pricing resolves place of supply from
+        // the same contract at Step 12.
+        services.AddScoped<IReferenceData, ReferenceDataService>();
+
         services.AddDataSeeder<TenantSeeder>();
         services.AddDataSeeder<ReferenceDataSeeder>();
         services.AddDataSeeder<StoreSettingsSeeder>();

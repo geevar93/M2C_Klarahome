@@ -137,12 +137,47 @@ re-distributable:
 | | Lives in | Changed by |
 |---|---|---|
 | Which business this deployment is | `.env`: `TENANT_CODE`, `TENANT_NAME`, `TENANT_ID`, `TENANT_DEFAULT_LOCALE`, `TENANT_DEFAULT_TIMEZONE` | A redeploy |
+| Secrets: signing key, encryption key, first administrator | `.env`: `AUTH_SIGNING_KEY_*`, `AUTH_ENCRYPTION_KEY*`, `AUTH_BOOTSTRAP_*` | A redeploy, and a key rotation |
 | Everything that business would want to change | `platform.store_settings` | `PUT /api/v1/admin/settings/{key}`, audited |
 | Whether a feature is on | `platform.feature_flags` | `PUT /api/v1/admin/feature-flags/{key}`, audited |
+| Who may do what | `identity.roles` and `identity.user_roles` | `PUT /api/v1/admin/roles/{id}`, `PUT /api/v1/admin/users/{id}/roles`, audited |
 
 Branding, legal entity, GSTIN, PAN, CIN, addresses, support and grievance contacts, locale,
 currency, timezone, return window, COD cap, free-shipping threshold and colours are all in the
 second row. None of them is a variable, and none of them is compiled in.
+
+### Signing in locally (Step 7)
+
+A fresh database has nobody in it. Set the bootstrap credential before the first migrator run:
+
+```ini
+AUTH_BOOTSTRAP_EMAIL=you@example.in
+AUTH_BOOTSTRAP_PASSWORD=a-password-of-at-least-ten-characters
+```
+
+The seeder creates that account once, as `platform-admin`, and does nothing on every deploy after
+it. `platform-admin` is a mandatory-two-factor role, so the first sign-in returns a challenge
+rather than a session:
+
+```bash
+# 1. Password. Answers with a challenge, not a token.
+curl -sX POST http://localhost:8080/api/v1/admin/auth/login   -H 'content-type: application/json'   -d '{"email":"you@example.in","password":"..."}'
+
+# 2. Enrol. Returns a base32 secret and an otpauth:// URI to scan.
+curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/enrol   -H 'content-type: application/json' -d '{"challengeToken":"<from step 1>"}'
+
+# 3. The code from your authenticator app completes the sign-in.
+curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/verify   -H 'content-type: application/json'   -d '{"challengeToken":"<from step 1>","code":"123456"}'
+```
+
+**One-time codes are written to the API log**, because there is no SMS or email transport until the
+Notifications module at Step 8. `docker logs klarahome-dev-api | grep "DEVELOPMENT ONLY"` shows the
+customer OTP or the reset link token. This dispatcher is what
+`docs/07-security-compliance.md` §3 forbids in production, and replacing it is a Step 8 deliverable.
+
+`AUTH_REFRESH_COOKIE_SECURE=false` in the dev stack: a browser will not return a `Secure` cookie
+over plain http, and sign-in would appear to fail with nothing in any log. It is never false in
+staging or production.
 
 > **`TENANT_ID` matters.** Left blank it is derived from `TENANT_CODE`, which survives a restart
 > but not a change of code — every row already written keeps the old id and becomes invisible.
@@ -417,6 +452,14 @@ A reset drops the database, so run the migrator again before expecting the API t
 | `cannot retrieve a system column in this context` when inserting | An entity mapped to a **partitioned** table picked up the `xmin` concurrency token, and PostgreSQL will not return a system column from one | Mark the entity `IAppendOnly`. That is what it is for, and an append-only table has no lost update to detect anyway |
 | `platform.audit_logs is append-only; UPDATE is not permitted` | A trigger enforcing docs/07-security-compliance.md §7 | Working as intended. Retention is `DROP` of a monthly partition, never `DELETE` |
 | An audit insert fails with `no partition of relation "audit_logs" found` | The migration created two years of monthly partitions and the default partition was dropped | Recreate it, or create the month: `select platform.ensure_audit_log_partition(current_date);` |
+| A signed-in user suddenly gets 401 on everything after an API restart | No `AUTH_SIGNING_KEY_PEM` is configured, so the host minted an ephemeral RSA key that died with the process. It warns about this on every start | Expected in Development. Sign in again, or configure a real key. Outside Development the host refuses to start rather than doing this |
+| Sign-in appears to succeed but every refresh is 401 | The refresh cookie is marked `Secure` and the browser will not send it back over plain http | `AUTH_REFRESH_COOKIE_SECURE=false` for local http work. Never false in a deployed environment |
+| `Auth:Encryption:CurrentKeyId is '...', which is not in Auth:Encryption:Keys` | Two-factor enrolment needs a key to protect the secret with | Set `AUTH_ENCRYPTION_KEY` to base64 of exactly 32 bytes: `openssl rand -base64 32` |
+| An enrolled authenticator stops being accepted after a config change | `AUTH_ENCRYPTION_KEY` changed, so the stored secret no longer decrypts | Put the old key back, or keep it listed alongside the new one — the key id travels in each stored value so both can be read |
+| A vendor user sees an empty list where rows plainly exist | The vendor query filter, comparing the row's `vendor_id` to the token's | Working as intended. Check the `vendor_id` claim in the token and on the row |
+| A `{id}` route answers 404 for a resource you can see in `psql` | Object-level scope. Out-of-scope resources answer 404 rather than 403 so existence is not leaked | Working as intended (`docs/07-security-compliance.md` §2) |
+| `The AuthorizationPolicy named: 'perm:...' was not found` | Something replaced `IAuthorizationPolicyProvider` after `AddKlaraHomeAuthorization`, or registered it with `TryAdd` | The provider manufactures every `perm:` policy. It is registered with `Replace` for exactly this reason |
+| No OTP arrives anywhere | There is no SMS or email transport until Step 8 | Read it from the API log: `docker logs klarahome-dev-api \| grep "DEVELOPMENT ONLY"` |
 | `dotnet format` reports thousands of `ENDOFLINE` errors, only on Windows | Stale CRLF in the working tree. `.gitattributes` normalises `*.cs` to LF in the repository, so a file written with CRLF and then committed is clean in git but still CRLF on disk | Re-checkout the files: `git ls-files -z '*.cs' \| xargs -0 rm -f && git checkout -- '*.cs'`. Verify with `dotnet format --verify-no-changes` |
 | `dotnet format` fails with `CHARSET` on a file under `Migrations/` | `dotnet ef` writes the migration with a UTF-8 BOM and the Designer/snapshot without one, and neither is configurable | Already handled: `.editorconfig` sets `charset = unset` for `**/Migrations/*.cs`. If it reappears, that section was lost |
 | Coverage numbers look wrong, and the log says `Coverage settings file is not a valid file` | `src/backend/coverage.settings.xml` is invalid XML, most often a `--` inside a comment, which XML forbids. The tool warns once and then measures with default filters | Fix the XML. Re-run with `--log-level Verbose --log-file <path>` and check that warning is gone |

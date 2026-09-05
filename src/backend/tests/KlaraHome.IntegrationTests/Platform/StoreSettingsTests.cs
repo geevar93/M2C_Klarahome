@@ -1,6 +1,7 @@
 using System.Text.Json;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Messaging;
+using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Platform.Application.FeatureFlags;
 using KlaraHome.Modules.Platform.Application.Settings;
 using KlaraHome.Modules.Platform.Infrastructure.FeatureFlags;
@@ -14,8 +15,8 @@ namespace KlaraHome.IntegrationTests.Platform;
 /// Settings and feature flags through the real handlers, against the real tables: what an operator
 /// changes, what other code then reads, and what the audit trail records about it.
 /// </summary>
-[Collection(PlatformSchema.CollectionName)]
-public sealed class StoreSettingsTests(PlatformSchemaFixture fixture)
+[Collection(KlaraHomeSchema.CollectionName)]
+public sealed class StoreSettingsTests(KlaraHomeSchemaFixture fixture)
 {
     [Fact]
     public async Task Changing_a_section_changes_what_the_typed_reader_returns()
@@ -60,7 +61,7 @@ public sealed class StoreSettingsTests(PlatformSchemaFixture fixture)
         var result = await dispatcher.SendAsync(
             new UpdateStoreSettingCommand(
                 BrandingSettings.SectionKey,
-                Document($$"""{ "storeName": "{{PlatformSchemaFixture.TenantName}}", "tagline": "{{tagline}}" }""")),
+                Document($$"""{ "storeName": "{{KlaraHomeSchemaFixture.TenantName}}", "tagline": "{{tagline}}" }""")),
             TestContext.Current.CancellationToken);
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : string.Empty);

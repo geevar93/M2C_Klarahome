@@ -1,5 +1,6 @@
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Tenancy;
+using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Platform.Domain;
 using KlaraHome.Modules.Platform.Infrastructure.FeatureFlags;
 using KlaraHome.Modules.Platform.Infrastructure.Persistence;
@@ -15,8 +16,8 @@ namespace KlaraHome.IntegrationTests.Platform;
 /// <summary>
 /// What a first deploy leaves behind, and what a second one must not disturb.
 /// </summary>
-[Collection(PlatformSchema.CollectionName)]
-public sealed class PlatformSeedingTests(PlatformSchemaFixture fixture)
+[Collection(KlaraHomeSchema.CollectionName)]
+public sealed class PlatformSeedingTests(KlaraHomeSchemaFixture fixture)
 {
     [Fact]
     public async Task The_configured_tenant_has_a_row()
@@ -30,8 +31,8 @@ public sealed class PlatformSeedingTests(PlatformSchemaFixture fixture)
         var row = await context.Tenants.SingleAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(tenant.TenantId, row.Id);
-        Assert.Equal(PlatformSchemaFixture.TenantCode, row.Code);
-        Assert.Equal(PlatformSchemaFixture.TenantName, row.Name);
+        Assert.Equal(KlaraHomeSchemaFixture.TenantCode, row.Code);
+        Assert.Equal(KlaraHomeSchemaFixture.TenantName, row.Name);
         Assert.Equal(TenantStatus.Active, row.Status);
     }
 
@@ -108,7 +109,7 @@ public sealed class PlatformSeedingTests(PlatformSchemaFixture fixture)
 
         // This is the whole point of the module: a fresh install already carries the client's name,
         // not ours, without a line of code changing.
-        Assert.Equal(PlatformSchemaFixture.TenantName, branding.StoreName);
+        Assert.Equal(KlaraHomeSchemaFixture.TenantName, branding.StoreName);
         Assert.Equal("en-IN", localization.Locale);
         Assert.Equal("Asia/Kolkata", localization.TimeZone);
     }

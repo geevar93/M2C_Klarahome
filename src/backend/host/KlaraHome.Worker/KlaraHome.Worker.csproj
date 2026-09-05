@@ -25,6 +25,7 @@
     <!-- One canonical module list, linked into every host so they cannot disagree. -->
     <Compile Include="../ModuleAssemblies.cs" Link="ModuleAssemblies.cs" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Identity/KlaraHome.Modules.Identity.csproj" />
   </ItemGroup>
 
 </Project>

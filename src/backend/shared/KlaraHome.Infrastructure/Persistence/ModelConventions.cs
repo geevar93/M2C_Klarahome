@@ -38,11 +38,17 @@ public static class ModelConventions
     /// <summary>Name of the query filter that confines every query to the ambient tenant.</summary>
     public const string TenantFilter = "Tenant";
 
+    /// <summary>Name of the query filter that confines a vendor caller to their own seller's rows.</summary>
+    public const string VendorFilter = "Vendor";
+
     private static readonly MethodInfo ApplySoftDeleteFilterMethod = typeof(ModelConventions)
         .GetMethod(nameof(ApplySoftDeleteFilter), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     private static readonly MethodInfo ApplyTenantFilterMethod = typeof(ModelConventions)
         .GetMethod(nameof(ApplyTenantFilter), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static readonly MethodInfo ApplyVendorFilterMethod = typeof(ModelConventions)
+        .GetMethod(nameof(ApplyVendorFilter), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     /// <summary>
     /// Applies every global convention: the owning schema, optimistic concurrency, tenant
@@ -67,6 +73,7 @@ public static class ModelConventions
 
             ApplyConcurrencyToken(entity);
             ApplyTenantScoping(modelBuilder, entity, context);
+            ApplyVendorScoping(modelBuilder, entity, context);
             ApplyUtcTimestamps(entity);
             ApplySoftDelete(modelBuilder, entity);
         }
@@ -179,6 +186,55 @@ public static class ModelConventions
         where TEntity : class, ITenantScoped
         => modelBuilder.Entity<TEntity>()
             .HasQueryFilter(TenantFilter, entity => entity.TenantId == context.TenantId);
+
+    /// <summary>
+    /// A vendor-scoped table is indexed on <c>vendor_id</c> and filtered by the caller's vendor,
+    /// so a vendor user cannot read another seller's rows even from a query that forgot to say so
+    /// (docs/07-security-compliance.md §2).
+    /// </summary>
+    private static void ApplyVendorScoping(
+        ModelBuilder modelBuilder,
+        IMutableEntityType entity,
+        KlaraHomeDbContext context)
+    {
+        if (!typeof(IVendorScoped).IsAssignableFrom(entity.ClrType))
+        {
+            return;
+        }
+
+        var vendorId = entity.FindProperty(nameof(IVendorScoped.VendorId));
+        if (vendorId is null)
+        {
+            return;
+        }
+
+        if (entity.FindIndex(new[] { vendorId }) is null)
+        {
+            entity.AddIndex(vendorId);
+        }
+
+        ApplyVendorFilterMethod
+            .MakeGenericMethod(entity.ClrType)
+            .Invoke(null, [modelBuilder, context]);
+    }
+
+    /// <summary>
+    /// Open for a caller with no vendor scope, closed for one with it. Platform staff and
+    /// background work see every seller's rows — that is what makes them platform-wide — while a
+    /// vendor user sees exactly their own.
+    /// </summary>
+    /// <remarks>
+    /// Like the tenant filter this closes over the context rather than the id, so the value is a
+    /// query parameter read per request instead of being baked into the cached model. The null
+    /// check is on the <em>caller's</em> scope, never on the row's: a row with no vendor belongs
+    /// to the platform, and a vendor user has no business seeing it either.
+    /// </remarks>
+    private static void ApplyVendorFilter<TEntity>(ModelBuilder modelBuilder, KlaraHomeDbContext context)
+        where TEntity : class, IVendorScoped
+        => modelBuilder.Entity<TEntity>()
+            .HasQueryFilter(
+                VendorFilter,
+                entity => context.VendorId == null || entity.VendorId == context.VendorId);
 
     /// <summary>
     /// <c>timestamptz</c> for every instant. Postgres normalises it to UTC and Npgsql round-trips

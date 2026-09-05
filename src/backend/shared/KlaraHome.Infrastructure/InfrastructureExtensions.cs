@@ -13,6 +13,7 @@ using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.SharedKernel.Time;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Configuration;
@@ -81,8 +82,13 @@ public static class InfrastructureExtensions
             options.Providers.Add<GzipCompressionProvider>();
         });
 
+        // Permission policies are manufactured from the name an endpoint declares, and every
+        // endpoint that declares nothing is closed by the fallback policy. The authentication
+        // scheme itself belongs to the Identity module, which owns the keys.
+        builder.Services.AddKlaraHomeAuthorization();
+
         // Refuses to start a non-Development host whose endpoints declare permissions nothing can
-        // enforce yet. Registered here rather than by a module, so one guard covers every module's
+        // enforce. Registered here rather than by a module, so one guard covers every module's
         // surface (see PermissionEndpoints).
         builder.Services.AddPermissionGuard();
 
@@ -178,6 +184,26 @@ public static class InfrastructureExtensions
         app.UseResponseCompression();
         app.UseKlaraHomeRequestLogging();
         app.UseCors(CorsOptions.PolicyName);
+
+        // A path that matched no route is a 404, and it has to be answered before authorisation
+        // runs. ASP.NET Core applies the fallback policy to unmatched requests as well as to
+        // endpoints, so without this an unknown URL answers 401 — which contradicts §1.2, tells a
+        // client nothing it can act on, and hides nothing: the route table is the published API.
+        app.Use(async (context, next) =>
+        {
+            if (context.GetEndpoint() is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            await next(context).ConfigureAwait(false);
+        });
+
+        // Before the rate limiter, because the per-user and per-vendor buckets partition on an
+        // identity that does not exist until the token has been validated.
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         if (rateLimiting.Enabled)
         {

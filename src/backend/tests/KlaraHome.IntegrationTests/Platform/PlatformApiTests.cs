@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using KlaraHome.IntegrationTests.Api;
+using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Platform.Infrastructure.FeatureFlags;
 
 namespace KlaraHome.IntegrationTests.Platform;
@@ -10,8 +11,8 @@ namespace KlaraHome.IntegrationTests.Platform;
 /// The Platform module over HTTP, through the real host: the storefront configuration document,
 /// the reference data, and a feature flag actually changing what the API serves.
 /// </summary>
-[Collection(PlatformSchema.CollectionName)]
-public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposable
+[Collection(KlaraHomeSchema.CollectionName)]
+public sealed class PlatformApiTests(KlaraHomeSchemaFixture fixture) : IDisposable
 {
     private PlatformApiFactory? _factory;
 
@@ -28,7 +29,7 @@ public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposabl
             "/api/v1/store/config",
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(PlatformSchemaFixture.TenantCode, document.GetProperty("tenantCode").GetString());
+        Assert.Equal(KlaraHomeSchemaFixture.TenantCode, document.GetProperty("tenantCode").GetString());
 
         var branding = document.GetProperty("settings").GetProperty("branding");
         Assert.False(string.IsNullOrWhiteSpace(branding.GetProperty("storeName").GetString()));
@@ -45,7 +46,7 @@ public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposabl
     {
         Assert.SkipWhen(fixture.SkipReason is not null, fixture.SkipReason ?? string.Empty);
 
-        using var client = CreateClient();
+        using var client = await CreateAdminClientAsync();
 
         var before = await client.GetAsync(new Uri("/api/v1/store/config", UriKind.Relative), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, before.StatusCode);
@@ -83,7 +84,7 @@ public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposabl
     {
         Assert.SkipWhen(fixture.SkipReason is not null, fixture.SkipReason ?? string.Empty);
 
-        using var client = CreateClient();
+        using var client = await CreateAdminClientAsync();
 
         var response = await client.PutAsJsonAsync(
             "/api/v1/admin/settings/commerce",
@@ -132,7 +133,7 @@ public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposabl
     {
         Assert.SkipWhen(fixture.SkipReason is not null, fixture.SkipReason ?? string.Empty);
 
-        using var client = CreateClient();
+        using var client = await CreateAdminClientAsync();
 
         var response = await client.PutAsJsonAsync(
             "/api/v1/admin/settings/branding",
@@ -206,6 +207,29 @@ public sealed class PlatformApiTests(PlatformSchemaFixture fixture) : IDisposabl
         _factory ??= new PlatformApiFactory(fixture.ConnectionString);
         return _factory.CreateClient();
     }
+
+    /// <summary>
+    /// A client signed in as the deployment's first administrator, through the real sign-in
+    /// including its mandatory second factor.
+    /// </summary>
+    /// <remarks>
+    /// The admin surface is behind permission policies from Step 7, so these tests authenticate
+    /// rather than assert against an open endpoint. Signing in properly also means the audit
+    /// entries they check now carry a real actor.
+    /// </remarks>
+    private async Task<HttpClient> CreateAdminClientAsync()
+    {
+        var client = CreateClient();
+
+        await TestSignIn.SignInAsync(
+            client,
+            "admin",
+            KlaraHomeSchemaFixture.BootstrapEmail,
+            KlaraHomeSchemaFixture.BootstrapPassword,
+            TestContext.Current.CancellationToken);
+
+        return client;
+    }
 }
 
 /// <summary>
@@ -224,9 +248,12 @@ public sealed class PlatformApiFactory(string connectionString) : KlaraHomeApiFa
         get
         {
             var settings = base.Settings;
-            settings["ConnectionStrings:Postgres"] = connectionString;
-            settings["Tenant:Code"] = PlatformSchemaFixture.TenantCode;
-            settings["Tenant:Name"] = PlatformSchemaFixture.TenantName;
+
+            foreach (var (key, value) in KlaraHomeSchemaFixture.SharedSettings(connectionString))
+            {
+                settings[key] = value;
+            }
+
             return settings;
         }
     }

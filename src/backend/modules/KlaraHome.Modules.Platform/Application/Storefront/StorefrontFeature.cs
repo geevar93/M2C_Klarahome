@@ -63,10 +63,14 @@ internal sealed class GetStoreConfigQueryHandler(
 }
 
 /// <summary>A state or union territory, as the storefront address form needs it.</summary>
+/// <param name="Id">
+/// The row's id. Carried because an address stores <c>state_id</c>, and a form that only knew the
+/// GST code would have to look the id up through a schema it may not read.
+/// </param>
 /// <param name="Code">The two-digit GST state code.</param>
 /// <param name="Name">Official name.</param>
 /// <param name="Kind">Whether it is a state or a union territory.</param>
-internal sealed record StateResponse(string Code, string Name, StateKind Kind);
+internal sealed record StateResponse(Guid Id, string Code, string Name, StateKind Kind);
 
 /// <summary>Lists the Indian states and union territories.</summary>
 internal sealed record GetStatesQuery : IQuery<IReadOnlyList<StateResponse>>;
@@ -82,7 +86,7 @@ internal sealed class GetStatesQueryHandler(PlatformDbContext context)
         IReadOnlyList<StateResponse> states = await context.States
             .AsNoTracking()
             .OrderBy(state => state.Name)
-            .Select(state => new StateResponse(state.Code, state.Name, state.Kind))
+            .Select(state => new StateResponse(state.Id, state.Code, state.Name, state.Kind))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

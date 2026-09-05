@@ -1,6 +1,7 @@
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
+using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Platform.Application.Auditing;
 using KlaraHome.Modules.Platform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -13,8 +14,8 @@ namespace KlaraHome.IntegrationTests.Platform;
 /// The audit trail's guarantees are database guarantees: it is partitioned, it is append-only, and
 /// the append-only part is enforced by the engine rather than by our own good intentions.
 /// </summary>
-[Collection(PlatformSchema.CollectionName)]
-public sealed class AuditTrailTests(PlatformSchemaFixture fixture)
+[Collection(KlaraHomeSchema.CollectionName)]
+public sealed class AuditTrailTests(KlaraHomeSchemaFixture fixture)
 {
     [Fact]
     public async Task An_entry_is_written_and_can_be_read_back()

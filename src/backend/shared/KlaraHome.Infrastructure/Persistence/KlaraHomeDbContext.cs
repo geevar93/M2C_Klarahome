@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -26,14 +27,23 @@ namespace KlaraHome.Infrastructure.Persistence;
 public abstract class KlaraHomeDbContext : DbContext
 {
     private readonly ITenantContext _tenantContext;
+    private readonly ICallerContext? _callerContext;
 
     /// <param name="options">Provider options supplied by DI.</param>
     /// <param name="tenantContext">The ambient tenant; stamped on writes and filtered on reads.</param>
-    protected KlaraHomeDbContext(DbContextOptions options, ITenantContext tenantContext)
+    /// <param name="callerContext">
+    /// The current caller, read by the vendor query filter. Optional so a design-time factory and
+    /// the migrator — neither of which has a caller — can build the model without one.
+    /// </param>
+    protected KlaraHomeDbContext(
+        DbContextOptions options,
+        ITenantContext tenantContext,
+        ICallerContext? callerContext = null)
         : base(options)
     {
         ArgumentNullException.ThrowIfNull(tenantContext);
         _tenantContext = tenantContext;
+        _callerContext = callerContext;
     }
 
     /// <summary>The Postgres schema this context owns. Must match the module's declared schema.</summary>
@@ -51,6 +61,13 @@ public abstract class KlaraHomeDbContext : DbContext
     /// parameterises it per query instead of baking it into the cached model.
     /// </summary>
     public Guid TenantId => _tenantContext.TenantId;
+
+    /// <summary>
+    /// The seller the current caller is confined to, or null for platform staff and background
+    /// work. Read by the vendor query filter; exposed for the same reason <see cref="TenantId"/>
+    /// is, so EF parameterises it per query.
+    /// </summary>
+    public Guid? VendorId => _callerContext?.VendorId;
 
     /// <summary>Integration events awaiting dispatch, written in the caller's transaction.</summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
