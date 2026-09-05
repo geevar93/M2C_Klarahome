@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 1)
-> **Last updated:** 2026-09-05 (Step 1 complete)
+> **Status:** APPROVED — in execution (Step 2)
+> **Last updated:** 2026-09-05 (Step 2 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -83,7 +83,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 |---|---|---|---|---|---|
 | 0 | Specification review & sign-off | — | ✅ DONE | 2026-09-05 | Approved by User: "Proceed with the implementation" |
 | 1 | Repository & monorepo scaffolding | A | ✅ DONE | 2026-09-05 | Node upgraded to 24.20.0; Nx 23.2.0 / Angular 22.1 workspace generated. All criteria met |
-| 2 | Local containerised dev environment | A | ⬜ NOT STARTED | | |
+| 2 | Local containerised dev environment | A | ✅ DONE | 2026-09-05 | Postgres 18 / Redis 8 / MinIO / Mailpit / Traefik v3 all healthy; all four criteria met |
 | 3 | Backend solution skeleton & cross-cutting concerns | A | ⬜ NOT STARTED | | |
 | 4 | Database foundation, EF Core & migration pipeline | A | ⬜ NOT STARTED | | |
 | 5 | CI pipeline & quality gates | A | ⬜ NOT STARTED | | |
@@ -264,7 +264,85 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - `docs/dev-setup.md` — prerequisites and troubleshooting for Windows/WSL2.
 - **Acceptance criteria:** `docker compose -f docker-compose.dev.yml up -d` starts all services
   healthy; Postgres reachable; MinIO console reachable; Mailpit UI reachable.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.**
+
+  **All four acceptance criteria met, verified by execution rather than by inspection:**
+  1. `docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d` — all five
+     long-running services report `(healthy)`: traefik, postgres, redis, minio, mailpit. The
+     one-shot `minio-init` exits `0`.
+  2. **Postgres reachable** from the host: `select version()` → `PostgreSQL 18.6`. The database
+     is created with `datlocprovider=i`, `datlocale=en-IN`, `UTF8`, server timezone `UTC`.
+  3. **MinIO console reachable** — confirmed in Chrome at `http://127.0.0.1:9001` (login page
+     renders) and over TLS through Traefik (`HTTP 200`).
+  4. **Mailpit UI reachable** — confirmed in Chrome at `http://mail.klarahome.localhost:8025`.
+
+  **Files created:**
+  - `infra/compose/docker-compose.dev.yml` — the five services plus the `minio-init` one-shot.
+    Every service carries `restart: unless-stopped`, a healthcheck with a `start_period`,
+    `deploy.resources.limits`, `no-new-privileges`, and json-file logging capped at 10 MB × 3,
+    per `06-infrastructure-devops.md` §4. Two networks: `edge` (Traefik-facing) and `data`.
+    Four named volumes, all prefixed with the compose project name.
+  - `infra/traefik/traefik.dev.yml` — static config: JSON logs, `web` → `websecure` redirect,
+    TLS on `websecure`, the `api@internal` dashboard, and a `ping` entrypoint
+    (container-internal only, :8082) so the `traefik healthcheck` CLI works. Docker provider
+    with `exposedByDefault: false`, plus a watched file provider.
+  - `infra/traefik/dynamic/middlewares.yml` — security headers, compression, and a rate-limit
+    middleware defined ready for the Step 3 routers.
+  - `infra/traefik/dynamic/tls.yml` — TLS options (minimum TLS 1.2). No certificate store, so
+    Traefik serves its own self-signed certificate.
+  - `infra/traefik/dynamic/certs.yml.example`, `certs/.gitkeep`, `dynamic/.gitignore` — the
+    opt-in mkcert path to a locally-trusted certificate. Certificates are never committed.
+  - `.env.example` — every variable documented, in two clearly separated groups: the dev-stack
+    variables consumed today, and the application variables from
+    `06-infrastructure-devops.md` §4.1 that the API will bind from Step 3. `.env` is
+    git-ignored (verified with `git check-ignore`).
+  - `infra/scripts/dev.ps1` and `infra/scripts/dev.sh` — `up | down | restart | status | logs |
+    reset | urls`. They resolve the repository root themselves, pass `--env-file` only when a
+    `.env` exists, and print the live URLs using the actual ports read from `.env`.
+  - `docs/dev-setup.md` — prerequisites, commands, credentials, configuration, hostnames and
+    TLS, everyday tasks, a troubleshooting table, and an explicit table of the deliberate
+    differences between this environment and production.
+
+  **Verified beyond the acceptance criteria:**
+  - **Traefik routing over TLS** for all four hostnames (`traefik.`, `minio.`, `s3.`, `mail.`
+    `klarahome.localhost`): `HTTP 200` each, the `s3` health endpoint `200`, HTTP→HTTPS
+    redirect working, and the security-header middleware asserted on the response
+    (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+    `Permissions-Policy`).
+  - **Buckets bootstrapped**: `media-public` (anonymous `download` policy) and `docs-private`
+    (private, versioning enabled), per `08-integrations.md` §4.
+  - **End-to-end SMTP capture**: a message sent to `mailpit:1025` from a throwaway container
+    appeared in the Mailpit REST API. Nothing leaves the machine.
+  - **Volume persistence**: a row, an object, a Redis key and a captured mail all survived a
+    full `down` / `up` cycle. Every probe artefact was removed afterwards.
+  - **Image tags pinned to exact versions**, each pulled and version-checked:
+    `postgres:18.6-alpine`, `redis:8.10.1-alpine`,
+    `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio/mc:RELEASE.2025-08-13T08-35-41Z`,
+    `axllent/mailpit:v1.31.0`, `traefik:v3.6.25`.
+
+  **Four deviations, none of which change the specification:**
+  1. **Compose file path.** The card writes the command as
+     `docker compose -f docker-compose.dev.yml up -d`, but `01-architecture.md` §8 places
+     compose files in `infra/compose/`. The §8 layout wins; the command becomes
+     `docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d`, wrapped by
+     `infra/scripts/dev.{ps1,sh} up` so the objective (a single command) still holds. No
+     duplicate file was placed at the repository root.
+  2. **`docker-compose.base.yml` was not created.** `06-infrastructure-devops.md` §4 splits
+     service definitions (base) from dev overrides. There is nothing to share yet — the
+     application services arrive at Step 3 — so creating an empty base file now would be
+     scaffolding a later step. The dev file is self-contained; the split happens at Step 3.
+  3. **Every variable has a default baked into the compose file** (`${VAR:-default}`), so a
+     fresh clone runs with no `.env` at all. Compose resolves its default env file relative to
+     the compose file rather than the repository root, so the root `.env` is passed explicitly
+     with `--env-file`; the helper scripts do this automatically.
+  4. **`read_only: true` root filesystems were not applied.** §4 lists them as a standard, but
+     Postgres, Redis and MinIO all write outside their volumes and would need a tmpfs matrix
+     that only pays off under production constraints. `no-new-privileges` **is** applied to
+     every service. Read-only roots belong to Step 32 and are in the Parking Lot.
+
+  **Known local-environment note (not a code issue):** this machine runs a native PostgreSQL on
+  5432, so the local git-ignored `.env` sets `POSTGRES_PORT=5433`. The committed default stays
+  5432; the override is documented in `docs/dev-setup.md` §4 and §7.
 
 ---
 
@@ -861,6 +939,13 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 1 | Legacy .NET SDKs 2.1.526 and 8.0.200 are also installed on this machine. Harmless — `global.json` pins 10.0.203 — but worth knowing if a build ever resolves unexpectedly. | ℹ️ No action; recorded for diagnostics |
 | 2026-09-05 | Step 1 | `NODE_OPTIONS` carries a VS Code JS-debugger bootloader, which attaches a debugger to every `node`/`npm` invocation and pollutes stdout. | ℹ️ No action now; **must be cleared in CI** (Step 5) so it cannot corrupt scripted npm output |
 | 2026-09-05 | Step 1 | Third-party accounts from `08-integrations.md` §7 are still unprovisioned. | ⏳ Not blocking until **Step 15** (Razorpay) / **Step 16** (logistics) |
+| 2026-09-05 | Step 2 | Traefik mounts the Docker socket directly (read-only) to read container labels. `06-infrastructure-devops.md` §9 says the socket must never be mounted into an application container. | ℹ️ Acceptable in dev; **Step 32 must put a socket proxy in front of it** in staging/production |
+| 2026-09-05 | Step 2 | `read_only: true` root filesystems (a §4 standard) are not applied to the data services — each needs its own tmpfs matrix. | ⏳ Deferred to **Step 32** with the rest of the production hardening |
+| 2026-09-05 | Step 2 | The dev `data` network is not `internal: true` and publishes host ports (bound to `127.0.0.1`), which local tooling needs but §4 forbids in production. | ℹ️ Deliberate dev/prod difference, tabulated in `docs/dev-setup.md` §8; **Step 32 owns the production form** |
+| 2026-09-05 | Step 2 | `docker compose --wait` returns as soon as *any* container exits, so the `minio-init` one-shot ended the wait early. | ✅ **RESOLVED** — the helper scripts start everything, then wait only on the five long-running services |
+| 2026-09-05 | Step 2 | Non-browser clients (`psql`, `curl`, .NET `HttpClient`) cannot resolve `*.klarahome.localhost` on Windows; only browsers special-case `.localhost`. | ℹ️ Documented in `docs/dev-setup.md` §5 with a hosts-file snippet. **Revisit at Step 3**, when the API needs a public storage base URL |
+| 2026-09-05 | Step 2 | MinIO is AGPLv3 and its licence terms have shifted repeatedly; the community image still ships the web console today. | ℹ️ ADR-010 already treats storage as an S3-API config swap, so the exposure is contained. No action |
+| 2026-09-05 | Step 2 | No observability services (Prometheus/Loki/Grafana) in the dev stack. | ℹ️ Correct — `06-infrastructure-devops.md` §8 and the plan both place them at **Step 31**. Recorded so it is not mistaken for an omission |
 
 ---
 
@@ -872,6 +957,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 0 | — | Specification approved by User; no amendments | User |
 | 2026-09-05 | 1 | `IMPLEMENTATION_PLAN.md` | Step 0 closed; Step 1 recorded as BLOCKED with outcome notes and Parking Lot entries. No specification change | — |
 | 2026-09-05 | 1 | `IMPLEMENTATION_PLAN.md`, `README.md`, `src/frontend/README.md` | Node blocker resolved (24.20.0); Nx/Angular workspace generated; Step 1 closed as DONE. Three tooling deviations recorded. No specification change | — |
+| 2026-09-05 | 2 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/README.md` | Step 2 closed as DONE; `docs/dev-setup.md` added and indexed; four deviations and seven Parking Lot items recorded. No specification change | — |
 
 ---
 

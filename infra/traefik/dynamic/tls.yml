@@ -1,0 +1,12 @@
+# TLS options. Certificates themselves are NOT configured here: with no
+# certificate store, Traefik serves an on-the-fly self-signed certificate, which
+# is all a *.localhost development host needs.
+#
+# To remove the browser warning, install mkcert and see docs/dev-setup.md,
+# then copy certs.yml.example to certs.yml.
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: false

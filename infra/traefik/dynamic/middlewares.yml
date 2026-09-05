@@ -1,0 +1,25 @@
+# Shared Traefik middlewares (dev). The production set adds HSTS and a CSP
+# assertion at the edge - see docs/06-infrastructure-devops.md #5.
+
+http:
+  middlewares:
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+        # Deliberately 0 in development: HSTS on a *.localhost host would force
+        # HTTPS for every other localhost project on this machine.
+        stsSeconds: 0
+
+    compression:
+      compress: {}
+
+    # Applied per-router from Step 3 onwards; stricter limits go on the auth
+    # endpoints per docs/06-infrastructure-devops.md #5.
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s

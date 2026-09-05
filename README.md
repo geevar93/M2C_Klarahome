@@ -15,7 +15,7 @@ After each step: implementation **stops**, the plan is updated with status and o
 the User is asked for explicit permission before the next step begins. Read
 [`CONTRIBUTING.md`](CONTRIBUTING.md) before making any change.
 
-**Current status: Step 1 complete — awaiting authorisation for Step 2.**
+**Current status: Step 2 complete — awaiting authorisation for Step 3.**
 
 ---
 
@@ -36,6 +36,7 @@ Start with [`docs/README.md`](docs/README.md). The specification set:
 | [08 Integrations](docs/08-integrations.md) | Razorpay, logistics, SMS/email, storage |
 | [09 NFR & testing](docs/09-nfr-testing-observability.md) | Targets, test strategy, alerting |
 | [10 Design placeholder](docs/10-design-system-placeholder.md) | Neutral tokens until Step 30 |
+| [Dev setup](docs/dev-setup.md) | Running the local containerised environment |
 
 ---
 
@@ -74,6 +75,25 @@ git config core.hooksPath .githooks   # enable commit message validation
 dotnet --version                      # expect 10.0.x (pinned in global.json)
 ```
 
-The Angular workspace is in place (`src/frontend`, see its README). The local containerised
-environment (Postgres, Redis, MinIO, Mailpit, Traefik) arrives in **Step 2**; the backend
-solution in **Step 3**.
+Start the backing services — PostgreSQL, Redis, MinIO, Mailpit and Traefik:
+
+```powershell
+./infra/scripts/dev.ps1 up            # Windows
+```
+
+```bash
+./infra/scripts/dev.sh up             # bash / WSL2 / macOS / Linux
+```
+
+| Service | URL |
+|---|---|
+| MinIO console | `http://127.0.0.1:9001` · `https://minio.klarahome.localhost` |
+| Mailpit (captured email) | `http://127.0.0.1:8025` · `https://mail.klarahome.localhost` |
+| Traefik dashboard | `https://traefik.klarahome.localhost` |
+| PostgreSQL | `127.0.0.1:5432` |
+| Redis | `127.0.0.1:6379` |
+
+Full details, credentials, TLS notes and troubleshooting: **[`docs/dev-setup.md`](docs/dev-setup.md)**.
+
+The Angular workspace is in place (`src/frontend`, see its README). The backend solution
+arrives in **Step 3**.

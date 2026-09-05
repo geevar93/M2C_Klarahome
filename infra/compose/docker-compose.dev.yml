@@ -1,0 +1,295 @@
+# Klara Home - local development environment (Step 2)
+#
+# Brings up every backing service the platform needs, matching what will run on the VPS.
+# Application containers (api, worker, storefront, admin) are NOT here yet - they arrive
+# with Step 3 and land in docker-compose.base.yml per docs/06-infrastructure-devops.md #4.
+#
+#   Up:    ./infra/scripts/dev.ps1 up          (Windows)
+#          ./infra/scripts/dev.sh up           (bash/WSL2)
+#   Raw:   docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d
+#
+# Every value below has a working default, so the stack starts with no .env at all.
+# Copy .env.example to .env only when you need to override something (see docs/dev-setup.md).
+
+name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &defaults
+  restart: unless-stopped
+  logging: *logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  # ---------------------------------------------------------------------------
+  # Traefik v3 - reverse proxy and local TLS termination.
+  # Serves its own self-signed certificate unless you drop a mkcert pair into
+  # infra/traefik/certs/ and enable dynamic/certs.yml (see docs/dev-setup.md).
+  # ---------------------------------------------------------------------------
+  traefik:
+    <<: *defaults
+    image: traefik:v3.6.25
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-traefik
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-80}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-443}:443"
+    volumes:
+      - ../traefik/traefik.dev.yml:/etc/traefik/traefik.yml:ro
+      - ../traefik/dynamic:/etc/traefik/dynamic:ro
+      - ../traefik/certs:/etc/traefik/certs:ro
+      # Read-only socket: Traefik discovers routers from container labels.
+      # Production (Step 32) puts a socket proxy in front of this - see the Parking Lot.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.tls=true
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 18 - one database, one schema per module (ADR-002).
+  # ---------------------------------------------------------------------------
+  postgres:
+    <<: *defaults
+    image: postgres:18.6-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-klarahome}
+      POSTGRES_USER: ${POSTGRES_USER:-klarahome}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-klarahome_dev_password}
+      # ICU collation pinned so index and ORDER BY behaviour matches the VPS exactly.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-IN --encoding=UTF8"
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - log_min_duration_statement=500
+    ports:
+      # Published for psql/DBeaver/EF tooling. Override POSTGRES_PORT if 5432 is
+      # already taken by a native PostgreSQL install (common on Windows).
+      - "${BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18 images declare the volume at /var/lib/postgresql and set
+      # PGDATA=/var/lib/postgresql/18/docker. Do not override PGDATA.
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 1G
+
+  # ---------------------------------------------------------------------------
+  # Redis 8 - HybridCache L2, sessions, rate-limit counters, idempotency keys.
+  # ---------------------------------------------------------------------------
+  redis:
+    <<: *defaults
+    image: redis:8.10.1-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-klarahome_dev_password}
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --requirepass "$$REDIS_PASSWORD"
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --save 900 1
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 384M
+
+  # ---------------------------------------------------------------------------
+  # MinIO - S3-compatible object storage (ADR-010). Same API as S3/R2, so moving
+  # to managed storage later is a configuration change with no code impact.
+  # ---------------------------------------------------------------------------
+  minio:
+    <<: *defaults
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-minio
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-klarahome}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
+      MINIO_BROWSER_REDIRECT_URL: https://minio.${DEV_DOMAIN:-klarahome.localhost}
+      MINIO_SERVER_URL: https://s3.${DEV_DOMAIN:-klarahome.localhost}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${MINIO_API_PORT:-9000}:9000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - data
+      - edge
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      # S3 API
+      - traefik.http.routers.minio-api.rule=Host(`s3.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.minio-api.entrypoints=websecure
+      - traefik.http.routers.minio-api.tls=true
+      - traefik.http.routers.minio-api.service=minio-api
+      - traefik.http.services.minio-api.loadbalancer.server.port=9000
+      # Web console
+      - traefik.http.routers.minio-console.rule=Host(`minio.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.minio-console.entrypoints=websecure
+      - traefik.http.routers.minio-console.tls=true
+      - traefik.http.routers.minio-console.service=minio-console
+      - traefik.http.services.minio-console.loadbalancer.server.port=9001
+
+  # ---------------------------------------------------------------------------
+  # One-shot bucket bootstrap. Bucket names per docs/08-integrations.md #4.
+  # ---------------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-minio-init
+    restart: "no"
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-klarahome}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
+      PUBLIC_BUCKET: ${STORAGE_PUBLIC_BUCKET:-media-public}
+      PRIVATE_BUCKET: ${STORAGE_PRIVATE_BUCKET:-docs-private}
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        set -e;
+        mc alias set kh http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+        mc mb --ignore-existing "kh/$$PUBLIC_BUCKET";
+        mc mb --ignore-existing "kh/$$PRIVATE_BUCKET";
+        mc anonymous set download "kh/$$PUBLIC_BUCKET";
+        mc version enable "kh/$$PRIVATE_BUCKET";
+        echo "buckets ready - $$PUBLIC_BUCKET (public read), $$PRIVATE_BUCKET (private, versioned)"
+    networks:
+      - data
+
+  # ---------------------------------------------------------------------------
+  # Mailpit - captures every outbound email in development. Nothing leaves the
+  # machine; the Notifications module (Step 8) points its SMTP sender here.
+  # ---------------------------------------------------------------------------
+  mailpit:
+    <<: *defaults
+    image: axllent/mailpit:v1.31.0
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-mailpit
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "2000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${BIND_ADDRESS:-127.0.0.1}:${MAILPIT_UI_PORT:-8025}:8025"
+    volumes:
+      - mailpit-data:/data
+    networks:
+      - data
+      - edge
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      - traefik.http.routers.mailpit.rule=Host(`mail.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.mailpit.entrypoints=websecure
+      - traefik.http.routers.mailpit.tls=true
+      - traefik.http.services.mailpit.loadbalancer.server.port=8025
+
+networks:
+  # Only Traefik publishes 80/443 here; application containers join it from Step 3.
+  edge:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+  # Backing services. In staging/production (Step 32) this network becomes
+  # internal: true and publishes no host ports; dev keeps them for local tooling.
+  data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-data
+
+volumes:
+  postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-postgres-data
+  redis-data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-redis-data
+  minio-data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-minio-data
+  mailpit-data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-mailpit-data

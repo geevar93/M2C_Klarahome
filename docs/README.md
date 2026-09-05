@@ -3,8 +3,8 @@
 Multi-vendor e-commerce platform for the **Indian** market, built to be **re-distributable** to
 other businesses on separate infrastructure.
 
-**Status:** Specification complete — **awaiting client review and sign-off (Step 0).**
-No implementation has begun, and none should begin until Step 0 is approved.
+**Status:** Specification approved (Step 0). Execution is under way — see the Master Status
+Table in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for what is actually done.
 
 ---
 
@@ -23,6 +23,14 @@ No implementation has begun, and none should begin until Step 0 is approved.
 | 08 | [08-integrations.md](08-integrations.md) | Razorpay, logistics, SMS/WhatsApp/email, storage — behind provider interfaces |
 | 09 | [09-nfr-testing-observability.md](09-nfr-testing-observability.md) | Performance/capacity/availability targets, test strategy, metrics and alerting |
 | 10 | [10-design-system-placeholder.md](10-design-system-placeholder.md) | The neutral placeholder tokens used until Step 30, and what happens at Step 30 |
+
+### Operational guides
+
+Written as the corresponding step lands, not up front.
+
+| Guide | Added at | What it covers |
+|---|---|---|
+| [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting |
 
 ---
 
@@ -55,9 +63,12 @@ The full protocol is Section "⛔ MANDATORY EXECUTION PROTOCOL" in
 
 ---
 
-## Open items for the client (Step 0)
+## Open items for the client
 
-1. Approve or amend this specification set.
+Item 1 is closed (the specification was approved at Step 0). The rest are still open, and
+items 2–3 become blocking at Step 15 (Razorpay) and Step 16 (logistics).
+
+1. ~~Approve or amend this specification set.~~ ✅ Approved at Step 0.
 2. Confirm the third-party providers and open the accounts listed in
    [08-integrations.md](08-integrations.md) §7 — logistics aggregator, SMS (with DLT
    registration), email, WhatsApp (optional), VPS provider and region, domain.

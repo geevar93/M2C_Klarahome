@@ -1,0 +1,18 @@
+# Copy to certs.yml after generating a local certificate with mkcert:
+#
+#   mkcert -install
+#   mkcert -cert-file infra/traefik/certs/local-cert.pem \
+#          -key-file  infra/traefik/certs/local-key.pem \
+#          "klarahome.localhost" "*.klarahome.localhost" localhost 127.0.0.1
+#
+# The certs/ directory is git-ignored (*.pem, *.key) - certificates are never committed.
+
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/local-cert.pem
+        keyFile: /etc/traefik/certs/local-key.pem
+  certificates:
+    - certFile: /etc/traefik/certs/local-cert.pem
+      keyFile: /etc/traefik/certs/local-key.pem
