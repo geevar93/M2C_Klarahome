@@ -121,6 +121,35 @@ suppression handling.
 
 Out of scope for v1 (web push is a Phase-2 decision alongside PWA installability).
 
+### 3.5 Identity providers (customer sign-in)
+
+**Interface:** `IExternalIdentityProvider` — `BuildAuthorizationUri(state, codeChallenge, returnUrl)`,
+`ExchangeAsync(code, codeVerifier)` returning a subject, an email and whether the provider states
+it is verified. One adapter per provider, selected by a configured key, exactly as the payment and
+courier adapters are.
+
+Free at these volumes, and the reason this exists: SMS and transactional email are paid, and
+without either a customer cannot register at all (ADR-014).
+
+| Provider | v1 | Onboarding |
+|---|---|---|
+| **Google** | ✅ Wired | An OAuth consent screen. `email` and `profile` are non-sensitive scopes, so no app review and no verification |
+| **Facebook** | ⚙️ Configured, disabled | Requires Business Verification and a published privacy-policy URL before the app leaves development mode |
+| Apple | — | Phase 2. Mandatory only if an iOS app ships offering other social logins |
+
+Flow: **authorization code with PKCE, server-side.** The client secret stays on the API; the
+authorization, token and userinfo endpoints come from the provider's discovery document under a
+pinned authority; `state` and the PKCE verifier travel in a short-lived encrypted cookie rather
+than a table, so there is no row to clean up; the post-sign-in `returnUrl` is checked against a
+configured allow-list.
+
+Two things this integration is **not**: it is not for staff or vendor users, and it is not a
+replacement for the second factor. Both are decisions, recorded in ADR-014.
+
+> **Facebook accounts may carry no email address.** `ck_users_has_identifier` requires a mobile
+> number or an email, so an email-less Facebook user cannot be created as the schema stands. It
+> costs nothing while Facebook is disabled, and it is the first thing to fix when it is enabled.
+
 ---
 
 ## 4. Media & Storage
@@ -171,9 +200,10 @@ Out of scope for v1 (web push is a Phase-2 decision alongside PWA installability
 | Payments | Razorpay | Client | ☐ | ☐ | ☐ | Route enablement to be confirmed |
 | Payouts | Razorpay Route / X | Client | ☐ | ☐ | ☐ | |
 | Logistics | TBC | Client | ☐ | ☐ | ☐ | Aggregator recommended |
-| SMS | TBC | Client | ☐ | ☐ | ☐ | DLT entity + templates needed |
+| SMS | TBC | Client | ☐ | ☐ | ☐ | DLT entity + templates needed. **Deferred:** no budget; `identity.mobile-otp-login` is off |
 | WhatsApp | TBC | Client | ☐ | ☐ | ☐ | Optional for v1 |
-| Email | TBC | Client | ☐ | ☐ | ☐ | Domain DNS access required |
+| Email | TBC | Client | ☐ | ☐ | ☐ | Domain DNS access required. **Deferred:** no budget; `identity.email-verification` and `identity.password-reset-email` are off |
+| Identity provider | Google | Client | ☐ | ☐ | — | OAuth client + consent screen. Needs the published privacy policy the screen links to |
 | VPS | TBC | Client | — | ☐ | ☐ | India region recommended |
 | Domain / DNS | TBC | Client | — | ☐ | ☐ | |
 

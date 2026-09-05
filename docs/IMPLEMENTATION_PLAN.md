@@ -64,7 +64,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | Phase | Theme | Steps | Outcome |
 |---|---|---|---|
 | **A** | Foundations | 1–5 | Repos, containers, backend/DB skeleton that boots |
-| **B** | Platform & Identity | 6–8 | Auth, tenancy/white-label config, media, notifications |
+| **B** | Platform & Identity | 6–8 (+7A) | Auth, tenancy/white-label config, media, notifications |
 | **C** | Commerce Core (Backend) | 9–14 | Catalog, inventory, vendors, pricing, cart, orders |
 | **D** | Money & Movement (Backend) | 15–18 | Payments, shipping, returns, settlements/payouts |
 | **E** | Content & Discovery (Backend) | 19–21 | CMS, search, reviews, reporting read-models |
@@ -89,6 +89,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 5 | CI pipeline & quality gates | A | ✅ DONE | 2026-09-05 | Every gate built, run and proven to fail correctly; 179 tests, 88.81% line coverage, both images scan clean. **One half of the acceptance criterion is not demonstrable yet:** there is no GitHub remote, so nothing can block a merge. Configuration documented in `ci-pipeline.md` §6 |
 | 6 | Platform module — tenancy, settings, branding, audit | B | ✅ DONE | 2026-09-05 | Tenant, typed settings store, feature flags, partitioned append-only audit trail and Indian reference data; 7 endpoints; 252 tests green, 92.44% line coverage. All three criteria met and demonstrated against the running stack. **Admin endpoints declare their permissions but nothing enforces them until Step 7** — the host refuses to start outside Development while that is true |
 | 7 | Identity & Access module | B | ✅ DONE | 2026-09-05 | Customer OTP, staff/vendor password + mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope in the data layer, profiles and Indian addresses; 50 routes across the two surfaces; 421 tests green, 89.06% line / 80.58% branch coverage. All three acceptance criteria met and demonstrated against a containerised stack. **Closes the Step 6 gap:** every admin endpoint that declared a permission is now behind a policy that checks it |
+| 7A | External identity providers & degraded-delivery mode | B | ⬜ NOT STARTED | | **Added at the Step 7 boundary by the User** — no budget for SMS or email yet. Google sign-in for customers, feature flags to turn the paid-provider features off, administrator-issued temporary passwords. Spec changed first: ADR-014, `07` §1, `04` §3.1, `03` §4.2, `08` §3.5 |
 | 8 | Media, file storage & Notifications module | B | ⬜ NOT STARTED | | |
 | 9 | Vendor / Seller module | C | ⬜ NOT STARTED | | |
 | 10 | Catalog module | C | ⬜ NOT STARTED | | |
@@ -1246,8 +1247,50 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
 
 ---
 
-### Step 8 — Media, file storage & Notifications module
+### Step 7A — External identity providers & degraded-delivery mode
 - **Phase:** B · **Depends on:** Step 7
+- **Raised by:** The User at the Step 7 boundary — no budget for an SMS gateway or a
+  transactional email provider yet, and both are expected later. Specification changed first
+  under protocol rule 8; see **ADR-014** and the Change Log.
+- **Objective:** A customer can register and sign in with no paid delivery provider, and every
+  feature that needs one is switched off at runtime rather than removed.
+- **Deliverables:**
+  - `IExternalIdentityProvider` with a **Google** adapter wired end to end and a **Facebook**
+    adapter configured but disabled. Server-side authorization-code flow with PKCE; `state` and
+    the code verifier in a short-lived encrypted cookie; `returnUrl` checked against an
+    allow-list.
+  - `identity.external_logins`, keyed on `(provider, subject)`. Linking rules exactly as
+    `07-security-compliance.md` §1 states them: subject first, a **verified** provider email
+    second, a new account otherwise, never a mobile number. Unlink refused when it is the last
+    credential.
+  - Storefront endpoints: `GET /store/auth/external/providers`, `.../{provider}/start`,
+    `.../{provider}/callback`, `GET`/`DELETE /store/me/external-logins[/{id}]`.
+  - Four feature flags — `identity.mobile-otp-login`, `identity.email-verification`,
+    `identity.password-reset-email`, `identity.external-login` — gating the endpoints that need a
+    paid provider. A disabled feature answers `404 FEATURE_DISABLED`.
+  - Temporary passwords: `POST /admin/users/{id}/password` (permission
+    `identity.user.manage`, audited, revokes every session), `users.must_change_password`, a
+    `password-change-required` challenge on the next sign-in, and
+    `POST /{store,admin}/auth/password/change`.
+  - The first outbound HTTP this system makes: a named `HttpClient` with a timeout, OIDC
+    discovery cached, and the provider allow-list `07-security-compliance.md` §3 requires.
+  - `AUTH_EXTERNAL_*` configuration, wired through compose and documented in `.env.example`,
+    `README.md` and `dev-setup.md`.
+- **Acceptance criteria:** With `identity.mobile-otp-login`, `identity.email-verification` and
+  `identity.password-reset-email` all **off**, a new customer completes registration and sign-in
+  through Google and reaches `GET /store/me`; an administrator locked out of a password account is
+  recovered by a temporary password and is forced to change it before a session is issued; every
+  flag turns its feature back on at runtime with no deploy; and nothing built at Step 7 changes
+  behaviour while the flags are on.
+- **Explicitly out of scope:** Staff and vendor external sign-in (ADR-014 decision 3); Apple;
+  replacing `LoggingOtpDispatcher`, which stays until Step 8 and is only reachable while the
+  flags are on.
+- **Outcome / Notes:** _(to be filled on completion)_
+
+---
+
+### Step 8 — Media, file storage & Notifications module
+- **Phase:** B · **Depends on:** Step 7, Step 7A
 - **Objective:** Central services every later module depends on.
 - **Deliverables:**
   - Media service: S3-compatible upload (MinIO), validation, virus-scan hook, image
@@ -1838,6 +1881,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 6 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.gitignore`, `infra/compose/docker-compose.dev.yml`, `infra/seed/README.md` (new) | Step 6 closed as DONE. The Platform module built: tenancy, typed settings store, feature flags, partitioned append-only audit trail, Indian reference data, and 7 endpoints. White-labelling documented in the README and in `dev-setup.md` §4/§6; `TENANT_NAME`, `TENANT_ID` and `PINCODE_DATA_PATH` added to the environment and wired through compose; four new troubleshooting rows. **Eight deviations and thirteen Parking Lot items recorded**, and three carried-forward items closed or unblocked. Two latent defects found and fixed (`TenantOptions` unbound in the worker and migrator; the connection string captured at registration). No change to docs `01`-`10` | — |
 | 2026-09-05 | 7 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `src/backend/Directory.Build.props`, `infra/compose/docker-compose.dev.yml`, `infra/docker/*.Dockerfile`, `tools/ef.ps1`, `tools/ef.sh` | Step 7 closed as DONE. The Identity module built: authentication for all three actor classes, mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope enforced in the data layer, customer profiles and Indian addresses. Sign-in, the bootstrap administrator and the Step 8 OTP-delivery gap documented in the README and `dev-setup.md`; `AUTH_*` added to the environment and wired through compose; eight new troubleshooting rows. **Eight deviations and nineteen Parking Lot items recorded**, and two carried-forward Step 6 items closed or advanced. Two packages added (`Microsoft.AspNetCore.Authentication.JwtBearer`, `Konscious.Security.Cryptography.Argon2`); `Directory.Build.props` silences CA1861 in test projects. One Step 6 endpoint changed: `GET /store/states` now returns each state's id, which an address needs. No change to docs `01`-`10` | — |
 
+| 2026-09-05 | 7A | **`07-security-compliance.md` §1 and §3, `04-api-specification.md` §3.1, `03-database-design.md` §4.2, `08-integrations.md` §3.5 and §7**, `docs/adr/ADR-014` (new), `IMPLEMENTATION_PLAN.md` | **Second specification change since Step 0.** The client has no budget for an SMS gateway or a transactional email provider, so two of the three Step 7 credentials cannot reach a real person in production, and `LoggingOtpDispatcher` is not shippable. External identity providers (Google now, Facebook designed for) added for **customers only**; the paid-provider features moved behind four runtime feature flags rather than being removed; administrator-issued temporary passwords added as the recovery route while email is off. Four decisions taken by the User, recorded in ADR-014, including the knowingly weaker temporary-password control. Step 7A inserted so steps 8-33 keep their numbers | **User** (chose all four options; ADR-014 accepted) |
 ---
 
 ## 6. Explicitly Deferred to Phase 2

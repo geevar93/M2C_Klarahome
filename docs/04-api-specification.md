@@ -95,13 +95,20 @@ by a vendor id in the path — a vendor cannot address another vendor's data at 
 
 ### 3.1 Auth & account
 ```
-POST   /store/auth/otp/request           { mobile, purpose }
-POST   /store/auth/otp/verify            { mobile, code } → tokens
+POST   /store/auth/otp/request           { mobile, purpose }        [flag: identity.mobile-otp-login]
+POST   /store/auth/otp/verify            { mobile, code } → tokens   [flag: identity.mobile-otp-login]
 POST   /store/auth/login                 { email, password }
 POST   /store/auth/refresh               (cookie) → new access token
 POST   /store/auth/logout
 POST   /store/auth/register
-POST   /store/auth/password/forgot | /reset
+POST   /store/auth/password/forgot | /reset                          [flag: identity.password-reset-email]
+POST   /store/auth/password/change       { challengeToken?, currentPassword, newPassword }
+
+GET    /store/auth/external/providers    → which providers are enabled, for the buttons
+GET    /store/auth/external/{provider}/start     ?returnUrl=         [flag: identity.external-login]
+GET    /store/auth/external/{provider}/callback  ?code= &state=      → 302 back to the storefront
+GET    /store/me/external-logins
+DELETE /store/me/external-logins/{id}    refused if it is the only credential left
 GET    /store/me
 PATCH  /store/me
 GET    /store/me/addresses

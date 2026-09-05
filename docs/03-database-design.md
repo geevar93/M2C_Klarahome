@@ -111,9 +111,14 @@ locale, timezone, and **all branding references**. Nothing branded is compiled i
 ### 4.2 `identity`
 
 **`users`** — `mobile` (E.164, unique per tenant), `email` (unique per tenant, nullable),
-`password_hash` (nullable — OTP-only users exist), `mobile_verified_at`, `email_verified_at`,
-`status`, `user_type` (`customer|vendor|staff`), `failed_attempts`, `locked_until`,
-`totp_secret_encrypted`, `totp_enabled`.
+`password_hash` (nullable — OTP-only and provider-only users exist), `mobile_verified_at`,
+`email_verified_at`, `status`, `user_type` (`customer|vendor|staff`), `failed_attempts`,
+`locked_until`, `totp_secret_encrypted`, `totp_enabled`, `must_change_password` (set when an
+administrator issues a temporary password; the next sign-in is challenged, not sessioned).
+**`external_logins`** — `user_id`, `provider` (`google|facebook`), `subject` (the provider's stable
+id), `email`, `email_verified`, `display_name`, `linked_at`, `last_login_at`. Unique
+`(tenant_id, provider, subject)`. The subject is the only linking key; see
+`07-security-compliance.md` §1 for why an email address is not.
 **`roles`** — `code`, `name`, `scope` (`platform|vendor`), `is_system`.
 **`permissions`** — `code`, `group`, `description`.
 **`role_permissions`**, **`user_roles`** — `user_id`, `role_id`, `vendor_id` (nullable; set for

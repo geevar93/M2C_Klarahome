@@ -6,9 +6,48 @@
 
 | Actor | Primary method | Secondary | MFA |
 |---|---|---|---|
-| Customer | Mobile + OTP (6-digit, 5-min TTL) | Email + password | Optional TOTP |
+| Customer | Mobile + OTP (6-digit, 5-min TTL) | External identity provider; email + password | Optional TOTP |
 | Vendor staff | Email + password | — | **Mandatory TOTP** |
 | Platform staff | Email + password | — | **Mandatory TOTP** |
+
+**External identity providers (customers only).** A shopper may sign in with Google, and later
+with Facebook, through the **server-side authorization-code flow with PKCE**: the client secret
+stays on the API, the token and userinfo endpoints come from a pinned authority's discovery
+document rather than from anything a caller supplied, and the browser only ever sees a redirect.
+Staff and vendor users are deliberately excluded — a compromised Google account must not reach
+`platform-admin`, and this deployment trusts no staff directory (ADR-014).
+
+Account linking is narrow, because linking by email address is both the standard approach and the
+standard account-takeover vector:
+
+1. A known `(provider, subject)` pair signs that user in. The subject is the provider's stable
+   identifier and is the only thing the link is keyed on.
+2. Otherwise, an email the provider states is **verified**, matching an existing user, links to
+   that user. An unverified email links to nothing.
+3. Otherwise a new customer account is created, with the email already verified — the provider
+   made a stronger assertion than our own verification link would have.
+4. A mobile number is never a linking key.
+
+Unlinking is refused when the provider is the account's only remaining credential.
+
+**Degraded operation without a delivery provider.** SMS and transactional email are paid
+dependencies, and a deployment may run before they exist. Four flags in `platform.feature_flags`
+turn the features that need them off at runtime; a disabled feature answers `404 FEATURE_DISABLED`
+and nothing about it is removed from the code:
+
+| Flag | Turns off | While off |
+|---|---|---|
+| `identity.mobile-otp-login` | `/store/auth/otp/*` | Customers use an identity provider, or email + password |
+| `identity.email-verification` | The verification send, and confirming an email | An address stays unverified unless a provider asserted it |
+| `identity.password-reset-email` | `/auth/password/forgot` and `/reset` | An administrator issues a temporary password |
+| `identity.external-login` | The whole external sign-in surface | Mobile OTP and email + password only |
+
+**Temporary passwords.** While email delivery is off, an administrator holding
+`identity.user.manage` may set a password for another account. The account is then marked as owing
+a change: the next sign-in returns a `password-change-required` challenge rather than a session,
+using the same challenge mechanism as the second factor, and every existing session is revoked.
+The act is audited. It is a knowingly weaker control than a reset link — an administrator briefly
+knows a credential that signs in as somebody else — and it is withdrawn when email returns.
 
 **Token model**
 - Access token: JWT, 15 minutes, signed RS256 (key in Docker secret, rotatable with an
@@ -63,7 +102,7 @@ fingerprint-lite risk signals feeding COD eligibility and review-posting rules.
 | CSRF | Bearer tokens for state-changing calls (not cookie-authenticated) + `SameSite` cookie for refresh + origin checks on the refresh endpoint |
 | Mass assignment | Explicit request DTOs; entities are never model-bound |
 | IDOR | Scope filters + object-level authorisation; UUIDv7 ids (unguessable, non-enumerable) |
-| SSRF | Outbound allow-list for webhook/callback URLs; no user-supplied URL fetching |
+| SSRF | Outbound allow-list for webhook/callback URLs; no user-supplied URL fetching. The identity provider is the first outbound call: its endpoints come from a pinned authority's discovery document, and the post-sign-in `returnUrl` is checked against a configured allow-list so the redirect cannot be aimed elsewhere |
 | File upload | MIME + magic-byte validation, extension allow-list, size caps, image re-encode on ingest (strips EXIF and embedded payloads), stored outside the web root, served from a separate host, virus-scan hook |
 | Rate abuse | Per-IP, per-user, per-endpoint limits (see `04-api-specification.md` §6) |
 | Enumeration | Uniform responses on login/OTP/forgot-password regardless of account existence |
