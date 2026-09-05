@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The innermost shared project. Pure C#: no ASP.NET Core, no EF Core, no third-party
+    packages. Everything here is safe to reference from a module's Domain layer.
+    Enforced by KlaraHome.ArchitectureTests.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.SharedKernel</RootNamespace>
+  </PropertyGroup>
+
+</Project>

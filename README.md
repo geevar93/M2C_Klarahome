@@ -15,7 +15,7 @@ After each step: implementation **stops**, the plan is updated with status and o
 the User is asked for explicit permission before the next step begins. Read
 [`CONTRIBUTING.md`](CONTRIBUTING.md) before making any change.
 
-**Current status: Step 2 complete — awaiting authorisation for Step 3.**
+**Current status: Step 3 complete — awaiting authorisation for Step 4.**
 
 ---
 
@@ -37,6 +37,7 @@ Start with [`docs/README.md`](docs/README.md). The specification set:
 | [09 NFR & testing](docs/09-nfr-testing-observability.md) | Targets, test strategy, alerting |
 | [10 Design placeholder](docs/10-design-system-placeholder.md) | Neutral tokens until Step 30 |
 | [Dev setup](docs/dev-setup.md) | Running the local containerised environment |
+| [ADRs](docs/adr/README.md) | Architecture decision records |
 
 ---
 
@@ -87,6 +88,9 @@ Start the backing services — PostgreSQL, Redis, MinIO, Mailpit and Traefik:
 
 | Service | URL |
 |---|---|
+| **API** | `https://api.klarahome.localhost/api/v1/meta` |
+| **API reference (Scalar)** | `https://api.klarahome.localhost/scalar` |
+| **API health** | `/health/live` · `/health/ready` |
 | MinIO console | `http://127.0.0.1:9001` · `https://minio.klarahome.localhost` |
 | Mailpit (captured email) | `http://127.0.0.1:8025` · `https://mail.klarahome.localhost` |
 | Traefik dashboard | `https://traefik.klarahome.localhost` |
@@ -95,5 +99,27 @@ Start the backing services — PostgreSQL, Redis, MinIO, Mailpit and Traefik:
 
 Full details, credentials, TLS notes and troubleshooting: **[`docs/dev-setup.md`](docs/dev-setup.md)**.
 
-The Angular workspace is in place (`src/frontend`, see its README). The backend solution
-arrives in **Step 3**.
+### Working on the backend
+
+```bash
+cd src/backend
+dotnet build KlaraHome.sln                 # zero warnings is the standard
+dotnet test --project tests/KlaraHome.UnitTests/KlaraHome.UnitTests.csproj
+dotnet test --project tests/KlaraHome.IntegrationTests/KlaraHome.IntegrationTests.csproj
+dotnet test --project tests/KlaraHome.ArchitectureTests/KlaraHome.ArchitectureTests.csproj
+```
+
+Run the API outside Docker against the containerised backing services:
+
+```bash
+dotnet run --project src/backend/host/KlaraHome.Api --launch-profile api-with-stack
+```
+
+Rebuild and restart just the API container:
+
+```bash
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d --build api
+```
+
+The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
+containers arrive in Phase F/G.

@@ -45,6 +45,11 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      CA1707: Underscored_test_names are the convention here and read far better in a failure
+      report than PascalCase run together. Production code keeps the rule.
+    -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
 </Project>

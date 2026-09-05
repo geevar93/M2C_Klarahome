@@ -30,7 +30,13 @@ Written as the corresponding step lands, not up front.
 
 | Guide | Added at | What it covers |
 |---|---|---|
-| [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting |
+| [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting. Extended at Step 3 with the API container |
+
+### Architecture decision records
+
+| Location | What it holds |
+|---|---|
+| [adr/](adr/README.md) | ADR-011 onward, one file per decision. ADR-001 – ADR-010 are tabulated in [`01-architecture.md` §9](01-architecture.md) |
 
 ---
 

@@ -1,0 +1,57 @@
+# =============================================================================
+# Klara Home - Docker build context exclusions
+# =============================================================================
+# The build context is the repository root. Keeping it tight is what makes the
+# image build fast and keeps secrets out of every layer
+# (docs/06-infrastructure-devops.md §3).
+# =============================================================================
+
+# --- Secrets: first, and never negated below ---------------------------------
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+*.pem
+*.p12
+appsettings.Local.json
+infra/traefik/certs/
+infra/traefik/dynamic/certs.yml
+
+# --- Version control and CI --------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.githooks
+.github
+
+# --- Build output ------------------------------------------------------------
+**/bin/
+**/obj/
+**/out/
+**/publish/
+**/TestResults/
+**/coverage/
+**/*.user
+**/*.suo
+
+# --- Node / Angular ----------------------------------------------------------
+**/node_modules/
+src/frontend/dist/
+src/frontend/.angular/
+src/frontend/.nx/
+
+# --- Docs and tooling that no image needs ------------------------------------
+docs/
+*.md
+!README.md
+tools/
+infra/observability/
+infra/scripts/
+
+# --- Editor / OS -------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+**/.DS_Store
+Thumbs.db

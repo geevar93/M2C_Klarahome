@@ -75,6 +75,19 @@ waits for every service to report **healthy**, and prints the URLs.
 | Mailpit — SMTP | `axllent/mailpit:v1.31.0` | `127.0.0.1:1025` | — |
 | Mailpit — UI | same | `http://127.0.0.1:8025` | `https://mail.klarahome.localhost` |
 | Traefik dashboard | `traefik:v3.6.25` | — | `https://traefik.klarahome.localhost` |
+| **API** | `klarahome/api:dev` (built locally) | — | `https://api.klarahome.localhost` |
+
+The API deliberately publishes **no host port**: Traefik is the only way in, exactly as on the
+VPS. Its useful endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `/health/live` | Liveness. Answers while the process is running; used by the container HEALTHCHECK |
+| `/health/ready` | Readiness. Also probes PostgreSQL and Redis |
+| `/api/v1/meta` | API version, build version, environment, server time |
+| `/openapi/v1.json` | The OpenAPI 3.1 document — the contract the Angular client is generated from |
+| `/scalar` | Browsable API reference. Non-production only |
+| `/api/v1/diagnostics/*` | Development-only proofs of the error contract (see §6) |
 
 Default development credentials (all overridable in `.env`):
 
@@ -188,6 +201,45 @@ curl -s http://127.0.0.1:8025/api/v1/messages
 docker exec -it klarahome-dev-minio mc ls local/media-public
 ```
 
+**Rebuild and restart the API after a code change**
+
+```bash
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d --build api
+docker logs -f klarahome-dev-api
+```
+
+For a normal edit-run-debug loop, skip the container and run the host directly against the
+containerised backing services — it starts in about a second and attaches a debugger:
+
+```bash
+dotnet run --project src/backend/host/KlaraHome.Api --launch-profile api-with-stack
+# http://localhost:5080/scalar
+```
+
+**Check the error contract by hand** (Development only, and only while
+`Api__EnableDiagnosticsEndpoints` is true):
+
+```bash
+# 500 ProblemDetails from a deliberate exception - no stack trace, correlation id only
+curl -sk https://api.klarahome.localhost/api/v1/diagnostics/boom
+
+# 422 with camelCased field errors from the FluentValidation pipeline
+curl -sk -X POST https://api.klarahome.localhost/api/v1/diagnostics/echo \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"","repeat":99}'
+
+# Any status in the contract, on demand: Malformed|Unauthorized|Forbidden|NotFound|
+# Conflict|Gone|Validation|RateLimited|Unexpected|Unavailable
+curl -sk https://api.klarahome.localhost/api/v1/diagnostics/error/Conflict
+```
+
+**Trace one request end to end** — send your own correlation id and grep for it:
+
+```bash
+curl -sk -H 'X-Correlation-Id: my-trace-1' https://api.klarahome.localhost/api/v1/meta
+docker logs klarahome-dev-api 2>&1 | grep my-trace-1
+```
+
 **Start clean**
 
 ```bash
@@ -209,6 +261,10 @@ docker exec -it klarahome-dev-minio mc ls local/media-public
 | Postgres container restarts after changing `POSTGRES_*` | Credentials are only applied to an **empty** data directory | `dev reset`, then `up` |
 | Everything is slow on Windows | The repository lives on `/mnt/c` inside WSL | Keep the clone on the Windows filesystem and use Docker Desktop's WSL integration |
 | `mc: Unable to initialize new alias` in `minio-init` | MinIO was not healthy yet | It has `depends_on: service_healthy`; check `dev logs minio` |
+| `api` container is `unhealthy` | It failed configuration validation at startup | `docker logs klarahome-dev-api` — a bad setting is reported by name and the host refuses to start on purpose |
+| `404` from `https://api.klarahome.localhost` | Traefik has not picked the router up yet, or the container is not on the `edge` network | `dev logs traefik`, then check the dashboard router list |
+| `/health/ready` is `Unhealthy` but `/health/live` is fine | PostgreSQL or Redis is down | That is the probe working. `dev status` and restart the offending service |
+| API image build fails on an analyzer warning | The image build runs with warnings-as-errors, as CI does | Fix the warning; `dotnet build` locally shows the same message as a warning |
 
 ---
 
@@ -225,3 +281,5 @@ Recorded so nothing here is mistaken for a production pattern.
 | Traefik dashboard open on loopback | Removed, or behind auth and an IP allow-list |
 | Mailpit captures all mail | A real transactional email provider |
 | No resource pressure enforcement beyond soft limits | Hard `deploy.resources.limits` tuned to the VPS |
+| API serves `/scalar` and the diagnostics endpoints | Both are off; the OpenAPI document is published as a generated client instead |
+| API image built from the working tree by compose | Image built once in CI, tagged with the commit SHA, pulled by the VPS |

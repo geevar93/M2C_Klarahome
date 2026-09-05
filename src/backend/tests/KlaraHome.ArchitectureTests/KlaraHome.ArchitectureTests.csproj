@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Boundary enforcement. docs/01-architecture.md §2.1 calls the module rules "enforced, not
+    aspirational" — this project is what makes that true. A violation fails the build.
+
+    It references the API host so that every module assembly the host composes is present in the
+    output directory and can be inspected, without this project having to list them.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KlaraHome.ArchitectureTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../host/KlaraHome.Api/KlaraHome.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+</Project>

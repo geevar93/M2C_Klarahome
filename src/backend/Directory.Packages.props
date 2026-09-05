@@ -8,8 +8,14 @@
     needed by a step, with the version verified against the feed at that time. Versions are
     deliberately NOT pre-populated speculatively — an unverified pin is worse than no pin.
 
-    Licensing guard (docs/01-architecture.md §4.3): MediatR and AutoMapper are commercially
-    licensed and MUST NOT be added. Use the in-house dispatcher and Mapperly instead.
+    Licensing guard (docs/01-architecture.md §4.3 / ADR-009): packages that carry a commercial
+    licence for commercial use MUST NOT be added.
+      * MediatR          -> use the in-house dispatcher in KlaraHome.Infrastructure/Messaging.
+      * AutoMapper       -> use Mapperly (source generator) or hand-written mapping.
+      * FluentAssertions -> v8+ is commercially licensed by Xceed. NOT USED AT ALL: the tests
+                            assert with xUnit's built-in Assert, so no assertion library can
+                            ever impose a licence on this product.
+                            See docs/adr/ADR-012-no-assertion-library.md.
   -->
 
   <PropertyGroup>
@@ -17,12 +23,42 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <ItemGroup Label="Runtime">
-    <!-- Populated in Step 3 (host + cross-cutting) and Step 4 (EF Core / Npgsql). -->
+  <ItemGroup Label="API / OpenAPI">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Validation">
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Logging">
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageVersion Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Telemetry">
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Health">
+    <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageVersion Include="AspNetCore.HealthChecks.Redis" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
-    <!-- Populated in Step 3/4 (xUnit, FluentAssertions, Testcontainers, NSubstitute). -->
+    <!-- xUnit v3 is a Microsoft.Testing.Platform runner: no VSTest adapter, no test SDK. -->
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
   </ItemGroup>
 
 </Project>

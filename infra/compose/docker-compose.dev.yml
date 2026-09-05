@@ -1,8 +1,8 @@
 # Klara Home - local development environment (Step 2)
 #
-# Brings up every backing service the platform needs, matching what will run on the VPS.
-# Application containers (api, worker, storefront, admin) are NOT here yet - they arrive
-# with Step 3 and land in docker-compose.base.yml per docs/06-infrastructure-devops.md #4.
+# Brings up every backing service the platform needs, matching what will run on the VPS,
+# plus the API container (added at Step 3). The worker, storefront and admin containers
+# arrive with the steps that give them something to do.
 #
 #   Up:    ./infra/scripts/dev.ps1 up          (Windows)
 #          ./infra/scripts/dev.sh up           (bash/WSL2)
@@ -275,8 +275,70 @@ services:
       - traefik.http.routers.mailpit.tls=true
       - traefik.http.services.mailpit.loadbalancer.server.port=8025
 
+  # ---------------------------------------------------------------------------
+  # API - ASP.NET Core 10 modular monolith (Step 3).
+  # Built from infra/docker/api.Dockerfile with the REPOSITORY ROOT as context.
+  # Publishes no host port: Traefik is the only way in.
+  # ---------------------------------------------------------------------------
+  api:
+    <<: *defaults
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        BUILD_CONFIGURATION: ${API_BUILD_CONFIGURATION:-Release}
+    image: klarahome/api:${API_IMAGE_TAG:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      APP_ROLE: api
+      # Container-internal names and ports: the API talks to the data network, never
+      # through the host-published ports.
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-klarahome};Username=${POSTGRES_USER:-klarahome};Password=${POSTGRES_PASSWORD:-klarahome_dev_password}
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:-klarahome_dev_password}
+      Tenant__Code: ${TENANT_CODE:-klarahome}
+      Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
+      Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
+      Observability__ServiceName: klarahome-api
+      Observability__OtlpEndpoint: ${OBSERVABILITY_OTLP_ENDPOINT:-}
+      # Containers log JSON even in Development: this is what a log shipper reads. The
+      # human-readable console template is for `dotnet run` in a terminal.
+      Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
+      Cors__AllowedOrigins__0: https://${DEV_DOMAIN:-klarahome.localhost}
+      Cors__AllowedOrigins__1: https://admin.${DEV_DOMAIN:-klarahome.localhost}
+    networks:
+      - edge
+      - data
+    healthcheck:
+      test: ["CMD", "/app/KlaraHome.Api", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1G
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      - traefik.http.routers.api.rule=Host(`api.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls=true
+      - traefik.http.routers.api.middlewares=security-headers@file,compression@file
+      - traefik.http.services.api.loadbalancer.server.port=8080
+
 networks:
-  # Only Traefik publishes 80/443 here; application containers join it from Step 3.
+  # Only Traefik publishes 80/443 here; application containers join it and are reached
+  # only through Traefik.
   edge:
     name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
   # Backing services. In staging/production (Step 32) this network becomes

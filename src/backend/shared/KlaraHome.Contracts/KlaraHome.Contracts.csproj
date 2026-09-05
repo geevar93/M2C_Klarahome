@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The ONLY assembly a module may reference to reach another module (docs/01-architecture.md
+    §2.1). It holds published contract interfaces and integration event definitions — never
+    entities, never DbContexts, never implementations.
+
+    Modules must NOT reference each other directly. Enforced by KlaraHome.ArchitectureTests.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

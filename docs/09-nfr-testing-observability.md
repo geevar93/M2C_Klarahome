@@ -64,7 +64,7 @@ not silently assumed.
 
 | Level | Scope | Tooling | Where it runs |
 |---|---|---|---|
-| **Unit** | Domain invariants, pricing/GST maths, state machines, validators, pure helpers | xUnit, FluentAssertions, NSubstitute / Vitest | Every commit |
+| **Unit** | Domain invariants, pricing/GST maths, state machines, validators, pure helpers | xUnit v3 (built-in `Assert`), NSubstitute / Vitest | Every commit |
 | **Integration** | Module + real Postgres + real Redis; repositories, handlers, migrations, outbox | xUnit + **Testcontainers** | Every commit |
 | **Contract** | API responses match the OpenAPI document; generated client compiles | Schema assertions + codegen diff | Every commit |
 | **Component (FE)** | Every UI primitive/pattern incl. keyboard and a11y | Testing Library | Every commit |
@@ -72,6 +72,12 @@ not silently assumed.
 | **Load** | Throughput, latency, soak, spike | k6 | Step 29, then pre-release for risky changes |
 | **Security** | SAST, dependency, container, DAST, authz matrix | CI + ZAP | Continuous + weekly |
 | **Visual regression** | Screenshot baselines | Playwright | **Only from Step 30** — pointless before the design exists |
+
+> **No third-party assertion library.** Assertions use xUnit's built-in `Assert` (Apache-2.0,
+> already a required dependency). FluentAssertions was the original choice here; version 8
+> moved to a commercial licence, which conflicts with ADR-009 for a redistributed product. See
+> [ADR-012](adr/ADR-012-no-assertion-library.md) — the decision is to depend on nothing that can
+> impose a licence later, rather than to pin a version and hope.
 
 ### 2.2 Non-negotiable test scenarios
 

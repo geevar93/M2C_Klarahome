@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MODULE TEMPLATE (Step 3).
+
+    This project is the canonical shape every module follows (docs/01-architecture.md §4.2):
+
+      Domain/          entities, value objects, domain events, invariants. No EF, no HTTP.
+      Application/     commands, queries, handlers, validators, DTOs, policies
+      Infrastructure/  DbContext, EF configurations, repositories, external adapters
+      Endpoints/       minimal API endpoints grouped by resource
+      PlatformModule.cs  the IModule implementation
+
+    Reference rules, enforced by KlaraHome.ArchitectureTests:
+      * may reference SharedKernel, Contracts and Infrastructure
+      * must NEVER reference another KlaraHome.Modules.* project
+      * its own types stay internal; only Contracts crosses the boundary
+
+    The Platform feature set itself (tenancy, settings, branding, audit) is Step 6.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Platform</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -38,7 +38,9 @@ dotnet_style_prefer_conditional_expression_over_return = false:suggestion
 
 # Immutability / correctness
 dotnet_style_readonly_field = true:warning
-dotnet_style_require_accessibility_modifiers = always:warning
+# Interface members cannot carry an accessibility modifier idiomatically, so the rule stops at
+# the interface boundary (Step 3: `always` also flagged interface members).
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
 csharp_prefer_static_local_function = true:warning
 
 # Naming: private fields _camelCase
@@ -86,3 +88,11 @@ indent_size = 2
 [*.{sln,csproj,props,targets}]
 indent_size = 2
 end_of_line = crlf
+
+# -----------------------------------------------------------------------------
+# Analyzer severities (Step 3)
+# -----------------------------------------------------------------------------
+[*.cs]
+# CA1716: `Error`, `Result` and friends collide with VB/F# keywords. They are the domain
+# vocabulary of the SharedKernel and this codebase is C#-only, so the rule buys nothing.
+dotnet_diagnostic.CA1716.severity = none

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The HTTP host. A composition root and nothing else: it wires cross-cutting concerns, hands
+    the versioned route group to each module, and exposes the probes. Business logic lives in
+    modules (docs/01-architecture.md §4.1).
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Api</RootNamespace>
+    <AssemblyName>KlaraHome.Api</AssemblyName>
+    <UserSecretsId>klarahome-api</UserSecretsId>
+    <!-- The generated OpenAPI document is written here by the CI codegen step (Step 5). -->
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)</OpenApiDocumentsDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Modules">
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

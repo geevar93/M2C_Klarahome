@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    The background host. Runs from the SAME image as the API with a different entrypoint
+    (docs/01-architecture.md §3.1), so a long-running job can never starve a customer request.
+
+    Step 3 gives it the host, configuration and observability only. Its actual work — outbox
+    dispatch (Step 4), scheduled jobs, notifications, projections and reconciliation — is added
+    by the steps that introduce it.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Worker</RootNamespace>
+    <AssemblyName>KlaraHome.Worker</AssemblyName>
+    <UserSecretsId>klarahome-worker</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
