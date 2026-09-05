@@ -2,7 +2,7 @@
 
 > **Document owner:** Solution Architecture
 > **Status:** APPROVED — in execution (Step 1)
-> **Last updated:** 2026-09-05 (Step 1)
+> **Last updated:** 2026-09-05 (Step 1 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -82,7 +82,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | # | Step | Phase | Status | Completed On | Notes |
 |---|---|---|---|---|---|
 | 0 | Specification review & sign-off | — | ✅ DONE | 2026-09-05 | Approved by User: "Proceed with the implementation" |
-| 1 | Repository & monorepo scaffolding | A | ⛔ BLOCKED | partial 2026-09-05 | 6 of 7 deliverables done. **Nx/Angular workspace blocked: Node v20.12.2 < Angular's required ^22.22.3** |
+| 1 | Repository & monorepo scaffolding | A | ✅ DONE | 2026-09-05 | Node upgraded to 24.20.0; Nx 23.2.0 / Angular 22.1 workspace generated. All criteria met |
 | 2 | Local containerised dev environment | A | ⬜ NOT STARTED | | |
 | 3 | Backend solution skeleton & cross-cutting concerns | A | ⬜ NOT STARTED | | |
 | 4 | Database foundation, EF Core & migration pipeline | A | ⬜ NOT STARTED | | |
@@ -161,9 +161,12 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Commit message convention (Conventional Commits) + PR template.
 - **Acceptance criteria:** `git log` shows an initial commit; folder tree matches the spec;
   `dotnet --version` and `npx nx --version` both resolve from the repo.
-- **Outcome / Notes:** ⛔ **BLOCKED — 6 of 7 deliverables complete (2026-09-05).**
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.** Commits `a61acf9` (scaffold) and `98e5b7f`
+  (frontend workspace) on `main`; working tree clean.
+  **All four acceptance criteria met:** initial commit ✅ · folder tree matches spec ✅ ·
+  `dotnet --version` → 10.0.203 ✅ · `npx nx --version` → Local v23.2.0 ✅.
 
-  **Delivered** — commit `a61acf9` on `main`, 61 files, working tree clean:
+  **Part 1 — repository scaffold** (commit `a61acf9`, 61 files):
   - Git repository initialised (`main`). Branch strategy documented in `CONTRIBUTING.md`.
   - Repository tree created per `01-architecture.md` §4.1 and §8: `src/backend`
     (`host/` × 3, `shared/` × 3, `modules/` × 17, `tests/` × 4), `src/frontend/{apps,libs}`,
@@ -199,27 +202,53 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
     `09-nfr-testing-observability.md` §2.4, plus an explicit scope check against step creep.
   - Root `README.md` with layout, prerequisites (actual verified versions) and next steps.
 
-  **⛔ Blocker — Nx/Angular workspace not generated.**
-  `@angular/core` currently requires Node `^22.22.3 || ^24.15.0 || >=26.0.0`; this machine has
-  **Node v20.12.2**. Running `create-nx-workspace` would either fail mid-install or silently
-  pin an outdated Angular, contradicting `05-frontend-architecture.md` §2 (standalone, signals,
-  zoneless, modern SSR). No install was attempted, so the tree is clean rather than
-  half-provisioned. `src/frontend/apps` and `libs` exist as placeholders so the tree matches
-  the spec, and `src/frontend/README.md` records the blocker, the fix, and the exact structure
-  and Nx boundary tags to generate.
+  **Part 2 — Nx/Angular workspace** (commit `98e5b7f`, 205 files). Initially blocked on
+  Node v20.12.2 being below Angular's engine range; **User upgraded to Node 24.20.0 via the
+  official MSI**, clearing it. Note the target moved from Node 22 to 24: `OpenJS.NodeJS.LTS`
+  now resolves to the 24 line, which is the current Active LTS and satisfies `^24.15.0`.
 
-  **Acceptance criteria status:** `git log` initial commit ✅ · folder tree matches spec ✅ ·
-  `dotnet --version` resolves ✅ · `npx nx --version` resolves ❌ (blocked).
+  Generated with **Nx 23.2.0 / Angular 22.1**:
+  - `apps/storefront` — SSR (`src/server.ts`), hydration with `withEventReplay()`, zoneless,
+    standalone, routing, SCSS, `kh` selector prefix.
+  - `apps/admin` — SPA, deliberately **no SSR** (authenticated and non-indexable, per
+    `05-frontend-architecture.md` §3.1).
+  - `apps/storefront-e2e`, `apps/admin-e2e` — Playwright.
+  - 13 placeholder libraries exactly as specified in `05-frontend-architecture.md` §1:
+    `data-access/{api,auth,cart,catalog,orders,content}`, `ui/{primitives,patterns,layout}`,
+    `domain`, `util`, `i18n`, `testing`. Import paths `@klarahome/*`.
+    `domain` and `util` are `@nx/js` libraries (framework-free by design); the rest are
+    Angular libraries.
+  - **Module boundaries enforced at lint time** via project tags and
+    `@nx/enforce-module-boundaries` in `eslint.config.mjs`, encoding all three constraints
+    from the spec. **Verified, not assumed:** a deliberate `ui → data-access` import was
+    introduced, confirmed to fail lint with the correct message, and reverted.
+  - **Both apps build.** storefront **72.35 kB** gzipped initial, admin **60.73 kB** — against
+    the 180 kB budget in `09-nfr-testing-observability.md` §1.1. Zoneless verified structurally:
+    `zone.js` is not a dependency at all (Angular 22 default).
 
-  **Resolution required from the User** — one of:
-  1. Upgrade to Node 22 LTS (`nvm install 22.22.3`), after which the workspace is generated
-     and Step 1 closes. **Recommended**; ~10 minutes.
-  2. Authorise proceeding to Step 2 with Step 1 left open. Steps 2–21 are backend and
-     infrastructure only and do not need Node; the workspace is not actually required until
-     **Step 22**. Low risk, but Step 1 stays `⛔ BLOCKED` until closed.
+  **Three deviations forced by current tooling** (recorded in `src/frontend/README.md`; none
+  change the specification):
+  1. **Nx 23 replaced legacy presets with opinionated templates.** `--preset=angular-monorepo`
+     silently ignored `--appName` and generated `apps/shop` **and `apps/api`** — a Node backend
+     directly contradicting our .NET backend — plus unrequested AI-agent scaffolding
+     (`.claude/`, `CLAUDE.md`, `.cursor/`, `.codex/`, `.gemini/`, `.opencode/`, `AGENTS.md`)
+     and a `packages/` layout. Discarded; rebuilt from the empty template with explicit
+     generators so every project is one we actually specified.
+  2. **The empty template ships the TypeScript project-references setup, which Angular does
+     not support** ([angular/angular#37276](https://github.com/angular/angular/issues/37276));
+     the app generator refuses to run against it. Converted to the classic setup —
+     `tsconfig.base.json` with `paths`, no root solution `tsconfig.json`, `@nx/js/typescript`
+     plugin removed from `nx.json`. The documented escape hatch
+     (`NX_IGNORE_UNSUPPORTED_TS_SETUP=true`, "at your own risk") was **not** used.
+  3. **`baseUrl` omitted** from `tsconfig.base.json` — TypeScript 6 deprecates it (TS5101) and
+     it broke both builds; the generated `paths` are already `./`-relative so it is redundant.
 
-  Environment verified at this step: .NET SDK 10.0.203, Git 2.46.1, Docker 29.4.0,
-  Node v20.12.2 (insufficient), npm 10.5.0.
+  Environment verified at close: .NET SDK 10.0.203, Git 2.46.1, Docker 29.4.0,
+  **Node v24.20.0**, npm 11.19.0.
+
+  **Carried into later steps:** `eslint.config.mjs` currently holds *only* the boundary rule —
+  the full Angular/TypeScript rule set, Prettier integration and CI wiring remain owned by
+  Step 5 and Step 22, as does generating the `data-access-api` client from OpenAPI.
 
 ---
 
@@ -824,7 +853,11 @@ with the User at the step boundary. Do not act on these items without explicit a
 
 | Date | Raised during | Item | Decision |
 |---|---|---|---|
-| 2026-09-05 | Step 1 | **Node.js v20.12.2 is below Angular's supported range** (`^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0`). Blocks Nx/Angular workspace generation. | ⏳ Awaiting User: upgrade Node now, or defer the workspace (not needed until Step 22) |
+| 2026-09-05 | Step 1 | **Node.js v20.12.2 is below Angular's supported range** (`^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0`). Blocks Nx/Angular workspace generation. | ✅ **RESOLVED** — User upgraded to Node 24.20.0 via MSI; workspace generated and Step 1 closed |
+| 2026-09-05 | Step 1 | Nx 23 templates inject AI-agent scaffolding (`.claude/`, `CLAUDE.md`, `.cursor/`, `.codex/`, `.gemini/`, `.opencode/`, `AGENTS.md`, `opencode.json`) into generated workspaces. Removed at generation time. | ℹ️ Removed. **Re-check after any Nx migration** — a `nx migrate` may reintroduce them |
+| 2026-09-05 | Step 1 | `src/frontend/.gitignore` (Nx-generated) is separate from the root `.gitignore` and duplicates several rules. | ℹ️ Harmless; consolidate at Step 5 if it causes confusion |
+| 2026-09-05 | Step 1 | Frontend `npm audit` reports **8 moderate** advisories in the fresh dependency tree, and 6 packages have uncovered install scripts. | ⏳ Not triaged — belongs to **Step 5** (vulnerability gate). Recorded so it is not missed |
+| 2026-09-05 | Step 1 | `@angular-devkit/build-angular` warns that Angular's Webpack support is deprecated in favour of `@angular/build`. Our apps already use the esbuild-based builder. | ℹ️ No action; the package is a transitive leftover |
 | 2026-09-05 | Step 1 | Legacy .NET SDKs 2.1.526 and 8.0.200 are also installed on this machine. Harmless — `global.json` pins 10.0.203 — but worth knowing if a build ever resolves unexpectedly. | ℹ️ No action; recorded for diagnostics |
 | 2026-09-05 | Step 1 | `NODE_OPTIONS` carries a VS Code JS-debugger bootloader, which attaches a debugger to every `node`/`npm` invocation and pollutes stdout. | ℹ️ No action now; **must be cleared in CI** (Step 5) so it cannot corrupt scripted npm output |
 | 2026-09-05 | Step 1 | Third-party accounts from `08-integrations.md` §7 are still unprovisioned. | ⏳ Not blocking until **Step 15** (Razorpay) / **Step 16** (logistics) |
@@ -838,6 +871,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | — | All | Initial specification set created | Pending |
 | 2026-09-05 | 0 | — | Specification approved by User; no amendments | User |
 | 2026-09-05 | 1 | `IMPLEMENTATION_PLAN.md` | Step 0 closed; Step 1 recorded as BLOCKED with outcome notes and Parking Lot entries. No specification change | — |
+| 2026-09-05 | 1 | `IMPLEMENTATION_PLAN.md`, `README.md`, `src/frontend/README.md` | Node blocker resolved (24.20.0); Nx/Angular workspace generated; Step 1 closed as DONE. Three tooling deviations recorded. No specification change | — |
 
 ---
 
