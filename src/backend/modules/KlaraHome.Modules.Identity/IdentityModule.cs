@@ -1,11 +1,14 @@
+using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Persistence.Seeding;
+using KlaraHome.Modules.Identity.Domain;
 using KlaraHome.Modules.Identity.Endpoints;
 using KlaraHome.Modules.Identity.Infrastructure;
 using KlaraHome.Modules.Identity.Infrastructure.Access;
+using KlaraHome.Modules.Identity.Infrastructure.External;
 using KlaraHome.Modules.Identity.Infrastructure.Persistence;
 using KlaraHome.Modules.Identity.Infrastructure.Security;
 using KlaraHome.Modules.Identity.Infrastructure.Seeding;
@@ -14,6 +17,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace KlaraHome.Modules.Identity;
@@ -73,6 +78,8 @@ public sealed class IdentityModule : IModule
         services.AddScoped<SignInCoordinator>();
         services.AddScoped<OtpService>();
 
+        services.AddSingleton<IFeatureFlagSource, IdentityFeatureFlagSource>();
+
         services.AddScoped<Application.Authentication.PasswordRules>();
         services.AddScoped<Application.Account.AddressWriter>();
         services.AddScoped<Application.Administration.AdminUserScope>();
@@ -84,11 +91,58 @@ public sealed class IdentityModule : IModule
         // that this is not a production arrangement.
         services.AddScoped<IOtpDispatcher, LoggingOtpDispatcher>();
 
+        AddExternalIdentityProviders(services, configuration);
+
         services.AddDataSeeder<PermissionSeeder>();
         services.AddDataSeeder<SystemRoleSeeder>();
         services.AddDataSeeder<BootstrapAdminSeeder>();
 
         AddAuthentication(services, configuration);
+    }
+
+    /// <summary>
+    /// Registers the identity-provider adapters and the one outbound HTTP client they share.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the first outbound call this product makes, so it arrives with the controls
+    /// <c>07-security-compliance.md</c> §3 asks for rather than after them: a bounded timeout, and
+    /// a handler that refuses any host outside the allow-list. Nothing here is caller-supplied —
+    /// the endpoints come from a pinned authority's discovery document — and the allow-list is
+    /// there so a future mistake fails at the socket instead of at the provider.
+    /// </para>
+    /// <para>
+    /// Both adapters are registered whether or not they are configured. An unconfigured one reports
+    /// <c>IsUsable == false</c>, is left off the sign-in page, and answers the same 404 as a
+    /// provider that does not exist — which is what a fresh deployment with no OAuth client should
+    /// look like.
+    /// </para>
+    /// </remarks>
+    private static void AddExternalIdentityProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddTransient<AllowedHostHandler>();
+
+        services
+            .AddHttpClient(ExternalHttp.ClientName, client => client.Timeout = ExternalHttp.Timeout)
+            .AddHttpMessageHandler<AllowedHostHandler>();
+
+        services.AddSingleton<OidcDiscoveryCache>();
+        services.AddScoped<ExternalLoginStateCookie>();
+        services.AddScoped<ExternalLoginService>();
+
+        services.AddSingleton<IExternalIdentityProvider>(provider => new OidcIdentityProvider(
+            ExternalProvider.Google,
+            provider.GetRequiredService<IOptions<AuthOptions>>().Value.External.Google,
+            provider.GetRequiredService<OidcDiscoveryCache>(),
+            provider.GetRequiredService<IHttpClientFactory>(),
+            provider.GetRequiredService<ILoggerFactory>().CreateLogger<OidcIdentityProvider>()));
+
+        services.AddSingleton<IExternalIdentityProvider>(provider => new OidcIdentityProvider(
+            ExternalProvider.Facebook,
+            provider.GetRequiredService<IOptions<AuthOptions>>().Value.External.Facebook,
+            provider.GetRequiredService<OidcDiscoveryCache>(),
+            provider.GetRequiredService<IHttpClientFactory>(),
+            provider.GetRequiredService<ILoggerFactory>().CreateLogger<OidcIdentityProvider>()));
     }
 
     /// <inheritdoc />
@@ -98,6 +152,7 @@ public sealed class IdentityModule : IModule
 
         var store = endpoints.MapGroup("/store");
         store.MapAuthEndpoints("store", includeOtp: true);
+        store.MapExternalAuthEndpoints();
         store.MapAccountEndpoints("store", includeAddresses: true);
 
         var admin = endpoints.MapGroup("/admin");

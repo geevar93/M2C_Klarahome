@@ -37,6 +37,9 @@ internal sealed class AuthOptions
     /// <summary>The first administrator, created once on an empty deployment.</summary>
     public BootstrapOptions Bootstrap { get; set; } = new();
 
+    /// <summary>External identity providers (ADR-014). Customers only.</summary>
+    public ExternalAuthOptions External { get; set; } = new();
+
     /// <summary>
     /// Roles for which a second factor is not optional (docs/07-security-compliance.md §1). A user
     /// holding any of these cannot complete a sign-in until they have enrolled one.
@@ -76,6 +79,99 @@ internal sealed class BootstrapOptions
     /// <param name="password">The configured password.</param>
     public static bool IsWellKnown(string? password)
         => password is not null && WellKnown.Contains(password, StringComparer.Ordinal);
+}
+
+/// <summary>
+/// External identity providers, and the two things that keep the redirect honest.
+/// </summary>
+internal sealed class ExternalAuthOptions
+{
+    /// <summary>
+    /// The public origin the provider redirects back to, without a trailing slash — for example
+    /// <c>https://api.klarahome.in</c>. It has to be configured rather than derived from the
+    /// request, because a redirect URI must match the one registered with the provider exactly,
+    /// and a forwarded Host header is attacker-controlled.
+    /// </summary>
+    public string CallbackBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Where the storefront may be sent after a successful sign-in. An allow-list, because
+    /// <c>returnUrl</c> arrives from the caller and an unchecked one is an open redirect
+    /// (docs/07-security-compliance.md §3).
+    /// </summary>
+    public IList<string> AllowedReturnUrls { get; set; } = [];
+
+    /// <summary>Where a caller is sent when they supply no <c>returnUrl</c>.</summary>
+    public string DefaultReturnUrl { get; set; } = string.Empty;
+
+    /// <summary>How long a started sign-in may sit unfinished at the provider.</summary>
+    [Range(1, 60)]
+    public int StateLifetimeMinutes { get; set; } = 10;
+
+    /// <summary>The cookie carrying the state and the PKCE verifier between the two redirects.</summary>
+    [Required]
+    public string StateCookieName { get; set; } = "kh_xs";
+
+    /// <summary>Google. Enabled once a client id and secret are supplied.</summary>
+    public ExternalProviderOptions Google { get; set; } = new()
+    {
+        Authority = "https://accounts.google.com",
+        Scopes = "openid email profile",
+    };
+
+    /// <summary>
+    /// Facebook. Configured and disabled: it cannot leave development mode until the deployment's
+    /// owner completes Business Verification and publishes a privacy policy (ADR-014).
+    /// </summary>
+    public ExternalProviderOptions Facebook { get; set; } = new()
+    {
+        // Facebook is not OIDC-discoverable, so its endpoints are pinned rather than fetched.
+        AuthorizationEndpoint = "https://www.facebook.com/v21.0/dialog/oauth",
+        TokenEndpoint = "https://graph.facebook.com/v21.0/oauth/access_token",
+        UserInfoEndpoint = "https://graph.facebook.com/v21.0/me?fields=id,name,email",
+        Scopes = "email public_profile",
+    };
+}
+
+/// <summary>One provider's registration.</summary>
+internal sealed class ExternalProviderOptions
+{
+    /// <summary>
+    /// Whether this provider is offered. False without a client id and secret whatever this says:
+    /// a provider that is "enabled" and unconfigured is a button that fails when somebody presses it.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>The OAuth client id. Public — it appears in the authorization URL.</summary>
+    public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>The OAuth client secret. A real secret; supplied the way the signing key is.</summary>
+    public string ClientSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The OIDC issuer whose discovery document supplies the endpoints. Pinned in configuration so
+    /// no caller can point the token exchange anywhere.
+    /// </summary>
+    public string? Authority { get; set; }
+
+    /// <summary>The authorization endpoint, when the provider is not OIDC-discoverable.</summary>
+    public string? AuthorizationEndpoint { get; set; }
+
+    /// <summary>The token endpoint, when the provider is not OIDC-discoverable.</summary>
+    public string? TokenEndpoint { get; set; }
+
+    /// <summary>The userinfo endpoint, when the provider is not OIDC-discoverable.</summary>
+    public string? UserInfoEndpoint { get; set; }
+
+    /// <summary>The scopes requested. Only ever enough to identify the person.</summary>
+    public string Scopes { get; set; } = "openid email profile";
+
+    /// <summary>Whether this provider is both switched on and actually usable.</summary>
+    public bool IsUsable
+        => Enabled
+           && !string.IsNullOrWhiteSpace(ClientId)
+           && !string.IsNullOrWhiteSpace(ClientSecret)
+           && (!string.IsNullOrWhiteSpace(Authority) || !string.IsNullOrWhiteSpace(AuthorizationEndpoint));
 }
 
 /// <summary>Access and refresh token issuance.</summary>

@@ -30,8 +30,24 @@ public abstract class IdentityTestBase(KlaraHomeSchemaFixture fixture) : IDispos
     protected void SkipWithoutDocker()
         => Assert.SkipWhen(fixture.SkipReason is not null, fixture.SkipReason ?? string.Empty);
 
+    /// <summary>Stands in for Google at the network boundary.</summary>
+    internal FakeIdentityProvider Provider => Factory.Provider;
+
+    /// <summary>Feature flags this host pins. Empty means the seeded defaults.</summary>
+    internal Dictionary<string, bool> Features => Factory.Features;
+
     /// <summary>A client against the host under test.</summary>
-    protected HttpClient CreateClient() => Factory.CreateClient();
+    /// <param name="followRedirects">
+    /// False for the external sign-in flow, whose redirects go to a provider that does not exist
+    /// and whose <c>Location</c> headers are what the test is asserting.
+    /// </param>
+    protected HttpClient CreateClient(bool followRedirects = true)
+        => followRedirects
+            ? Factory.CreateClient()
+            : Factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+            });
 
     /// <summary>A mobile number no other test is using.</summary>
     /// <remarks>

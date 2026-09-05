@@ -200,7 +200,9 @@ internal sealed class StoreSettingsSeeder(
 /// ones somebody has already touched.
 /// </summary>
 /// <param name="context">The Platform module's context.</param>
-internal sealed class FeatureFlagSeeder(PlatformDbContext context) : IDataSeeder
+/// <param name="sources">Every module's declared flags. The table lives here; the declarations do not.</param>
+internal sealed class FeatureFlagSeeder(PlatformDbContext context, IEnumerable<IFeatureFlagSource> sources)
+    : IDataSeeder
 {
     /// <inheritdoc />
     public string Name => "Platform.FeatureFlags";
@@ -215,7 +217,14 @@ internal sealed class FeatureFlagSeeder(PlatformDbContext context) : IDataSeeder
             .ToDictionaryAsync(flag => flag.Key, StringComparer.OrdinalIgnoreCase, cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (var declaration in PlatformFeatures.All)
+        // Every module's flags, not just this one's. The table lives here, so this seeder is the
+        // only thing that may write it — see IFeatureFlagSource.
+        var declared = sources
+            .SelectMany(source => source.Flags)
+            .DistinctBy(flag => flag.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var declaration in declared)
         {
             if (existing.TryGetValue(declaration.Key, out var flag))
             {

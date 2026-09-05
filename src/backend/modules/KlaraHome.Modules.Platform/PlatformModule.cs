@@ -66,6 +66,8 @@ public sealed class PlatformModule : IModule
         services.AddScoped<StoreSettingsService>();
         services.AddScoped<IStoreSettings>(provider => provider.GetRequiredService<StoreSettingsService>());
 
+        services.AddSingleton<IFeatureFlagSource, Infrastructure.FeatureFlags.PlatformFeatureFlagSource>();
+
         services.AddScoped<FeatureFlagService>();
         services.AddScoped<IFeatureFlags>(provider => provider.GetRequiredService<FeatureFlagService>());
 

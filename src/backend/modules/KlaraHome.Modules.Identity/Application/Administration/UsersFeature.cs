@@ -7,6 +7,7 @@ using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Identity.Application.Authentication;
 using KlaraHome.Modules.Identity.Application.Validation;
 using KlaraHome.Modules.Identity.Domain;
+using KlaraHome.Modules.Identity.Infrastructure;
 using KlaraHome.Modules.Identity.Infrastructure.Access;
 using KlaraHome.Modules.Identity.Infrastructure.Persistence;
 using KlaraHome.Modules.Identity.Infrastructure.Security;
@@ -66,6 +67,11 @@ internal sealed record SetUserStatusCommand(Guid Id, UserStatus Status) : IComma
 /// <param name="CreatedAt">When the account was created.</param>
 /// <param name="VendorId">The seller they act for, or null.</param>
 /// <param name="Roles">The roles they hold.</param>
+/// <param name="MustChangePassword">Whether an administrator issued the current password.</param>
+/// <param name="PasswordSetupPending">
+/// Whether this account has no password at all. True for one just created while email delivery is
+/// off — nobody can sign in to it until an administrator issues a temporary password.
+/// </param>
 internal sealed record AdminUserResponse(
     Guid Id,
     UserType UserType,
@@ -79,7 +85,9 @@ internal sealed record AdminUserResponse(
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
     Guid? VendorId,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    bool MustChangePassword,
+    bool PasswordSetupPending);
 
 /// <summary>Rules for creating an account.</summary>
 internal sealed class CreateUserValidator : AbstractValidator<CreateUserCommand>
@@ -241,7 +249,9 @@ internal sealed class SearchUsersQueryHandler(IdentityDbContext context, ICaller
             user.LastLoginAt,
             user.CreatedAt,
             vendorId,
-            roles);
+            roles,
+            user.MustChangePassword,
+            user.PasswordHash is null && user.UserType != Domain.UserType.Customer);
     }
 }
 
@@ -284,12 +294,14 @@ internal sealed class GetUserQueryHandler(AdminUserScope scope)
 /// <param name="caller">The signed-in caller.</param>
 /// <param name="otp">Sends the new user a password-reset link to set their first password.</param>
 /// <param name="audit">Records the creation.</param>
+/// <param name="flags">Decides whether a link can be sent at all.</param>
 internal sealed class CreateUserCommandHandler(
     IdentityDbContext context,
     AdminUserScope scope,
     ICallerContext caller,
     OtpService otp,
-    IAuditLogger audit) : ICommandHandler<CreateUserCommand, AdminUserResponse>
+    IAuditLogger audit,
+    IFeatureFlags flags) : ICommandHandler<CreateUserCommand, AdminUserResponse>
 {
     /// <summary>The audited action for a created account.</summary>
     public const string AuditAction = "identity.user.created";
@@ -358,9 +370,20 @@ internal sealed class CreateUserCommandHandler(
         // No password is set here. The account is created without one and the new user chooses
         // theirs from a reset link, so nobody — including the administrator who created it — ever
         // knows a credential that would let them sign in as somebody else.
-        await otp
-            .IssueAsync(email, OtpChannel.Email, OtpPurpose.PasswordReset, user.Id, cancellationToken)
+        //
+        // With email delivery off there is no link to send, and the account is left unable to sign
+        // in until an administrator issues a temporary password (ADR-014 decision 5). The response
+        // says so through PasswordSetupPending rather than leaving it to be discovered.
+        var canEmail = await flags
+            .IsEnabledAsync(IdentityFeatures.PasswordResetEmail, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+
+        if (canEmail)
+        {
+            await otp
+                .IssueAsync(email, OtpChannel.Email, OtpPurpose.PasswordReset, user.Id, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         await audit.RecordAsync(
             new AuditEntry
@@ -374,6 +397,7 @@ internal sealed class CreateUserCommandHandler(
                     userType = command.UserType.ToString(),
                     roles = command.RoleCodes,
                     vendorId,
+                    passwordLinkSent = canEmail,
                 },
             },
             cancellationToken).ConfigureAwait(false);

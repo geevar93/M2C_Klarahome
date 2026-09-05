@@ -225,7 +225,7 @@ Three actor classes, one set of endpoints, mapped under both `/store` and `/admi
 
 | Actor | Primary credential | Second factor |
 |---|---|---|
-| Customer | Mobile number + 6-digit OTP | Optional |
+| Customer | Mobile number + 6-digit OTP, **Google**, or email + password | Optional |
 | Vendor staff | Email + password | **Mandatory for `vendor-owner`** |
 | Platform staff | Email + password | **Mandatory for `platform-admin`** |
 
@@ -268,9 +268,52 @@ asks for another seller's data gets no rows rather than someone else's, and a `{
 first sign-in enrols a second factor before it issues a session. Accounts an administrator creates
 afterwards get no password at all — the new user sets their own from an emailed link.
 
-> **Until Step 8 there is no SMS or email transport.** One-time codes and reset links are written
-> to the API log by `LoggingOtpDispatcher`, which is how you sign in locally and is exactly what
-> `docs/07-security-compliance.md` §3 forbids in production. The Notifications module replaces it.
+```bash
+# Sign in with an identity provider. Two redirects with a server-side token exchange between them.
+GET  /api/v1/store/auth/external/providers      # which buttons to render
+GET  /api/v1/store/auth/external/google/start   ?returnUrl=
+GET  /api/v1/store/auth/external/google/callback   -> 302 back, refresh cookie set
+GET/DELETE /api/v1/store/me/external-logins[/{id}]
+
+# Replace a password. Also the way out of an administrator-issued temporary one.
+POST /api/v1/admin/auth/password/change         { challengeToken?, currentPassword, newPassword }
+PUT  /api/v1/admin/users/{id}/password          { temporaryPassword }
+```
+
+### Running without an SMS or email provider
+
+SMS and transactional email are paid, and a deployment may run before they exist. Four flags in
+`platform.feature_flags` turn the features that need them off **at runtime** — nothing is removed
+from the code, and the day a provider is paid for the feature returns with no deploy (ADR-014):
+
+| Flag | Off means |
+|---|---|
+| `identity.mobile-otp-login` | Customers sign in with Google, or email + password |
+| `identity.email-verification` | An address stays unverified unless a provider asserted it |
+| `identity.password-reset-email` | An administrator issues a temporary password instead |
+| `identity.external-login` | The external sign-in surface disappears |
+
+```bash
+PUT /api/v1/admin/feature-flags/identity.mobile-otp-login   { "enabled": false }
+```
+
+A disabled feature answers `404 FEATURE_DISABLED`. **Google sign-in is what makes this workable**:
+it is free, it needs no app review for `email`/`profile`, and the address it returns arrives already
+verified — a stronger assertion than our own verification link would have been. Set
+`AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET`; a provider with no client id is left off
+the sign-in page rather than offered and broken.
+
+External sign-in is **for customers only**. Staff and vendor users keep a password and a mandatory
+second factor, so a compromised Google account cannot reach `platform-admin` — which is also why an
+administrator has to be able to issue a temporary password while email is off. That password buys a
+`password-change-required` challenge rather than a session, ends every existing session, and is
+audited with the administrator's name on it. It is a knowingly weaker control than a reset link and
+is withdrawn when email delivery returns.
+
+> **While `identity.mobile-otp-login` or the email flags are on and Step 8 has not landed,** codes
+> and links are written to the API log by `LoggingOtpDispatcher` — which is how you sign in locally
+> and exactly what `docs/07-security-compliance.md` §3 forbids in production. The Notifications
+> module replaces it; turning the flags off is what makes a deployment safe before it does.
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

@@ -89,7 +89,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 5 | CI pipeline & quality gates | A | ✅ DONE | 2026-09-05 | Every gate built, run and proven to fail correctly; 179 tests, 88.81% line coverage, both images scan clean. **One half of the acceptance criterion is not demonstrable yet:** there is no GitHub remote, so nothing can block a merge. Configuration documented in `ci-pipeline.md` §6 |
 | 6 | Platform module — tenancy, settings, branding, audit | B | ✅ DONE | 2026-09-05 | Tenant, typed settings store, feature flags, partitioned append-only audit trail and Indian reference data; 7 endpoints; 252 tests green, 92.44% line coverage. All three criteria met and demonstrated against the running stack. **Admin endpoints declare their permissions but nothing enforces them until Step 7** — the host refuses to start outside Development while that is true |
 | 7 | Identity & Access module | B | ✅ DONE | 2026-09-05 | Customer OTP, staff/vendor password + mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope in the data layer, profiles and Indian addresses; 50 routes across the two surfaces; 421 tests green, 89.06% line / 80.58% branch coverage. All three acceptance criteria met and demonstrated against a containerised stack. **Closes the Step 6 gap:** every admin endpoint that declared a permission is now behind a policy that checks it |
-| 7A | External identity providers & degraded-delivery mode | B | ⬜ NOT STARTED | | **Added at the Step 7 boundary by the User** — no budget for SMS or email yet. Google sign-in for customers, feature flags to turn the paid-provider features off, administrator-issued temporary passwords. Spec changed first: ADR-014, `07` §1, `04` §3.1, `03` §4.2, `08` §3.5 |
+| 7A | External identity providers & degraded-delivery mode | B | ✅ DONE | 2026-09-05 | Google sign-in for customers (server-side code + PKCE), four runtime flags that turn the SMS- and email-dependent features off, administrator-issued temporary passwords with a forced change. Facebook configured and disabled. 511 tests green, 89.8% line / 81.2% branch. **Nothing from Step 7 changed behaviour** — every flag ships on. Spec changed first: ADR-014 |
 | 8 | Media, file storage & Notifications module | B | ⬜ NOT STARTED | | |
 | 9 | Vendor / Seller module | C | ⬜ NOT STARTED | | |
 | 10 | Catalog module | C | ⬜ NOT STARTED | | |
@@ -1285,7 +1285,89 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
 - **Explicitly out of scope:** Staff and vendor external sign-in (ADR-014 decision 3); Apple;
   replacing `LoggingOtpDispatcher`, which stays until Step 8 and is only reachable while the
   flags are on.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.** Both halves of the acceptance criterion met and
+  demonstrated against a containerised stack: a customer signs in with a provider while SMS and
+  email are switched off, and an administrator recovers a locked-out colleague with a temporary
+  password they are then forced to replace.
+
+  **Nothing from Step 7 changed behaviour.** Every flag ships on, so the default path is the one
+  Step 7 shipped, and a test says so by name. The 140 Step 7 integration tests still pass
+  unmodified apart from one assertion that gained a field.
+
+  **External sign-in.** `IExternalIdentityProvider`, with a generic OIDC adapter that serves Google
+  and is registered for Facebook too. Server-side authorization code with PKCE: the client secret
+  never reaches the browser, the endpoints come from the authority's discovery document rather than
+  from anything a caller supplied, and the `state` and code verifier travel in an AES-GCM encrypted
+  cookie rather than a table — so there is no row to clean up and no retention job to add. The
+  identity is read from the `id_token` rather than a second call to userinfo: it is signed, it
+  already carries `sub`, `email` and `email_verified`, and it costs no round trip.
+
+  **Linking is narrow, because the obvious implementation is the vulnerability.** A known
+  `(provider, subject)` signs that user in whatever their email says today; a **verified** provider
+  email may join an existing account; an unverified one may not, and a new account is created
+  instead — or refused with a conflict when the address is already taken. A mobile number is never
+  a linking key. A staff or vendor account matched by email is refused outright rather than linked,
+  which is what keeps ADR-014 decision 3 from being bypassed by a Google account bearing the right
+  address.
+
+  **The first outbound HTTP this product makes**, and it arrives with the controls
+  `07-security-compliance.md` §3 asks for rather than after them: a named client with a ten-second
+  timeout, a cached discovery document, and a `DelegatingHandler` that refuses any host outside a
+  compiled-in allow-list. Nothing in the URL is caller-supplied; the allow-list is there so a
+  future mistake fails at the socket instead of at the provider.
+
+  **Feature flags across a module boundary.** The flags live in `platform.feature_flags`, which the
+  Identity module may not write to. `IFeatureFlagSource` lets any module declare its flags and the
+  Platform seeder collects every registered source — so the admin UI lists every switch that
+  exists, rather than only the ones somebody has already touched. `RequireFeature("...")` gates an
+  endpoint the way `RequirePermission` gates one, recording the flag as metadata alongside the
+  filter so the set stays enumerable.
+
+  **Temporary passwords**, and what narrows them. `users.must_change_password`, a
+  `password-change-required` challenge reusing the mechanism the second factor already had, and one
+  `POST /auth/password/change` serving both the forced route and a voluntary change. Issuing one
+  ends every session the account has, the password still has to meet the full policy — "temporary"
+  is not a reason to accept `Password123` — and the entry is audited as the administrator's act
+  rather than the system's.
+
+  **Endpoints added**
+
+  | Method | Route | Notes |
+  |---|---|---|
+  | `GET` | `/store/auth/external/providers` | Only providers that are switched on *and* configured |
+  | `GET` | `/store/auth/external/{provider}/start` | 302 to the provider, state cookie set |
+  | `GET` | `/store/auth/external/{provider}/callback` | 302 back to an allow-listed return URL, refresh cookie set |
+  | `GET`, `DELETE` | `/store/me/external-logins[/{id}]` | Unlink refused when it is the last credential |
+  | `POST` | `/{store,admin}/auth/password/change` | Not flag-gated: it is the way out of a temporary password |
+  | `PUT` | `/admin/users/{id}/password` | `identity.user.manage`, audited, ends every session |
+
+  **Deviations from the specification, and why**
+
+  1. **The state is a cookie, not a table.** `03-database-design.md` gains `external_logins` and
+     nothing else. A row for each started sign-in would need an index and a retention job for the
+     ones nobody finishes; an encrypted cookie expires by itself. `SameSite=Lax` is load-bearing —
+     `Strict` would drop it on the provider's redirect back and every sign-in would fail silently.
+
+  2. **A provider that is enabled but unconfigured is treated as absent**, not as an error. It is
+     the ordinary state of a fresh deployment, and a button that fails when somebody presses it is
+     worse than no button.
+
+  3. **`AdminUserResponse` gained two fields rather than a new response shape.** `MustChangePassword`
+     and `PasswordSetupPending` answer "can this account sign in yet", which an administrator
+     creating a user with email off needs to know. Adding fields keeps every existing client working;
+     a wrapper type would not have.
+
+  4. **The unverified-email collision is a `409`, not a silent second account.** Refusing tells the
+     person something they can act on — sign in with the password you already have — where creating
+     a second account under a different provider identity would leave two accounts and one confused
+     customer.
+
+  #### What is still owed
+
+  `LoggingOtpDispatcher` is unchanged and still writes codes to the log. With the flags off it is
+  unreachable, which is what makes a deployment safe today; Step 8 removes the need for it. The
+  `08-integrations.md` §7 row for the identity provider is `⛔ BLOCKED` until the client owns a
+  Google OAuth client and has published the privacy policy its consent screen links to.
 
 ---
 
@@ -1863,6 +1945,19 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 7 | **`FeatureRollout.Segments` is still unusable**, though Step 6 expected this step to supply the value. `ICallerContext.Segment` reads a `segment` claim, but nothing assigns a cohort to a user. | ⏳ The plumbing is in place and the claim is read; what is missing is a definition of what a cohort *is*, which belongs to whichever step first needs one. Percentage and allow-list rollout both work today |
 | 2026-09-05 | Step 7 | **`platform.idempotency_keys` is still not created.** Unchanged from Steps 4 and 6. | ⏳ Created by the step that enforces the `Idempotency-Key` contract — **Step 13/14** at the latest |
 
+| 2026-09-05 | Step 7A | **The identity-provider row in `08-integrations.md` §7 is incomplete.** Google sign-in is built and tested, but this deployment owns no OAuth client and has published no privacy policy for the consent screen to link to. | ⛔ **Open — needs the User.** Under §7's own rule this is a `BLOCKED` condition, not a reason to stub. The code is finished and proven against a fake provider and against Google's real discovery document; what is missing is an account |
+| 2026-09-05 | Step 7A | **The privacy policy and the processor register do not yet mention Google.** DPDP §5.6 requires a processor register, and a consent screen requires a published policy. | ⛔ **Needs the client.** A launch-checklist item at **Step 33**, and a prerequisite for the row above rather than a follow-up to it |
+| 2026-09-05 | Step 7A | **Facebook cannot create an account with no email address.** `ck_users_has_identifier` requires a mobile number or an email, and a Facebook account may carry neither. | ⏳ Costs nothing while Facebook is disabled. The handler returns `IDENTITY_EXTERNAL_NO_EMAIL` naming exactly this, so whoever enables Facebook meets it immediately rather than debugging a constraint violation |
+| 2026-09-05 | Step 7A | **The `id_token` signature is not re-validated.** The token arrives over TLS from the provider's own token endpoint in a direct server-to-server call, which OIDC §3.1.3.7 permits. | ℹ️ Correct as built, and recorded because it looks like an omission. It would stop being correct if the identity were ever accepted from the browser instead — which is exactly the flow ADR-014 decision 2 rejected |
+| 2026-09-05 | Step 7A | **A customer whose provider email is unverified gets a second account**, or a conflict when the address is taken. | ℹ️ Deliberate (`07-security-compliance.md` §1). Linking on an unverified address is the standard account-takeover vector. It is a support cost, and the conflict message tells the person what to do instead |
+| 2026-09-05 | Step 7A | **An administrator briefly knows a credential that would sign in as another person.** | ℹ️ ADR-014 decision 5, taken knowingly by the User with the trade-off stated. Narrowed by the forced change, the session revocation and the audit entry; closed when email delivery returns and the reset link makes the endpoint unnecessary |
+| 2026-09-05 | Step 7A | **Google is an availability dependency.** A customer who registered that way cannot sign in while Google is unreachable; the endpoint answers `503`. | ℹ️ Email and password remain available to them, and `identity.external-login` can be turned off. Recorded because it is a new class of outage this system did not previously have |
+| 2026-09-05 | Step 7A | **`FeatureGate` evaluates a flag on every gated request.** The evaluation is served from the Platform module's in-process cache, so it is not a query per request — but it is a cache lookup on the hot path of the auth endpoints. | ℹ️ Measured in nothing today. Folded into the existing Redis/`HybridCache` item if the settings cache ever moves |
+| 2026-09-05 | Step 7A | **No provider-initiated logout, and no token revocation at the provider.** Signing out here ends our session and leaves the Google session alone. | ℹ️ Correct for a storefront — signing out of a shop should not sign somebody out of Gmail. Recorded so it is not mistaken for an omission |
+| 2026-09-05 | Step 7A | **`external_logins` rows are never pruned**, including for accounts that are soft-deleted. | ⏳ Joins the refresh-token and OTP retention item at **Step 31**. A DPDP erasure will need to anonymise them too, which belongs to the same work |
+| 2026-09-05 | Step 7A | **The Angular storefront does not exist yet**, so the redirect flow has been proved with `curl` and an integration test rather than a browser. The `SameSite=Lax` cookie behaviour in particular is asserted by its attributes, not by a real navigation. | ⏳ **Step 23** builds the storefront shell and is the first chance to drive this from a browser. Worth an explicit check there rather than assuming |
+| 2026-09-05 | Step 7A | `AdminUserResponse` gained `mustChangePassword` and `passwordSetupPending`. Additive, so no client breaks, but the generated Angular client will regenerate at **Step 22**. | ℹ️ Recorded so the diff is expected rather than investigated |
+
 ---
 
 ## 5. Change Log
@@ -1882,6 +1977,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 7 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `src/backend/Directory.Build.props`, `infra/compose/docker-compose.dev.yml`, `infra/docker/*.Dockerfile`, `tools/ef.ps1`, `tools/ef.sh` | Step 7 closed as DONE. The Identity module built: authentication for all three actor classes, mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope enforced in the data layer, customer profiles and Indian addresses. Sign-in, the bootstrap administrator and the Step 8 OTP-delivery gap documented in the README and `dev-setup.md`; `AUTH_*` added to the environment and wired through compose; eight new troubleshooting rows. **Eight deviations and nineteen Parking Lot items recorded**, and two carried-forward Step 6 items closed or advanced. Two packages added (`Microsoft.AspNetCore.Authentication.JwtBearer`, `Konscious.Security.Cryptography.Argon2`); `Directory.Build.props` silences CA1861 in test projects. One Step 6 endpoint changed: `GET /store/states` now returns each state's id, which an address needs. No change to docs `01`-`10` | — |
 
 | 2026-09-05 | 7A | **`07-security-compliance.md` §1 and §3, `04-api-specification.md` §3.1, `03-database-design.md` §4.2, `08-integrations.md` §3.5 and §7**, `docs/adr/ADR-014` (new), `IMPLEMENTATION_PLAN.md` | **Second specification change since Step 0.** The client has no budget for an SMS gateway or a transactional email provider, so two of the three Step 7 credentials cannot reach a real person in production, and `LoggingOtpDispatcher` is not shippable. External identity providers (Google now, Facebook designed for) added for **customers only**; the paid-provider features moved behind four runtime feature flags rather than being removed; administrator-issued temporary passwords added as the recovery route while email is off. Four decisions taken by the User, recorded in ADR-014, including the knowingly weaker temporary-password control. Step 7A inserted so steps 8-33 keep their numbers | **User** (chose all four options; ADR-014 accepted) |
+| 2026-09-05 | 7A | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `infra/compose/docker-compose.dev.yml` | Step 7A closed as DONE. External identity providers built behind `IExternalIdentityProvider` (Google wired, Facebook configured and disabled); the first outbound HTTP client, with the timeout and host allow-list `07` §3 requires; `IFeatureFlagSource` so a module can declare a flag without writing to the Platform schema, and `RequireFeature` to gate an endpoint on one; temporary passwords with a `password-change-required` challenge. Sign-in, the degraded mode and the recovery route documented in the README and `dev-setup.md`; `AUTH_GOOGLE_*` and `AUTH_EXTERNAL_*` added and wired through compose; six new troubleshooting rows. **Four deviations and twelve Parking Lot items recorded**, two of them `BLOCKED` on the client owning a Google OAuth client and publishing a privacy policy. Docs `01`-`10` were amended by the preceding entry, not by this one | — |
 ---
 
 ## 6. Explicitly Deferred to Phase 2

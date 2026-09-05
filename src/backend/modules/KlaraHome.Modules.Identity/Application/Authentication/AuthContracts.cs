@@ -67,7 +67,8 @@ internal sealed record SignInResponse(
 /// <summary>A sign-in that stopped at the second factor.</summary>
 /// <param name="Type">
 /// <c>two-factor</c> when a code is expected, <c>two-factor-enrolment</c> when the account holds a
-/// role that requires one and has not enrolled yet.
+/// role that requires one and has not enrolled yet, <c>password-change-required</c> when the
+/// current password was issued by an administrator and has to be replaced.
 /// </param>
 /// <param name="ChallengeToken">The short-lived token that carries the pending sign-in.</param>
 internal sealed record TwoFactorChallengeResponse(string Type, string ChallengeToken)
@@ -77,6 +78,12 @@ internal sealed record TwoFactorChallengeResponse(string Type, string ChallengeT
 
     /// <summary>A second factor is mandatory for this account and has not been enrolled.</summary>
     public const string EnrolmentRequired = "two-factor-enrolment";
+
+    /// <summary>
+    /// The password was issued by somebody else and must be replaced before a session exists
+    /// (ADR-014 decision 5).
+    /// </summary>
+    public const string PasswordChangeRequired = "password-change-required";
 }
 
 /// <summary>

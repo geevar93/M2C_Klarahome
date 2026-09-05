@@ -331,3 +331,37 @@ internal sealed class AddressConfiguration : IEntityTypeConfiguration<Address>
         builder.Ignore(address => address.DomainEvents);
     }
 }
+
+/// <summary>Maps <see cref="ExternalLogin"/> to <c>identity.external_logins</c>.</summary>
+internal sealed class ExternalLoginConfiguration : IEntityTypeConfiguration<ExternalLogin>
+{
+    public void Configure(EntityTypeBuilder<ExternalLogin> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("external_logins", table => table.HasCheckConstraint(
+            "ck_external_logins_provider",
+            "provider IN ('Google', 'Facebook')"));
+
+        builder.HasKey(link => link.Id);
+        builder.Property(link => link.Id).ValueGeneratedNever();
+
+        builder.Property(link => link.Provider).HasConversion<string>().HasMaxLength(32);
+
+        // Google's `sub` is 21 digits today and the specification does not bound it; 255 is the
+        // conventional ceiling and is far beyond anything either provider issues.
+        builder.Property(link => link.Subject).HasMaxLength(255);
+        builder.Property(link => link.Email).HasMaxLength(320);
+        builder.Property(link => link.DisplayName).HasMaxLength(200);
+
+        // The lookup every external sign-in makes, and the uniqueness that stops one provider
+        // identity from being attached to two accounts.
+        builder
+            .HasIndex(link => new { link.TenantId, link.Provider, link.Subject })
+            .IsUnique();
+
+        builder.HasIndex(link => link.UserId);
+
+        builder.Ignore(link => link.DomainEvents);
+    }
+}

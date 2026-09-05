@@ -126,8 +126,19 @@ public sealed class PlatformSeedingTests(KlaraHomeSchemaFixture fixture)
             .Select(flag => flag.Key)
             .ToListAsync(TestContext.Current.CancellationToken);
 
+        // Every module's flags, not only this one's: the table lives in the platform schema, and
+        // the seeder collects every registered IFeatureFlagSource so a module can declare a switch
+        // without writing to a schema it does not own.
+        var declared = scope.ServiceProvider
+            .GetServices<IFeatureFlagSource>()
+            .SelectMany(source => source.Flags)
+            .Select(flag => flag.Key)
+            .ToList();
+
+        Assert.Contains(PlatformFeatures.All.Select(flag => flag.Key), key => declared.Contains(key));
+
         Assert.Equal(
-            PlatformFeatures.All.Select(flag => flag.Key).Order(StringComparer.Ordinal),
+            declared.Order(StringComparer.Ordinal),
             keys.Order(StringComparer.Ordinal));
     }
 

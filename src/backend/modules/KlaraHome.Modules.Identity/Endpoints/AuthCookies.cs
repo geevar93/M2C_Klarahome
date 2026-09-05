@@ -98,7 +98,12 @@ internal static class AuthCookies
             context.Connection.RemoteIpAddress?.ToString());
     }
 
-    private static void Write(HttpContext context, string refreshToken, TokenOptions tokens)
+    /// <summary>Writes the refresh cookie. Used by the external callback, which returns a redirect
+    /// rather than a body and so cannot go through <see cref="ToSignIn"/>.</summary>
+    /// <param name="context">The request.</param>
+    /// <param name="refreshToken">The opaque refresh secret.</param>
+    /// <param name="tokens">Cookie name, lifetime and the Secure flag.</param>
+    public static void Write(HttpContext context, string refreshToken, TokenOptions tokens)
         => context.Response.Cookies.Append(tokens.RefreshCookieName, refreshToken, new CookieOptions
         {
             HttpOnly = true,

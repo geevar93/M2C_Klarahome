@@ -57,6 +57,9 @@ internal sealed class IdentityDbContext(
     /// <summary>Saved delivery and billing addresses.</summary>
     public DbSet<Address> Addresses => Set<Address>();
 
+    /// <summary>Identities at external providers, linked to accounts here.</summary>
+    public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
+
     /// <inheritdoc />
     protected override void ConfigureModule(ModelBuilder modelBuilder)
     {
@@ -72,5 +75,6 @@ internal sealed class IdentityDbContext(
         modelBuilder.ApplyConfiguration(new OtpChallengeConfiguration());
         modelBuilder.ApplyConfiguration(new CustomerProfileConfiguration());
         modelBuilder.ApplyConfiguration(new AddressConfiguration());
+        modelBuilder.ApplyConfiguration(new ExternalLoginConfiguration());
     }
 }

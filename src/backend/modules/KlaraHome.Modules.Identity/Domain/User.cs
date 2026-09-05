@@ -78,6 +78,17 @@ internal sealed class User : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISo
     /// <summary>When this user last signed in successfully.</summary>
     public DateTimeOffset? LastLoginAt { get; private set; }
 
+    /// <summary>
+    /// Whether the current password was issued by somebody else and must be replaced before a
+    /// session is granted (ADR-014 decision 5).
+    /// </summary>
+    /// <remarks>
+    /// It exists because, while email delivery is off, an administrator has to be able to hand a
+    /// locked-out colleague a way back in. The forced change is what stops that from leaving a
+    /// credential two people know indefinitely.
+    /// </remarks>
+    public bool MustChangePassword { get; private set; }
+
     /// <summary>The roles this user holds, each optionally scoped to one vendor.</summary>
     public IReadOnlyList<UserRole> Roles => _roles;
 
@@ -138,8 +149,17 @@ internal sealed class User : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISo
 
     /// <summary>Sets or replaces the password hash. The hashing itself is an infrastructure concern.</summary>
     /// <param name="passwordHash">An Argon2id PHC string.</param>
-    public void SetPasswordHash(string passwordHash)
-        => PasswordHash = Guard.NotNullOrWhiteSpace(passwordHash);
+    /// <param name="mustChange">
+    /// Whether the owner has to replace it before they get a session. True only when somebody else
+    /// chose it — an administrator issuing a temporary password. Any password the owner chose
+    /// themselves clears the obligation, which is why this defaults to false rather than being
+    /// left alone.
+    /// </param>
+    public void SetPasswordHash(string passwordHash, bool mustChange = false)
+    {
+        PasswordHash = Guard.NotNullOrWhiteSpace(passwordHash);
+        MustChangePassword = mustChange;
+    }
 
     /// <summary>Attaches or replaces the email address. Verification starts again from zero.</summary>
     /// <param name="email">The new address, lowercased.</param>
@@ -205,6 +225,14 @@ internal sealed class User : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISo
         TotpEnabled = false;
         TotpSecretEncrypted = null;
     }
+
+    /// <summary>Whether this account can be signed in to without an external provider.</summary>
+    /// <remarks>
+    /// Read before unlinking a provider: an account whose only credential is the identity being
+    /// removed would become unreachable, and the unlink is refused
+    /// (docs/07-security-compliance.md §1).
+    /// </remarks>
+    public bool HasLocalCredential => PasswordHash is not null || MobileVerifiedAt is not null;
 
     /// <summary>Records a successful sign-in, clearing the failure counter and any lockout.</summary>
     /// <param name="at">When the sign-in happened.</param>

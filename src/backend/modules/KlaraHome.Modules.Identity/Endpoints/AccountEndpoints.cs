@@ -1,8 +1,10 @@
+using KlaraHome.Infrastructure.Features;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.Modules.Identity.Application.Account;
 using KlaraHome.Modules.Identity.Application.Authentication;
+using KlaraHome.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -58,9 +60,12 @@ internal static class AccountEndpoints
         MapSessions(group, namePrefix);
         MapTwoFactor(group, namePrefix);
 
+        // Linked providers are a customer's concern: staff and vendor users cannot sign in with one
+        // (ADR-014 decision 3), so the admin surface has nothing to list.
         if (includeAddresses)
         {
             MapAddresses(group, namePrefix);
+            group.MapExternalLoginManagement(namePrefix);
         }
 
         return surface;

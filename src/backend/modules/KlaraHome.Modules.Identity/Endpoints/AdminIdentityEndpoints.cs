@@ -3,6 +3,7 @@ using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.Modules.Identity.Application.Administration;
+using KlaraHome.Modules.Identity.Application.Authentication;
 using KlaraHome.Modules.Identity.Domain;
 using KlaraHome.Modules.Identity.Infrastructure.Seeding;
 using Microsoft.AspNetCore.Builder;
@@ -147,6 +148,26 @@ internal static class AdminIdentityEndpoints
             .WithName("adminUserRolesPut")
             .WithSummary("Replaces an account's roles and signs it out, so the change takes effect at once.")
             .RequirePermission(PermissionCatalog.IdentityRoleAssign)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<AdminUserResponse>();
+
+        users.MapPut("/{id:guid}/password", async (
+                Guid id,
+                SetTemporaryPasswordBody body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var command = new SetTemporaryPasswordCommand(id, body.TemporaryPassword);
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminUserPasswordPut")
+            .WithSummary("Issues a temporary password for another account, to be conveyed out of band. "
+                         + "The account cannot be used until it is replaced, and every session is ended. "
+                         + "This exists because email delivery is off (ADR-014); it is a weaker control "
+                         + "than a reset link and is withdrawn when email returns.")
+            .RequirePermission(PermissionCatalog.IdentityUserManage)
             .RequireRateLimiting(RateLimitPolicies.AdminWrite)
             .Produces<AdminUserResponse>();
 

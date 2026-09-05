@@ -205,10 +205,12 @@ internal sealed class UpdateMeCommandHandler(
 /// <param name="context">The Identity data context.</param>
 /// <param name="caller">The signed-in caller.</param>
 /// <param name="otp">Issues and delivers the code.</param>
+/// <param name="flags">Decides whether the channel this asks for can deliver anything.</param>
 internal sealed class RequestVerificationCommandHandler(
     IdentityDbContext context,
     ICallerContext caller,
-    OtpService otp) : ICommandHandler<RequestVerificationCommand>
+    OtpService otp,
+    IFeatureFlags flags) : ICommandHandler<RequestVerificationCommand>
 {
     public async Task<Result> HandleAsync(
         RequestVerificationCommand command,
@@ -228,6 +230,21 @@ internal sealed class RequestVerificationCommandHandler(
         var (destination, purpose) = command.Channel == OtpChannel.Email
             ? (user.Email, OtpPurpose.VerifyEmail)
             : (user.Mobile, OtpPurpose.VerifyMobile);
+
+        // Gated here rather than on the endpoint, because one route serves two channels and each
+        // needs a different paid provider — the email half and the SMS half go dark separately.
+        // Checked before the destination, because "we cannot send anything on this channel" is
+        // true whether or not the caller has an address to send to.
+        var channelFlag = command.Channel == OtpChannel.Email
+            ? Infrastructure.IdentityFeatures.EmailVerification
+            : Infrastructure.IdentityFeatures.MobileOtpLogin;
+
+        if (!await flags.IsEnabledAsync(channelFlag, cancellationToken: cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.NotFound(
+                "FEATURE_DISABLED",
+                $"The feature '{channelFlag}' is not enabled on this store."));
+        }
 
         if (string.IsNullOrWhiteSpace(destination))
         {

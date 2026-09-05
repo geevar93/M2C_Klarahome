@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Features;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
@@ -121,6 +122,7 @@ internal static class AuthEndpoints
                 return result.ToOk(context);
             })
             .WithName(namePrefix + "AuthOtpRequest")
+            .RequireFeature(IdentityFeatures.MobileOtpLogin)
             .WithSummary("Sends a one-time code to a mobile number. The response is the same whether or "
                          + "not the number is registered.")
             .RequireRateLimiting(RateLimitPolicies.Otp)
@@ -138,6 +140,7 @@ internal static class AuthEndpoints
                 return AuthCookies.ToSignIn(result, context, options);
             })
             .WithName(namePrefix + "AuthOtpVerify")
+            .RequireFeature(IdentityFeatures.MobileOtpLogin)
             .WithSummary("Signs in with a one-time code, registering the customer if the number is new.")
             .RequireRateLimiting(RateLimitPolicies.Auth)
             .Produces<SignInResponse>();
@@ -183,6 +186,28 @@ internal static class AuthEndpoints
             .RequireRateLimiting(RateLimitPolicies.Auth)
             .Produces<SignInResponse>();
 
+        group.MapPost("/password/change", async (
+                ChangePasswordBody body,
+                IDispatcher dispatcher,
+                IOptions<AuthOptions> options,
+                HttpContext context) =>
+            {
+                var command = new ChangePasswordCommand(
+                    body.ChallengeToken,
+                    body.CurrentPassword,
+                    body.NewPassword,
+                    AuthCookies.DeviceOf(context));
+
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+                return AuthCookies.ToSignIn(result, context, options);
+            })
+            .WithName(namePrefix + "AuthPasswordChange")
+            .WithSummary("Replaces a password and issues the session. Not gated by a flag: it is the route "
+                         + "out of an administrator-issued temporary password, which exists precisely because "
+                         + "email delivery is off.")
+            .RequireRateLimiting(RateLimitPolicies.Auth)
+            .Produces<SignInResponse>();
+
         group.MapPost("/password/forgot", async (
                 ForgotPasswordBody body,
                 IDispatcher dispatcher,
@@ -195,6 +220,7 @@ internal static class AuthEndpoints
                 return result.ToNoContent(context);
             })
             .WithName(namePrefix + "AuthPasswordForgot")
+            .RequireFeature(IdentityFeatures.PasswordResetEmail)
             .WithSummary("Sends a password-reset link. Always answers 204, whether or not the address is known.")
             .RequireRateLimiting(RateLimitPolicies.Otp)
             .Produces(StatusCodes.Status204NoContent);
@@ -210,6 +236,7 @@ internal static class AuthEndpoints
                 return result.ToNoContent(context);
             })
             .WithName(namePrefix + "AuthPasswordReset")
+            .RequireFeature(IdentityFeatures.PasswordResetEmail)
             .WithSummary("Sets a new password from a reset link, and signs every device out.")
             .RequireRateLimiting(RateLimitPolicies.Auth)
             .Produces(StatusCodes.Status204NoContent);

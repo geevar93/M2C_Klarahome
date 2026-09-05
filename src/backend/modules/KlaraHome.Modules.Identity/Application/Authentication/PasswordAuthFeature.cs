@@ -225,6 +225,7 @@ internal sealed class PasswordLoginCommandHandler(
 /// <param name="signIn">Signs the new customer in.</param>
 /// <param name="access">Finds the customer role.</param>
 /// <param name="otp">Sends the email verification link.</param>
+/// <param name="flags">Decides whether there is anywhere to send it.</param>
 /// <param name="clock">The clock.</param>
 internal sealed class RegisterCustomerCommandHandler(
     IdentityDbContext context,
@@ -232,6 +233,7 @@ internal sealed class RegisterCustomerCommandHandler(
     SignInCoordinator signIn,
     AccessResolver access,
     OtpService otp,
+    Contracts.Platform.IFeatureFlags flags,
     IClock clock) : ICommandHandler<RegisterCustomerCommand, SignInResult>
 {
     public async Task<Result<SignInResult>> HandleAsync(
@@ -281,9 +283,19 @@ internal sealed class RegisterCustomerCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await otp
-            .IssueAsync(email, OtpChannel.Email, OtpPurpose.VerifyEmail, user.Id, cancellationToken)
+        // Registration succeeds either way. With email delivery off the address simply stays
+        // unverified, which is a state the account model already has and the storefront already
+        // shows — not a reason to refuse somebody an account.
+        var canVerify = await flags
+            .IsEnabledAsync(IdentityFeatures.EmailVerification, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+
+        if (canVerify)
+        {
+            await otp
+                .IssueAsync(email, OtpChannel.Email, OtpPurpose.VerifyEmail, user.Id, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return await signIn
             .CompleteAsync(user, command.Device, secondFactorSatisfied: false, cancellationToken)

@@ -170,8 +170,39 @@ curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/enrol   -H 'content-ty
 curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/verify   -H 'content-type: application/json'   -d '{"challengeToken":"<from step 1>","code":"123456"}'
 ```
 
-**One-time codes are written to the API log**, because there is no SMS or email transport until the
-Notifications module at Step 8. `docker logs klarahome-dev-api | grep "DEVELOPMENT ONLY"` shows the
+### Running without an SMS or email provider (Step 7A)
+
+There is no free local path for SMS, and a production email provider costs money. Four flags turn
+the features that need one off at runtime (ADR-014):
+
+```bash
+# As an administrator, with a bearer token:
+PUT /api/v1/admin/feature-flags/identity.mobile-otp-login      { "enabled": false }
+PUT /api/v1/admin/feature-flags/identity.email-verification    { "enabled": false }
+PUT /api/v1/admin/feature-flags/identity.password-reset-email  { "enabled": false }
+```
+
+Those endpoints then answer `404 FEATURE_DISABLED`, and the change is audited. Turning one back on
+brings the feature back on the next request — the code behind it is what shipped at Step 7.
+
+With email off, an account an administrator creates has no password and no link:
+`passwordSetupPending` is true on the response, and the way in is a temporary password.
+
+```bash
+PUT  /api/v1/admin/users/{id}/password        { "temporaryPassword": "..." }
+# The next sign-in returns a password-change-required challenge, not a session:
+POST /api/v1/admin/auth/password/change       { "challengeToken": "...", "currentPassword": "...", "newPassword": "..." }
+```
+
+**Google sign-in** replaces the OTP for customers. Create an OAuth client at
+`console.cloud.google.com` (Web application), add
+`<AUTH_EXTERNAL_CALLBACK_BASE_URL>/api/v1/store/auth/external/google/callback` as an authorised
+redirect URI, then set `AUTH_GOOGLE_ENABLED=true` with the client id and secret. It works against
+real Google from the dev stack — the only outbound host the API is allowed to reach is the provider
+allow-list, so nothing else is reachable even by mistake.
+
+**One-time codes are written to the API log** while the flags are on, because there is no SMS or
+email transport until the Notifications module at Step 8. `docker logs klarahome-dev-api | grep "DEVELOPMENT ONLY"` shows the
 customer OTP or the reset link token. This dispatcher is what
 `docs/07-security-compliance.md` §3 forbids in production, and replacing it is a Step 8 deliverable.
 
@@ -460,6 +491,12 @@ A reset drops the database, so run the migrator again before expecting the API t
 | A `{id}` route answers 404 for a resource you can see in `psql` | Object-level scope. Out-of-scope resources answer 404 rather than 403 so existence is not leaked | Working as intended (`docs/07-security-compliance.md` §2) |
 | `The AuthorizationPolicy named: 'perm:...' was not found` | Something replaced `IAuthorizationPolicyProvider` after `AddKlaraHomeAuthorization`, or registered it with `TryAdd` | The provider manufactures every `perm:` policy. It is registered with `Replace` for exactly this reason |
 | No OTP arrives anywhere | There is no SMS or email transport until Step 8 | Read it from the API log: `docker logs klarahome-dev-api \| grep "DEVELOPMENT ONLY"` |
+| Google sign-in button does not appear | The provider is switched on but has no client id, so it is listed as unusable rather than offered and broken | Set `AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET`. `GET /api/v1/store/auth/external/providers` shows what is actually on offer |
+| `redirect_uri_mismatch` from Google | The URI Google was given does not match one registered on the OAuth client | It is built from `AUTH_EXTERNAL_CALLBACK_BASE_URL`, never from the request Host. Register `<that>/api/v1/store/auth/external/google/callback` exactly |
+| Every external sign-in ends in `IDENTITY_EXTERNAL_CALLBACK_INVALID` | The state cookie is not coming back — most often `AUTH_REFRESH_COOKIE_SECURE=true` over plain http, or a callback origin that differs from the one the sign-in started on | Same fix as the refresh cookie: false for local http. The cookie is `SameSite=Lax` and scoped to `/api/v1/store/auth/external` |
+| `IDENTITY_RETURN_URL_NOT_ALLOWED` on start | `returnUrl` is neither a relative path nor a configured origin | Add the origin to `AUTH_EXTERNAL_ALLOWED_RETURN_URL`. It is an allow-list because an open redirect on the endpoint that has just issued a session is a phishing tool |
+| A Google user ends up with a second account | The provider did not state that it had verified the address, so it was not allowed to link to the existing one | Working as intended (`docs/07-security-compliance.md` §1). Linking on an unverified address is how accounts get stolen |
+| An outbound request fails with "not in the identity-provider allow-list" | Something tried to reach a host outside `ExternalHttp.AllowedHosts` | That is the SSRF control working. Add the host deliberately if a new provider needs it |
 | `dotnet format` reports thousands of `ENDOFLINE` errors, only on Windows | Stale CRLF in the working tree. `.gitattributes` normalises `*.cs` to LF in the repository, so a file written with CRLF and then committed is clean in git but still CRLF on disk | Re-checkout the files: `git ls-files -z '*.cs' \| xargs -0 rm -f && git checkout -- '*.cs'`. Verify with `dotnet format --verify-no-changes` |
 | `dotnet format` fails with `CHARSET` on a file under `Migrations/` | `dotnet ef` writes the migration with a UTF-8 BOM and the Designer/snapshot without one, and neither is configurable | Already handled: `.editorconfig` sets `charset = unset` for `**/Migrations/*.cs`. If it reappears, that section was lost |
 | Coverage numbers look wrong, and the log says `Coverage settings file is not a valid file` | `src/backend/coverage.settings.xml` is invalid XML, most often a `--` inside a comment, which XML forbids. The tool warns once and then measures with default filters | Fix the XML. Re-run with `--log-level Verbose --log-file <path>` and check that warning is gone |

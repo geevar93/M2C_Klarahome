@@ -320,6 +320,17 @@ services:
       Auth__Tokens__RefreshCookieSecure: ${AUTH_REFRESH_COOKIE_SECURE:-false}
       Auth__Bootstrap__Email: ${AUTH_BOOTSTRAP_EMAIL:-}
       Auth__Bootstrap__Password: ${AUTH_BOOTSTRAP_PASSWORD:-}
+      # Identity providers (Step 7A). Unconfigured by default: a provider with no client id is
+      # left off the sign-in page rather than offered and broken.
+      Auth__External__Google__Enabled: ${AUTH_GOOGLE_ENABLED:-false}
+      Auth__External__Google__ClientId: ${AUTH_GOOGLE_CLIENT_ID:-}
+      Auth__External__Google__ClientSecret: ${AUTH_GOOGLE_CLIENT_SECRET:-}
+      Auth__External__Facebook__Enabled: ${AUTH_FACEBOOK_ENABLED:-false}
+      Auth__External__Facebook__ClientId: ${AUTH_FACEBOOK_CLIENT_ID:-}
+      Auth__External__Facebook__ClientSecret: ${AUTH_FACEBOOK_CLIENT_SECRET:-}
+      Auth__External__CallbackBaseUrl: ${AUTH_EXTERNAL_CALLBACK_BASE_URL:-https://api.${DEV_DOMAIN:-klarahome.localhost}}
+      Auth__External__AllowedReturnUrls__0: ${AUTH_EXTERNAL_ALLOWED_RETURN_URL:-https://${DEV_DOMAIN:-klarahome.localhost}}
+      Auth__External__DefaultReturnUrl: ${AUTH_EXTERNAL_DEFAULT_RETURN_URL:-https://${DEV_DOMAIN:-klarahome.localhost}/}
       Database__MigrateOnStartup: ${DATABASE_MIGRATE_ON_STARTUP:-false}
       Database__EnableSensitiveDataLogging: ${DATABASE_SENSITIVE_LOGGING:-false}
       Observability__ServiceName: klarahome-api

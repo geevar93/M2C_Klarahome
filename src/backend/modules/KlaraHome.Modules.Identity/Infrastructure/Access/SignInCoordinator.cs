@@ -75,6 +75,16 @@ internal sealed class SignInCoordinator(
             }
         }
 
+        // Checked after the second factor, not before it: a temporary password is a first factor,
+        // and letting somebody replace a password before proving who they are would hand the
+        // account to whoever the temporary one leaked to.
+        if (user.MustChangePassword)
+        {
+            return SignInResult.Challenged(
+                TwoFactorChallengeResponse.PasswordChangeRequired,
+                tokens.IssueTwoFactorChallenge(user.Id));
+        }
+
         var issued = await sessions.StartAsync(user, device, cancellationToken).ConfigureAwait(false);
 
         await audit.RecordAsync(
@@ -151,7 +161,13 @@ internal sealed class SignInCoordinator(
             : $"***{identifier[^4..]}";
     }
 
-    private static AuditActorType ActorTypeOf(UserType userType) => userType switch
+    /// <summary>
+    /// The audit actor class for a user type. Shared, because an entry recorded as
+    /// <see cref="AuditActorType.System"/> when a person did it is an audit trail that answers the
+    /// wrong question.
+    /// </summary>
+    /// <param name="userType">The acting user's type.</param>
+    public static AuditActorType ActorTypeOf(UserType userType) => userType switch
     {
         UserType.Customer => AuditActorType.Customer,
         UserType.Vendor => AuditActorType.VendorUser,
