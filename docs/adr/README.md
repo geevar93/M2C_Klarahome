@@ -13,6 +13,7 @@ onward are written here as full files, at the step that raises them.
 | 001–010 | See `01-architecture.md` §9 | Accepted | Step 0 |
 | [011](ADR-011-fluentassertions-7-pin.md) | Pin FluentAssertions to the 7.x line | ❌ Rejected — superseded by 012 | Step 3 |
 | [012](ADR-012-no-assertion-library.md) | No third-party assertion library; use xUnit's built-in `Assert` | ✅ Accepted | Step 3 |
+| [013](ADR-013-one-outbox-in-the-platform-schema.md) | One outbox table in the `platform` schema, written by every module in its own transaction | ✅ Accepted | Step 4 |
 
 > **Backlog:** ADR-001 – ADR-010 exist only as table rows. Expanding them into individual files
 > is in the Parking Lot of `../IMPLEMENTATION_PLAN.md`; it is documentation debt, not a decision

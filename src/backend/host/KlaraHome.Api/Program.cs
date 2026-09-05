@@ -2,10 +2,12 @@ using System.Reflection;
 using KlaraHome.Api;
 using KlaraHome.Api.Diagnostics;
 using KlaraHome.Api.Endpoints;
+using KlaraHome.Hosting;
 using KlaraHome.Infrastructure;
 using KlaraHome.Infrastructure.Configuration;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.OpenApi;
+using KlaraHome.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 using Serilog;
@@ -35,6 +37,11 @@ try
     ];
 
     builder.AddKlaraHomeInfrastructure(applicationAssemblies);
+
+    // Registered before the modules, because each module's AddServices registers its DbContext on
+    // top of these. The API attributes writes to the request principal; it does not dispatch the
+    // outbox — that is the worker's job.
+    builder.Services.AddKlaraHomePersistence(builder.Configuration, httpContextAvailable: true);
     builder.Services.AddModules(builder.Configuration, ModuleAssemblies.All);
 
     var app = builder.Build();

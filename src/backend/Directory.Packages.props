@@ -28,6 +28,26 @@
     <PackageVersion Include="Scalar.AspNetCore" Version="2.17.2" />
   </ItemGroup>
 
+  <ItemGroup Label="Persistence">
+    <!--
+      EF Core 10.0.11 tracks the ASP.NET Core 10.0.11 already pinned above; the Npgsql provider
+      versions independently (10.0.3) and is PostgreSQL-licensed, so it carries no redistribution
+      liability. Previews are excluded by global.json (allowPrerelease: false) — EF Core 11 is
+      preview-only at the time of writing and is deliberately not used.
+    -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!--
+      snake_case identifiers (docs/03-database-design.md 1). Apache-2.0, by the Npgsql provider's
+      own maintainer, and it rewrites every identifier kind - tables, columns, keys, indexes,
+      constraints, sequences - which a hand-rolled convention reliably gets wrong for the ones
+      nobody remembers to test.
+    -->
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Validation">
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
@@ -59,6 +79,8 @@
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <!-- MIT. Spins a throwaway Postgres 18 container so the DB tests run the real provider. -->
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
   </ItemGroup>
 
 </Project>

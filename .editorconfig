@@ -96,3 +96,18 @@ end_of_line = crlf
 # CA1716: `Error`, `Result` and friends collide with VB/F# keywords. They are the domain
 # vocabulary of the SharedKernel and this codebase is C#-only, so the rule buys nothing.
 dotnet_diagnostic.CA1716.severity = none
+
+# -----------------------------------------------------------------------------
+# Generated code (Step 4)
+# -----------------------------------------------------------------------------
+# EF Core migrations are written by `dotnet ef`, not by hand. Holding generated files to the
+# hand-written style rules means either editing every migration after generating it, or watching
+# CI fail on code nobody typed. The correctness analyzers still apply; only style does not.
+[**/Migrations/*.cs]
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE0055.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.IDE0301.severity = none
+dotnet_diagnostic.SA1601.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1062.severity = none

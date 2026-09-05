@@ -95,6 +95,7 @@ public sealed class ModuleBoundaryTests
         {
             var leaked = assembly.GetExportedTypes()
                 .Where(type => !SolutionAssemblies.IsModuleType(type))
+                .Where(type => !SolutionAssemblies.IsGeneratedMigration(type))
                 .Select(type => type.FullName)
                 .ToList();
 
@@ -102,6 +103,50 @@ public sealed class ModuleBoundaryTests
                 leaked.Count == 0,
                 "A module's entities, handlers and DTOs stay internal; only KlaraHome.Contracts crosses the "
                 + $"boundary. {assembly.GetName().Name} exposes: {string.Join(", ", leaked)}");
+        }
+    }
+
+    [Fact]
+    public void A_module_DbContext_is_internal()
+    {
+        // The exemption above lets EF's generated migration classes be public, because the
+        // scaffolder emits them that way and nothing can consume them meaningfully. The type that
+        // exemption must never be allowed to cover is the context itself: a public DbContext is a
+        // module's entire table set handed to whoever references the assembly.
+        foreach (var assembly in SolutionAssemblies.Modules)
+        {
+            var exposed = assembly.GetExportedTypes()
+                .Where(type => typeof(Microsoft.EntityFrameworkCore.DbContext).IsAssignableFrom(type))
+                .Select(type => type.FullName)
+                .ToList();
+
+            Assert.True(
+                exposed.Count == 0,
+                $"{assembly.GetName().Name} exposes a DbContext publicly: {string.Join(", ", exposed)}. "
+                + "A module's context is registered by the host and resolved by descriptor; no other "
+                + "assembly may name it.");
+        }
+    }
+
+    [Fact]
+    public void A_module_owns_the_schema_its_context_writes_to()
+    {
+        // The module declares a schema and the context writes to one. If they disagree, a module's
+        // tables land inside another module's boundary — and the two declarations live far enough
+        // apart that nothing else would notice.
+        foreach (var assembly in SolutionAssemblies.Modules)
+        {
+            var module = SolutionAssemblies.Instantiate(SolutionAssemblies.ModuleTypesIn(assembly).Single());
+
+            foreach (var contextType in SolutionAssemblies.DbContextTypesIn(assembly))
+            {
+                var schema = SolutionAssemblies.DeclaredSchemaOf(contextType);
+
+                Assert.True(
+                    string.Equals(schema, module.Schema, StringComparison.Ordinal),
+                    $"{contextType.Name} owns schema '{schema}' but module '{module.Name}' declares "
+                    + $"'{module.Schema}'.");
+            }
         }
     }
 

@@ -240,11 +240,74 @@ curl -sk -H 'X-Correlation-Id: my-trace-1' https://api.klarahome.localhost/api/v
 docker logs klarahome-dev-api 2>&1 | grep my-trace-1
 ```
 
+**Apply database migrations** — the API never migrates on startup, in any environment. A
+one-shot `migrator` job does it, and it sits in the `migrate` compose profile so a plain `up`
+never races it:
+
+```bash
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env   --profile migrate run --rm migrator
+echo $?     # 0 = applied or already up to date, 1 = failed and nothing was committed
+```
+
+Re-running it is a no-op — that is the contract, and the deploy pipeline depends on it.
+
+You will see one line on every run:
+
+```
+Cannot load library libgssapi_krb5.so.2
+```
+
+That is Npgsql probing for Kerberos on a chiseled image that has no krb5. It falls back to
+SCRAM, which is what the server offers. Harmless, and noted here so nobody spends an afternoon
+on it.
+
+**Author a migration**
+
+```bash
+./tools/ef.ps1 add Platform AddTenantTable    # Windows
+./tools/ef.sh  add Platform AddTenantTable    # bash / WSL2
+./tools/ef.sh  list Platform                  # what exists, and what is applied
+./tools/ef.sh  remove Platform                # undo the last one, if unapplied
+./tools/ef.sh  script Platform                # idempotent SQL -> artifacts/migrations/
+```
+
+Each module owns its own `DbContext`, its own Postgres schema and its own
+`__ef_migrations_history` table inside that schema, so the scripts take a module name and derive
+the rest. **Review the generated SQL, not only the C#** (`docs/03-database-design.md` §7); the
+`script` command exists to make that easy.
+
+Migrations can also be applied from the host, without building the image:
+
+```bash
+cd src/backend
+ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=klarahome;Username=klarahome;Password=klarahome_dev_password"   dotnet run --project host/KlaraHome.Migrator
+```
+
+**Inspect what the migrations created**
+
+```bash
+docker exec klarahome-dev-postgres psql -U klarahome -d klarahome -c "\dt platform.*"
+docker exec klarahome-dev-postgres psql -U klarahome -d klarahome -c "\d platform.outbox_messages"
+docker exec klarahome-dev-postgres psql -U klarahome -d klarahome -c "\dx"
+```
+
+**Run the database tests** — they start their own throwaway PostgreSQL through Testcontainers,
+pinned to the same image the stack runs, so they never touch your dev data:
+
+```bash
+cd src/backend
+dotnet test --project tests/KlaraHome.IntegrationTests/KlaraHome.IntegrationTests.csproj
+```
+
+With no Docker daemon they skip rather than fail.
+
 **Start clean**
 
 ```bash
 ./infra/scripts/dev.ps1 reset    # deletes every volume, then run `up` again
 ```
+
+A reset drops the database, so run the migrator again before expecting the API to serve data.
 
 ---
 
@@ -265,6 +328,12 @@ docker logs klarahome-dev-api 2>&1 | grep my-trace-1
 | `404` from `https://api.klarahome.localhost` | Traefik has not picked the router up yet, or the container is not on the `edge` network | `dev logs traefik`, then check the dashboard router list |
 | `/health/ready` is `Unhealthy` but `/health/live` is fine | PostgreSQL or Redis is down | That is the probe working. `dev status` and restart the offending service |
 | API image build fails on an analyzer warning | The image build runs with warnings-as-errors, as CI does | Fix the warning; `dotnet build` locally shows the same message as a warning |
+| `dotnet test` reports `Zero tests ran` but the suites have tests | The Microsoft.Testing.Platform runner talks to the test host over a loopback JSON-RPC connection; a firewall or endpoint-security agent can block it silently, and the orchestrator reports zero rather than an error | Run the test executable directly — it is the same runner without the RPC hop: `./tests/KlaraHome.UnitTests/bin/Debug/net10.0/KlaraHome.UnitTests.exe`. Verify with `<exe> --help`: if that works, the tests are fine and only the orchestrator is blocked |
+| `Cannot load library libgssapi_krb5.so.2` from the migrator | Npgsql probes for Kerberos; a chiseled image has no krb5 | Harmless. Authentication proceeds over SCRAM. Not a failure and not worth an image change — the `-extra` chiseled variant does not carry krb5 either |
+| `relation "platform.outbox_messages" does not exist` | The migrator has not been run against this database | Run the `migrator` job (§6). After `dev reset` it always has to be run again |
+| Migrator exits 1 with `password authentication failed` | `.env` credentials differ from the ones the Postgres volume was initialised with | Credentials are only applied to an **empty** data directory: `dev reset`, then `up`, then migrate |
+| `The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions` | Retry-on-failure is enabled, so EF will not let you open a transaction it cannot re-run | Use `KlaraHomeDbContext.ExecuteInTransactionAsync(...)` instead of `BeginTransactionAsync`. It wraps the transaction in the execution strategy, which is the required order |
+| A query returns nothing though the rows are visible in `psql` | The global tenant and soft-delete filters | Expected. `IgnoreQueryFilters()` in a query, deliberately and locally, or check `tenant_id` and `deleted_at` on the row |
 
 ---
 
@@ -283,3 +352,6 @@ Recorded so nothing here is mistaken for a production pattern.
 | No resource pressure enforcement beyond soft limits | Hard `deploy.resources.limits` tuned to the VPS |
 | API serves `/scalar` and the diagnostics endpoints | Both are off; the OpenAPI document is published as a generated client instead |
 | API image built from the working tree by compose | Image built once in CI, tagged with the commit SHA, pulled by the VPS |
+| Migrations are applied by hand, whenever you remember | The `migrator` job runs to completion in the deploy pipeline, and the new API version does not start unless it exits 0 |
+| `Database__EnableSensitiveDataLogging` may be on, so EF logs parameter values | Refused: the host will not boot in Production with it set, because those values include personal data |
+| `Tenant__Id` is derived from `Tenant__Code` if unset | Set explicitly. A derived id changes if the code ever changes, which would strand every row already written |

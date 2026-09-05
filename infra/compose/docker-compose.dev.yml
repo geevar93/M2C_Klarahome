@@ -1,8 +1,8 @@
 # Klara Home - local development environment (Step 2)
 #
 # Brings up every backing service the platform needs, matching what will run on the VPS,
-# plus the API container (added at Step 3). The worker, storefront and admin containers
-# arrive with the steps that give them something to do.
+# plus the API container (Step 3) and the one-shot migrator job (Step 4). The worker,
+# storefront and admin containers arrive with the steps that give them something to do.
 #
 #   Up:    ./infra/scripts/dev.ps1 up          (Windows)
 #          ./infra/scripts/dev.sh up           (bash/WSL2)
@@ -306,6 +306,8 @@ services:
       Tenant__Code: ${TENANT_CODE:-klarahome}
       Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
       Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
+      Database__MigrateOnStartup: ${DATABASE_MIGRATE_ON_STARTUP:-false}
+      Database__EnableSensitiveDataLogging: ${DATABASE_SENSITIVE_LOGGING:-false}
       Observability__ServiceName: klarahome-api
       Observability__OtlpEndpoint: ${OBSERVABILITY_OTLP_ENDPOINT:-}
       # Containers log JSON even in Development: this is what a log shipper reads. The
@@ -335,6 +337,51 @@ services:
       - traefik.http.routers.api.tls=true
       - traefik.http.routers.api.middlewares=security-headers@file,compression@file
       - traefik.http.services.api.loadbalancer.server.port=8080
+
+  # ---------------------------------------------------------------------------
+  # Migrator - one-shot database migration job (Step 4).
+  # Applies every module's pending EF Core migrations, runs the idempotent
+  # seeders, and exits. The API never migrates on startup.
+  #
+  # It is NOT started by `docker compose up`: it sits in the `migrate` profile so
+  # a normal `up` does not race it against the API. Run it explicitly:
+  #
+  #   docker compose -f infra/compose/docker-compose.dev.yml --profile migrate   #     run --rm migrator
+  #
+  # This is the same shape the deploy pipeline uses on the VPS (Step 32): run the
+  # job to completion, check the exit code, then start the new API version.
+  # ---------------------------------------------------------------------------
+  migrator:
+    profiles: ["migrate"]
+    restart: "no"
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    build:
+      context: ../..
+      dockerfile: infra/docker/migrator.Dockerfile
+      args:
+        BUILD_CONFIGURATION: ${API_BUILD_CONFIGURATION:-Release}
+    image: klarahome/migrator:${API_IMAGE_TAG:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-migrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      APP_ROLE: migrator
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-klarahome};Username=${POSTGRES_USER:-klarahome};Password=${POSTGRES_PASSWORD:-klarahome_dev_password}
+      Tenant__Code: ${TENANT_CODE:-klarahome}
+      Database__RunSeeders: ${DATABASE_RUN_SEEDERS:-true}
+      Observability__ServiceName: klarahome-migrator
+      Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
+    networks:
+      - data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
 
 networks:
   # Only Traefik publishes 80/443 here; application containers join it and are reached

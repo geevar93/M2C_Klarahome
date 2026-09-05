@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 3)
-> **Last updated:** 2026-09-05 (Step 3 complete)
+> **Status:** APPROVED — in execution (Step 4)
+> **Last updated:** 2026-09-05 (Step 4 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -85,7 +85,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 1 | Repository & monorepo scaffolding | A | ✅ DONE | 2026-09-05 | Node upgraded to 24.20.0; Nx 23.2.0 / Angular 22.1 workspace generated. All criteria met |
 | 2 | Local containerised dev environment | A | ✅ DONE | 2026-09-05 | Postgres 18 / Redis 8 / MinIO / Mailpit / Traefik v3 all healthy; all four criteria met |
 | 3 | Backend solution skeleton & cross-cutting concerns | A | ✅ DONE | 2026-09-05 | API container builds, runs and is healthy behind Traefik; 112 tests green; all four criteria met |
-| 4 | Database foundation, EF Core & migration pipeline | A | ⬜ NOT STARTED | | |
+| 4 | Database foundation, EF Core & migration pipeline | A | ✅ DONE | 2026-09-05 | Migrator container applies the schema and re-runs clean; idempotent SQL verified twice against a fresh database; 179 tests green; all three criteria met |
 | 5 | CI pipeline & quality gates | A | ⬜ NOT STARTED | | |
 | 6 | Platform module — tenancy, settings, branding, audit | B | ⬜ NOT STARTED | | |
 | 7 | Identity & Access module | B | ⬜ NOT STARTED | | |
@@ -567,7 +567,187 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Seed/bootstrap data mechanism (roles, settings, tax rates, states/PIN reference data).
 - **Acceptance criteria:** A sample migration creates its schema and applies cleanly to the
   dev Postgres container; idempotent script generation verified; audit columns populate.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.**
+
+  **All three acceptance criteria met, verified by running the artefacts rather than by
+  inspection:**
+  1. **A sample migration creates its schema and applies cleanly to the dev Postgres container.**
+     The `migrator` job container was built (`klarahome/migrator:dev`, 196 MB) and run against the
+     live dev PostgreSQL after `DROP SCHEMA platform CASCADE`: exit **0**, one migration applied,
+     `platform.outbox_messages`, `platform.inbox_messages` and
+     `platform.__ef_migrations_history` created, four extensions installed. Run again immediately:
+     exit **0**, *"Module Platform is up to date"*, **0** migrations applied.
+  2. **Idempotent script generation verified.** `./tools/ef.sh script Platform` produced an
+     idempotent SQL file, which was then applied **twice** to a freshly created database with
+     `psql -v ON_ERROR_STOP=1`. Both runs succeeded and the resulting schema was correct — the
+     guarantee tested, rather than the presence of `IF NOT EXISTS` in the text.
+  3. **Audit columns populate.** Asserted against a real PostgreSQL 18 container: an insert that
+     sets *neither* `tenant_id`, `created_at` nor `created_by` comes back with all three
+     populated; an update stamps `updated_at`/`updated_by` and provably does **not** let a caller
+     rewrite `created_at`/`created_by`.
+
+  **Data-access conventions** — `docs/03-database-design.md` §1, applied to every module model
+  from one place (`ModelConventions`), after the module's own mapping so a convention can be
+  overridden deliberately but never has to be restated:
+  - **snake_case** identifiers via `EFCore.NamingConventions` 10.0.1 (Apache-2.0, by the Npgsql
+    provider's maintainer). Chosen over a hand-rolled convention because it rewrites *every*
+    identifier kind — tables, columns, keys, indexes, constraints, sequences — including the ones
+    nobody remembers to test.
+  - **UUIDv7 keys** generated in application code through a single greppable call site
+    (`UuidV7.New()`), so `Guid.NewGuid()` — which would scatter every insert across the
+    primary-key B-tree — is visible in review. `UuidV7.TimestampOf` makes "was this key generated
+    the way we require?" answerable in a test, and it correctly rejects a v4.
+  - **Auditing interceptor** fills `tenant_id`, `created_at/by`, `updated_at/by` and the
+    soft-delete columns on every save, for every context. An interceptor rather than a base-class
+    override, so it cannot be bypassed by a context that forgets to call `base.SaveChangesAsync`.
+    It also refuses to let an update rewrite creation, and refuses to let an update move a row
+    between tenants — that is not an update, it is a data leak.
+  - **Optimistic concurrency** on PostgreSQL's own `xmin` system column: no column, no trigger, no
+    write amplification. Verified with two contexts racing one row.
+  - **Soft delete** as an opt-in marker plus a global query filter; `Remove()` on a soft-deletable
+    entity is converted into an update, so nobody has to know which entities are soft-deleted and
+    no accidental `DELETE` escapes through a cascade.
+  - **Tenant scoping** as a second, *named* global query filter (EF Core 10 supports several per
+    entity) plus a `tenant_id` index. The filter closes over the context, not over the id, so one
+    cached model serves every tenant.
+  - **Money** as an EF complex property mapping to `numeric(18,4)` + `*_currency_code char(3)`
+    defaulted to INR — a value, not an entity, so EF neither tracks it separately nor gives it a
+    table. Round-tripped at four decimal places and at a magnitude no `double` could hold.
+  - **`timestamptz`** for every instant, so "when did this happen" has one answer wherever the
+    query ran.
+
+  **Transactional outbox** (ADR-003, and **ADR-013** written at this step):
+  - `platform.outbox_messages` and `platform.inbox_messages` per `03-database-design.md` §4.1,
+    with the partial index the dispatcher's only query needs
+    (`(occurred_at) WHERE processed_at IS NULL`), so polling stays the size of the backlog rather
+    than the size of the history.
+  - `IOutbox` is resolved **per `DbContext`**, so a publish joins the transaction the handler is
+    already in. Publishing outside that transaction is not discouraged, it is unavailable.
+    Proved both ways: a commit writes the row and the event together; a failure writes neither.
+  - The DDL is owned by exactly one context (`OwnsMessagingTables`); every other module context
+    maps the same tables with `ExcludeFromMigrations()`, centrally, so there is nothing for a
+    module author to remember. A startup validator refuses to boot when zero or several contexts
+    claim ownership.
+  - **`OutboxDispatcher`** hosted service: claims rows with `FOR UPDATE SKIP LOCKED`, so more than
+    one worker is safe by construction rather than by convention; delivers in `occurred_at` order;
+    marks processed; records `attempts` and the last error; stops retrying at `MaxAttempts` so a
+    poison message cannot hot-loop; and marks a message no handler claims as processed rather than
+    letting it block the queue. It runs in the **worker only** — every API replica polling would
+    multiply the work and contend for the same rows.
+
+  **Migration pipeline:**
+  - One `DbContext` per module, one Postgres schema per module, and — importantly — one
+    `__ef_migrations_history` **per schema**. Sharing one history table would let the first module
+    to migrate convince every later one that it was already up to date.
+  - `MigrationRunner` resolves contexts from the descriptors that registration leaves behind, so
+    the migrator composes modules without referencing any of them.
+  - A **design-time factory** that reuses the *same* `ConfigureKlaraHome` call the runtime
+    registration makes, so the model `dotnet ef` generates a migration from is the model the
+    application runs.
+  - `tools/ef.ps1` / `tools/ef.sh` derive the three `dotnet ef` arguments from a module name, and
+    `script` writes the **idempotent SQL** that `03-database-design.md` §7 requires to be reviewed
+    in the PR rather than only the C#.
+  - `infra/docker/migrator.Dockerfile` — multi-stage, lockfile-first restore, chiseled, non-root,
+    OCI-labelled, and deliberately **no HEALTHCHECK**: a health check on a job that is meant to
+    exit reports unhealthy the moment it succeeds. The compose service sits in a `migrate`
+    **profile**, so a plain `up` never races it against the API — the same shape the VPS deploy
+    will use.
+  - `dotnet-ef` 10.0.11 pinned in a **local tool manifest** (`.config/dotnet-tools.json`), so
+    every clone and CI get the same tool version rather than whatever is installed globally.
+
+  **Seeding mechanism:** `IDataSeeder` (idempotent and re-runnable by contract, upsert by natural
+  key — never "insert if the table is empty"), ordered, run by the migrator after migrations, and
+  switchable off for a schema-only restore drill. A failing seeder names itself in the error and
+  stops the run rather than leaving a half-seeded database that looks like a success.
+  **No production seeder ships at this step** — every candidate dataset (roles, permissions,
+  settings, tax rates, states, PIN codes) belongs to the module whose step introduces it. The
+  mechanism is proven by tests, not by inventing data early.
+
+  **Fail-fast configuration:** `DatabaseOptions` is bound and validated at startup, and the host
+  **refuses to boot in Production** with `MigrateOnStartup` or `EnableSensitiveDataLogging` set.
+  The first would let a rolling restart run two versions of the code against two shapes of a
+  table; the second writes personal data into the logs.
+
+  **Tests — 179, all green** (up from 112), no third-party assertion library (ADR-012):
+  - **102 unit** (+39) — the built EF model asserted without ever opening a connection: schema
+    placement, snake_case tables and columns, Money's two columns and their types, "money is never
+    a floating-point type", the `xmin` token, `timestamptz`, tenant index and filter, soft-delete
+    filter, *and that an entity opting into nothing gets no filters at all*; the outbox's partial
+    index and the inbox's composite key; per-schema migration history; UUIDv7 generation, ordering
+    and rejection of a v4; outbox serialisation stability and type-name resolution; seeder
+    ordering, re-runnability and failure reporting; deterministic tenant-id derivation.
+  - **63 integration** (+26) — against a real PostgreSQL 18 started by Testcontainers and pinned
+    to the image the dev stack runs: audit columns, update semantics, soft delete, tenant
+    isolation, tenant immutability, `xmin` concurrency conflict, Money round-trips, snake_case in
+    `information_schema`; the real `MigrationRunner` applying to an empty database and re-running
+    clean, extensions present, history in the module schema, seeders run and skipped; the outbox
+    committing and rolling back with its cause; and the **dispatcher driven end to end** through
+    its own `StartAsync` — delivery, no re-delivery, failure recorded, retry budget exhausted,
+    unhandled message not blocking the queue, and occurrence ordering.
+  - **14 architecture** (+2) — the existing rules, plus **a module `DbContext` must be internal**
+    and **a module must own the schema its context writes to**.
+
+  ---
+
+  **Four deviations, each recorded rather than absorbed:**
+
+  1. **The outbox is written across a schema boundary, and that is deliberate.**
+     `03-database-design.md` §4.1 places `outbox_messages` in the `platform` schema, while
+     `01-architecture.md` §2.1 forbids cross-schema access. Both are honoured: the outbox is
+     infrastructure, has no foreign keys, is never *read* by a module, and is only ever appended
+     to — in the module's own transaction, which is the entire guarantee the pattern provides.
+     Written up in full as **ADR-013 (Accepted)**, including the two alternatives rejected
+     (a queue per module schema loses cross-module causal ordering; a separate `DbContext` loses
+     the transaction, which is the whole point). **No change to docs `01`–`10`.**
+  2. **The migrator image runs on `aspnet`, not `runtime`.** The migrator serves no HTTP, so the
+     smaller base was the intent — but it references `KlaraHome.Infrastructure` for the module
+     registry, options binding and logging, and that assembly carries a `FrameworkReference` to
+     `Microsoft.AspNetCore.App`. The `runtime` image fails at launch. Recorded, with the
+     Infrastructure split in the Parking Lot rather than smuggled into this step.
+  3. **Four PostgreSQL extensions are created by the initial migration.** `03-database-design.md`
+     §1 requires five; `pgcrypto`, `pg_trgm`, `unaccent` and `btree_gin` are created here because
+     extensions are database-wide and the first module to migrate is the honest place for them —
+     a `CREATE EXTENSION` discovered halfway through the Search module is an unplanned production
+     change. The fifth, `pg_stat_statements`, needs `shared_preload_libraries`, which is a server
+     setting rather than a migration; it belongs to the Postgres container configuration at
+     Step 31 and is in the Parking Lot.
+  4. **Generated EF code is exempted from two rules.** `.editorconfig` no longer applies the
+     hand-written style rules to `**/Migrations/*.cs`, and the architecture rule *"a module
+     exposes nothing publicly"* now exempts generated migration and model-snapshot classes.
+     `dotnet ef` emits both as `public partial`, and partial declarations cannot disagree about
+     accessibility, so the alternative was hand-editing every generated file — a step that gets
+     forgotten once and then quietly never done again. The exemption is narrow and paid for: a
+     **new** rule asserts that a module's `DbContext` itself is internal, which is the type that
+     actually matters.
+
+  **Two bugs the tests caught before they could ship** (recorded because they are the argument
+  for writing them):
+  - The `OutboxDispatcher` opened its own transaction while retry-on-failure was enabled. EF
+    refuses that — it cannot re-run a unit of work whose boundaries it does not own — so the
+    dispatcher would have thrown on its first poll in every environment. Fixed by giving the base
+    context one sanctioned `ExecuteInTransactionAsync`, which wraps the transaction in the
+    execution strategy in the required order, so no module rediscovers this.
+  - `MigrationRunner` wrapped `MigrateAsync` in an explicit transaction, which suppresses the
+    advisory lock EF takes to stop two migrator containers migrating at once, and aborted the
+    transaction on a first run when the provider probed for the not-yet-existent history table.
+
+  **Known gaps, deliberate and recorded (all in the Parking Lot):**
+  - **No production seeder exists yet** — the mechanism is complete and tested; the data belongs
+    to Steps 6, 7 and 12.
+  - **No partitioning.** `03-database-design.md` §8 wants monthly range partitions on
+    `audit_logs`, `stock_ledger_entries`, `tracking_events`, `notification_messages` and
+    `search_queries`. None of those tables exists yet; partitioning is created with the table, not
+    retrofitted.
+  - **No Dapper.** `01-architecture.md` §4.3 pairs EF with Dapper for hot read paths. Nothing is
+    hot yet, and adding a second data-access library before there is a query that needs it would
+    be speculation.
+  - **The outbox retry has no stored backoff.** Retries are spaced by the poll interval and capped
+    by `MaxAttempts`, which is a budget in polls rather than milliseconds. `occurred_at`,
+    `attempts` and `error` are exactly the columns §4.1 specifies; a `next_attempt_at` column
+    would be a schema change beyond the spec.
+  - **`platform.idempotency_keys` is not created.** It is listed in §4.1, but it serves the
+    `Idempotency-Key` API concern from `01-architecture.md` §6, which no step has yet built. It is
+    created by the step that enforces it.
 
 ---
 
@@ -1141,6 +1321,17 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 3 | `.editorconfig` (a Step 1 artefact) was amended: accessibility modifiers no longer required on interface members, and CA1716 silenced. | ℹ️ Both changes justified in the Step 3 outcome notes. No specification impact |
 | 2026-09-05 | Step 3 | `packages.lock.json` files are now committed (Step 1 set `RestorePackagesWithLockFile`). The Docker build restores **with a runtime identifier**, which produces a different lock file, so `dotnet restore --locked-mode` cannot be applied uniformly. | ⏳ **Step 5** must decide where `--locked-mode` is enforced — CI restore yes, image build no — or regenerate RID-specific lock files |
 | 2026-09-05 | Step 3 | `dotnet test` now requires the Microsoft.Testing.Platform runner declared in `global.json`; the CLI form is `dotnet test --project <path>`. | ℹ️ **Step 5 must use this form.** A bare project path argument is rejected by the .NET 10 SDK |
+| 2026-09-05 | Step 4 | **`dotnet test` reports `Zero tests ran` on this machine**, intermittently and then persistently, while the test executables run all 179 tests correctly. The Microsoft.Testing.Platform orchestrator reaches the host over a loopback JSON-RPC connection and reports zero rather than an error when that connection is refused — most likely an endpoint-security agent. | ⏳ **Step 5 must not depend on `dotnet test` alone.** Workaround documented in `docs/dev-setup.md` §7: run the test executable directly. CI should assert a **non-zero test count**, so a silent zero can never be mistaken for a pass |
+| 2026-09-05 | Step 4 | `KlaraHome.Infrastructure` carries a `FrameworkReference` to `Microsoft.AspNetCore.App`, so the migrator — which serves no HTTP — must run on the `aspnet` base image rather than `runtime`. | ⏳ Splitting persistence/hosting out of Infrastructure would shrink the job image and sharpen the layering. Not urgent; revisit at **Step 29/31** unless another non-HTTP host appears first |
+| 2026-09-05 | Step 4 | `pg_stat_statements` (required by `03-database-design.md` §1) is **not** installed: it needs `shared_preload_libraries`, a server setting rather than a migration. | ⏳ Belongs to the Postgres container configuration at **Step 31**, with the rest of the observability work |
+| 2026-09-05 | Step 4 | Table partitioning from `03-database-design.md` §8 (`audit_logs`, `stock_ledger_entries`, `tracking_events`, `notification_messages`, `search_queries`) is not implemented. | ℹ️ Correct — none of those tables exists yet, and a partitioned table is created partitioned rather than converted later. Each owning step creates its own |
+| 2026-09-05 | Step 4 | Dapper, which `01-architecture.md` §4.3 pairs with EF for hot read paths, is not referenced. | ℹ️ No hot path exists. Add it when a specific query needs it, not before |
+| 2026-09-05 | Step 4 | `platform.idempotency_keys` (`03-database-design.md` §4.1) is not created. | ⏳ It serves the `Idempotency-Key` header contract from `01-architecture.md` §6, which no step has built yet. Created by the step that enforces it — **Step 13/14** at the latest |
+| 2026-09-05 | Step 4 | The outbox has no stored retry backoff: attempts are spaced by the poll interval and capped by `MaxAttempts`. A dead-lettered message stays in the table with `processed_at` NULL and needs a human. | ⏳ Adequate for v1. If dead letters become routine, revisit at **Step 31** with an alert rather than a schema change |
+| 2026-09-05 | Step 4 | EF logs the "does the history table exist?" probe as an **Error** on a first migration against an empty database, which looks alarming in a deploy log although it is expected. | ℹ️ EF behaviour, first run only. Noted so it is not chased |
+| 2026-09-05 | Step 4 | `Cannot load library libgssapi_krb5.so.2` is printed by Npgsql on every migrator run: the chiseled image has no krb5, so the Kerberos probe fails and authentication proceeds over SCRAM. The `-extra` chiseled variant does not carry krb5 either. | ℹ️ Harmless. Documented in `docs/dev-setup.md` §7 rather than paid for with a larger image |
+| 2026-09-05 | Step 4 | `Tenant:Id` falls back to a value derived from `Tenant:Code` when unset. Stable across restarts, but changing the code would strand every row written under the old derived id. | ⏳ **Step 6** replaces this with a database-backed tenant. Until then `.env.example` and `docs/dev-setup.md` §8 both say to set it explicitly on any deployment that holds data |
+| 2026-09-05 | Step 4 | Generated EF migrations are exempted from the `.editorconfig` style rules and from the "a module exposes nothing publicly" architecture rule, because `dotnet ef` emits them as `public partial` and offers no way to change that. | ℹ️ Narrow and compensated: a new architecture rule asserts the module `DbContext` itself is internal. No action |
 
 ---
 
@@ -1155,6 +1346,7 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 2 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/README.md` | Step 2 closed as DONE; `docs/dev-setup.md` added and indexed; four deviations and seven Parking Lot items recorded. No specification change | — |
 | 2026-09-05 | 3 | `docs/adr/` (new: README, ADR-011, ADR-012), **`09-nfr-testing-observability.md` §2.1** | **First specification change since Step 0.** FluentAssertions 8.x moved to a commercial licence, colliding with ADR-009 for a redistributed product. ADR-011 proposed pinning 7.x and was **rejected**; ADR-012 removes the third-party assertion dependency altogether in favour of xUnit's built-in `Assert`. §2.1 updated to match | **User** (chose the option; ADR-012 accepted) |
 | 2026-09-05 | 3 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.editorconfig`, `global.json` | Step 3 closed as DONE; API endpoints, backend build/test commands and the container rebuild loop documented; five deviations and eight Parking Lot items recorded. No change to docs `01`–`10` | — |
+| 2026-09-05 | 4 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `.editorconfig`, `docs/adr/` | Step 4 closed as DONE; migration workflow, `tools/ef.*`, the `migrate` compose profile and six new troubleshooting rows documented; **ADR-013** added (one outbox in the `platform` schema); four deviations and eleven Parking Lot items recorded. No change to docs `01`–`10` | — |
 
 ---
 

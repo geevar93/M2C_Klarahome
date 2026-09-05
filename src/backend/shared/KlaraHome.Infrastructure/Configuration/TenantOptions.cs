@@ -16,6 +16,14 @@ public sealed class TenantOptions
     [RegularExpression("^[a-z0-9][a-z0-9-]{1,30}$", ErrorMessage = "Tenant code must be lowercase kebab-case.")]
     public string Code { get; set; } = "klarahome";
 
+    /// <summary>
+    /// The tenant's primary key, written into <c>tenant_id</c> on every row. Set this explicitly
+    /// on any deployment that holds data. Left unset it is derived deterministically from
+    /// <see cref="Code"/>, which survives a restart but not a change of code — see
+    /// <c>ConfiguredTenantContext</c>.
+    /// </summary>
+    public Guid? Id { get; set; }
+
     /// <summary>BCP-47 locale used when the caller expresses no preference.</summary>
     [Required]
     public string DefaultLocale { get; set; } = "en-IN";

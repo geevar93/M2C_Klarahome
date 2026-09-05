@@ -4,7 +4,9 @@
     Drives the real API host in-process through WebApplicationFactory, so what is asserted is the
     actual middleware pipeline and the actual error contract, not a reconstruction of them.
 
-    Testcontainers-backed database tests arrive with the data layer in Step 4.
+    Database tests (Step 4) run against a throwaway PostgreSQL 18 container started by
+    Testcontainers, pinned to the same image the dev compose stack uses. They are skipped, not
+    failed, when no Docker daemon is reachable.
   -->
 
   <PropertyGroup>
@@ -23,6 +25,16 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup Label="Shared test model">
+    <!--
+      One fixture, linked into both test projects: the unit tests assert the model's shape without
+      a database, the integration tests assert its behaviour against a real one. Two copies would
+      drift, and the drift would look like a passing suite.
+    -->
+    <Compile Include="../Shared/ConventionsModel.cs" Link="Persistence/ConventionsModel.cs" />
   </ItemGroup>
 
 </Project>

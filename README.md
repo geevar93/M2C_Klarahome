@@ -103,11 +103,17 @@ Full details, credentials, TLS notes and troubleshooting: **[`docs/dev-setup.md`
 
 ```bash
 cd src/backend
+dotnet tool restore                        # once per clone: brings in dotnet-ef
 dotnet build KlaraHome.sln                 # zero warnings is the standard
 dotnet test --project tests/KlaraHome.UnitTests/KlaraHome.UnitTests.csproj
 dotnet test --project tests/KlaraHome.IntegrationTests/KlaraHome.IntegrationTests.csproj
 dotnet test --project tests/KlaraHome.ArchitectureTests/KlaraHome.ArchitectureTests.csproj
 ```
+
+The integration tests start a throwaway PostgreSQL container, so **Docker must be running**.
+Without it the database tests skip rather than fail. If `dotnet test` reports `Zero tests ran`
+while the suites clearly contain tests, see the troubleshooting table in
+[`docs/dev-setup.md`](docs/dev-setup.md).
 
 Run the API outside Docker against the containerised backing services:
 
@@ -119,6 +125,31 @@ Rebuild and restart just the API container:
 
 ```bash
 docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d --build api
+```
+
+### Database and migrations
+
+One PostgreSQL database, one schema per module, one migration history per module. **The API
+never migrates on startup** — a one-shot `migrator` job applies migrations before the new
+version starts (`docs/03-database-design.md` §7).
+
+```bash
+# Apply every module's pending migrations, then run the seeders.
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env   --profile migrate run --rm migrator            # exits 0 on success, 1 on failure
+
+./tools/ef.ps1 add Platform AddTenantTable       # author a migration  (Windows)
+./tools/ef.sh  add Platform AddTenantTable       # ...or bash/WSL2
+./tools/ef.sh  list Platform                     # what exists, what is applied
+./tools/ef.sh  script Platform                   # idempotent SQL -> artifacts/migrations/
+```
+
+The generated SQL is what gets reviewed in the pull request, not only the C#.
+
+Migrations can also be applied from the host, without the container:
+
+```bash
+cd src/backend
+ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=klarahome;Username=klarahome;Password=..."   dotnet run --project host/KlaraHome.Migrator
 ```
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin

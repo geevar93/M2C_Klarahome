@@ -23,4 +23,13 @@
     <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
+  <ItemGroup Label="Shared test model">
+    <!--
+      One fixture, linked into both test projects: the unit tests assert the model's shape without
+      a database, the integration tests assert its behaviour against a real one. Two copies would
+      drift, and the drift would look like a passing suite.
+    -->
+    <Compile Include="../Shared/ConventionsModel.cs" Link="Persistence/ConventionsModel.cs" />
+  </ItemGroup>
+
 </Project>
