@@ -1,0 +1,71 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "importHelpers": true,
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "es2022",
+      "dom"
+    ],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@klarahome/data-access-api": [
+        "./libs/data-access/api/src/index.ts"
+      ],
+      "@klarahome/data-access-auth": [
+        "./libs/data-access/auth/src/index.ts"
+      ],
+      "@klarahome/data-access-cart": [
+        "./libs/data-access/cart/src/index.ts"
+      ],
+      "@klarahome/data-access-catalog": [
+        "./libs/data-access/catalog/src/index.ts"
+      ],
+      "@klarahome/data-access-orders": [
+        "./libs/data-access/orders/src/index.ts"
+      ],
+      "@klarahome/data-access-content": [
+        "./libs/data-access/content/src/index.ts"
+      ],
+      "@klarahome/ui-primitives": [
+        "./libs/ui/primitives/src/index.ts"
+      ],
+      "@klarahome/ui-patterns": [
+        "./libs/ui/patterns/src/index.ts"
+      ],
+      "@klarahome/ui-layout": [
+        "./libs/ui/layout/src/index.ts"
+      ],
+      "@klarahome/i18n": [
+        "./libs/i18n/src/index.ts"
+      ],
+      "@klarahome/testing": [
+        "./libs/testing/src/index.ts"
+      ],
+      "@klarahome/domain": [
+        "./libs/domain/src/index.ts"
+      ],
+      "@klarahome/util": [
+        "./libs/util/src/index.ts"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
+}

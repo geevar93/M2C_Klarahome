@@ -1,0 +1,23 @@
+{
+  "name": "ui-patterns",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/ui/patterns/src",
+  "prefix": "kh",
+  "projectType": "library",
+  "tags": [
+    "type:ui",
+    "scope:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/{projectRoot}"
+      ],
+      "options": {
+        "jestConfig": "libs/ui/patterns/jest.config.cts",
+        "tsConfig": "libs/ui/patterns/tsconfig.spec.json"
+      }
+    }
+  }
+}

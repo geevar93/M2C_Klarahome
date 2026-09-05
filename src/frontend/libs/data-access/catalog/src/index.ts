@@ -1,0 +1,1 @@
+export * from './lib/data-access-catalog/data-access-catalog';

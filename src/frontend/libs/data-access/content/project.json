@@ -1,0 +1,23 @@
+{
+  "name": "data-access-content",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/data-access/content/src",
+  "prefix": "kh",
+  "projectType": "library",
+  "tags": [
+    "type:data-access",
+    "scope:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/{projectRoot}"
+      ],
+      "options": {
+        "jestConfig": "libs/data-access/content/jest.config.cts",
+        "tsConfig": "libs/data-access/content/tsconfig.spec.json"
+      }
+    }
+  }
+}

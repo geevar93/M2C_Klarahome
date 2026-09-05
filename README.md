@@ -63,10 +63,7 @@ tools/                 Codegen and database tooling
 | .NET SDK | 10.0.x | ✅ 10.0.203 |
 | Git | 2.40+ | ✅ 2.46.1 |
 | Docker | 24+ with Compose v2 | ✅ 29.4.0 |
-| Node.js | **22.22.3+ / 24.15+** (Angular requirement) | ⛔ **20.12.2 — upgrade required** |
-
-> **Node.js must be upgraded before the Angular workspace can be created.** The current
-> Angular release requires `^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0`. Node 22 LTS is recommended.
+| Node.js | **22.22.3+ / 24.15+** (Angular requirement) | ✅ 24.20.0 |
 
 ## Getting started
 
@@ -77,5 +74,6 @@ git config core.hooksPath .githooks   # enable commit message validation
 dotnet --version                      # expect 10.0.x (pinned in global.json)
 ```
 
-The local containerised environment (Postgres, Redis, MinIO, Mailpit, Traefik) arrives in
-**Step 2**; the backend solution in **Step 3**.
+The Angular workspace is in place (`src/frontend`, see its README). The local containerised
+environment (Postgres, Redis, MinIO, Mailpit, Traefik) arrives in **Step 2**; the backend
+solution in **Step 3**.
