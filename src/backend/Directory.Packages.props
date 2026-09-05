@@ -1,0 +1,28 @@
+<Project>
+
+  <!--
+    Central Package Management (CPM).
+    Every PackageReference in this solution is versionless; the version is declared HERE, once.
+
+    Convention: a PackageVersion entry is added at the moment a package is first genuinely
+    needed by a step, with the version verified against the feed at that time. Versions are
+    deliberately NOT pre-populated speculatively — an unverified pin is worse than no pin.
+
+    Licensing guard (docs/01-architecture.md §4.3): MediatR and AutoMapper are commercially
+    licensed and MUST NOT be added. Use the in-house dispatcher and Mapperly instead.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Runtime">
+    <!-- Populated in Step 3 (host + cross-cutting) and Step 4 (EF Core / Npgsql). -->
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <!-- Populated in Step 3/4 (xUnit, FluentAssertions, Testcontainers, NSubstitute). -->
+  </ItemGroup>
+
+</Project>

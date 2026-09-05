@@ -1,0 +1,29 @@
+* text=auto eol=lf
+
+*.sln        text eol=crlf
+*.csproj     text eol=lf
+*.cs         text eol=lf diff=csharp
+*.ts         text eol=lf
+*.html       text eol=lf
+*.scss       text eol=lf
+*.json       text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.md         text eol=lf
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+*.ps1        text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Generated files: collapse in diffs and exclude from language stats
+src/frontend/libs/data-access/api/** linguist-generated=true
+package-lock.json -diff linguist-generated=true

@@ -1,0 +1,50 @@
+<Project>
+
+  <!--
+    Klara Home — shared MSBuild properties for every backend project.
+    See docs/01-architecture.md §4 for the decisions encoded here.
+  -->
+
+  <PropertyGroup Label="Platform">
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Quality">
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Missing XML comment: too noisy for internal types -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Step 5: analyzers are errors in CI, warnings locally so developers are not blocked -->
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Build">
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Product">
+    <Product>Klara Home</Product>
+    <Company>Klara Home</Company>
+    <Authors>Klara Home Engineering</Authors>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Copyright>Copyright (c) $([System.DateTime]::Now.Year)</Copyright>
+  </PropertyGroup>
+
+  <!-- Test projects: relax docs, never pack -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

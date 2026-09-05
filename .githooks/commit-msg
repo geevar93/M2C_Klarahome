@@ -1,0 +1,37 @@
+#!/bin/sh
+# Conventional Commits validation — see CONTRIBUTING.md
+# Enable with: git config core.hooksPath .githooks
+
+msg_file="$1"
+subject=$(head -n1 "$msg_file")
+
+# Ignore merge/revert/fixup commits
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9./-]+\))?!?: [a-z].{0,70}[^.]$'
+
+if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+  echo "-----------------------------------------------------------------"
+  echo "  Invalid commit message subject:"
+  echo "    $subject"
+  echo ""
+  echo "  Expected: <type>(<scope>): <subject>"
+  echo "    type    feat|fix|docs|refactor|perf|test|build|ci|chore|revert"
+  echo "    subject imperative, lower case, no trailing '.', <= 72 chars"
+  echo ""
+  echo "  Example: feat(catalog): add vendor listing buy-box resolution"
+  echo "  See CONTRIBUTING.md"
+  echo "-----------------------------------------------------------------"
+  exit 1
+fi
+
+# A '!' breaking marker requires a BREAKING CHANGE footer
+if printf '%s' "$subject" | grep -Eq '^[a-z]+(\([a-z0-9./-]+\))?!:'; then
+  if ! grep -q '^BREAKING CHANGE: ' "$msg_file"; then
+    echo "Commit marked breaking with '!' but has no 'BREAKING CHANGE: ' footer."
+    exit 1
+  fi
+fi
+exit 0
