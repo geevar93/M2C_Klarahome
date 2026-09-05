@@ -17,6 +17,8 @@ context_for() {
     case "$1" in
         Platform) echo "PlatformDbContext" ;;
         Identity) echo "IdentityDbContext" ;;
+        Media) echo "MediaDbContext" ;;
+        Notifications) echo "NotificationsDbContext" ;;
         *) return 1 ;;
     esac
 }

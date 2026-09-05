@@ -15,6 +15,9 @@ onward are written here as full files, at the step that raises them.
 | [012](ADR-012-no-assertion-library.md) | No third-party assertion library; use xUnit's built-in `Assert` | ✅ Accepted | Step 3 |
 | [013](ADR-013-one-outbox-in-the-platform-schema.md) | One outbox table in the `platform` schema, written by every module in its own transaction | ✅ Accepted | Step 4 |
 | [014](ADR-014-external-identity-providers.md) | External identity providers for customers; SMS and email features deferred behind runtime flags | ✅ Accepted | Step 7 boundary |
+| [015](ADR-015-pdfsharp-migradoc-for-documents.md) | PDFsharp + MigraDoc (MIT) for generated documents, not QuestPDF | ✅ Accepted | Step 8 |
+| [016](ADR-016-media-is-its-own-module.md) | Media is its own module, with its own `media` schema | ✅ Accepted | Step 8 |
+| [017](ADR-017-unprovisioned-channels-are-suppressed.md) | A notification channel with no provider is suppressed, not failed | ✅ Accepted | Step 8 |
 
 > **Backlog:** ADR-001 – ADR-010 exist only as table rows. Expanding them into individual files
 > is in the Parking Lot of `../IMPLEMENTATION_PLAN.md`; it is documentation debt, not a decision

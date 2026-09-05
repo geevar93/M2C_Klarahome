@@ -310,10 +310,76 @@ administrator has to be able to issue a temporary password while email is off. T
 audited with the administrator's name on it. It is a knowingly weaker control than a reset link and
 is withdrawn when email delivery returns.
 
-> **While `identity.mobile-otp-login` or the email flags are on and Step 8 has not landed,** codes
-> and links are written to the API log by `LoggingOtpDispatcher` — which is how you sign in locally
-> and exactly what `docs/07-security-compliance.md` §3 forbids in production. The Notifications
-> module replaces it; turning the flags off is what makes a deployment safe before it does.
+> **One-time codes are no longer written to the log.** Step 8 replaced `LoggingOtpDispatcher`: a
+> code is now rendered from an editable template and handed straight to a provider, and the row that
+> records the attempt keeps neither the body nor any variable's value. Locally there is still no SMS
+> account, so the message goes to Mailpit instead — see below.
+
+### Media and documents
+
+`POST /api/v1/admin/media` accepts a file and answers with its id, its URL and the responsive
+renditions the storefront should ask for:
+
+```bash
+curl -k -X POST https://api.klarahome.localhost/api/v1/admin/media \
+     -H "Authorization: Bearer $TOKEN" -F file=@hero.png
+# 201 { "id": "...", "url": "https://s3.../hero.png",
+#       "variants": [ { "name": "thumb", "width": 160, "url": "https://img.../rs:fit:160:0/..." }, ... ] }
+```
+
+- **What a file is, is decided by its bytes.** The declared content type and the filename both come
+  from the caller, so neither is evidence: a `.png` that is really a PHP script is refused, and the
+  extension a download is offered under comes from the content.
+- **No rendition is stored.** The variant URL is an instruction that imgproxy carries out and caches,
+  so re-tuning `Media__VariantWidths` changes what the next page load asks for and needs no
+  regeneration job. **Set `IMGPROXY_KEY` and `IMGPROXY_SALT` in any deployed environment** — unsigned,
+  imgproxy will resize for anybody who finds it, on this deployment's bandwidth and domain.
+- **A private file has no URL.** Invoices, KYC documents and labels go to `docs-private` and are
+  reached only through `GET /admin/media/{id}/link`, which mints a short-lived signed URL *after*
+  the caller's authorisation has been checked.
+- **Nothing scans uploads yet.** `IVirusScanner` has one implementation that records
+  `scanState: "Skipped"` rather than pretending. Set `Media__RequireVirusScan=true` and uploads are
+  refused while that is true, which is the state a deployment handling KYC documents should be in.
+
+Generated documents — invoices, credit notes, labels — go through `IDocumentStore`: rendered with
+PDFsharp and MigraDoc (ADR-015), stored privately, registered like any other file.
+
+### Notifications
+
+A caller names an **event**, never a message. What that event says, on which channels, in which
+language, is a template an operator edits in `GET/PUT /admin/notification-templates` without a
+deploy.
+
+```bash
+# Prove a channel works end to end, through the real pipeline.
+POST /api/v1/admin/notifications/test   { "channel": "Email", "to": "you@example.com" }
+
+# What was sent, what was not, and why. Recipients are masked.
+GET  /api/v1/admin/notifications?status=Suppressed
+```
+
+**A channel with no provider is suppressed, not failed (ADR-017).** Every message is rendered,
+queued and recorded whether or not anybody can carry it; one that nobody could send ends
+`Suppressed` with a reason — `NoProvider`, `ChannelDisabled`, `OptedOut`, `NoRecipient`,
+`NoTemplate` — which does not retry and is not an incident. That is what lets this platform be
+operated before the SMS row of `docs/08-integrations.md` §7 is complete, and what makes "what did we
+fail to tell people" a query rather than a guess.
+
+| Channel | State here | Notes |
+|---|---|---|
+| Email | ✅ Works | SMTP; Mailpit locally, any host in production. Needs no paid account |
+| SMS | ⛔ No account | Recorded as `Suppressed / NoProvider` in production. Outside Production it goes to Mailpit so a developer can complete a mobile sign-in |
+| WhatsApp | ⛔ No account | Same, and no adapter written |
+| In-app | ✅ Works | The delivery log is the inbox; there is no provider to configure |
+
+The queue is drained by the **worker**, which is the only host with `Notifications__DispatcherEnabled`
+set: failures retry with exponential backoff and jitter, and a permanent refusal — a rejected mailbox
+— is not retried at all. A **one-time code is the exception**: it is sent inline, because it cannot
+wait for a poll and its body must not be stored for one.
+
+When an SMS account is bought: write the adapter, set `Sms__Provider`, and register a DLT template id
+against each SMS template. An active SMS template with no id is refused, because an Indian operator
+**drops** a non-conforming message rather than rejecting it.
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

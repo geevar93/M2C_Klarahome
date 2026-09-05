@@ -181,8 +181,22 @@ public sealed class AdminSurfaceTests(KlaraHomeApiFactory factory) : IClassFixtu
             .OfType<RouteEndpoint>()
             .Where(endpoint => IsUnder(endpoint, AdminPrefix));
 
+    /// <summary>
+    /// Whether a route sits under a prefix, matched on whole path segments.
+    /// </summary>
+    /// <remarks>
+    /// A plain <c>StartsWith</c> is wrong and was: <c>/api/v1/admin/media</c> begins with
+    /// <c>/api/v1/admin/me</c>, so the media library counted as part of the self-service surface
+    /// and was expected to declare no permission. The boundary has to be a segment boundary.
+    /// </remarks>
     private static bool IsUnder(RouteEndpoint endpoint, string prefix)
-        => endpoint.RoutePattern.RawText?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true;
+    {
+        var route = endpoint.RoutePattern.RawText;
+
+        return route is not null
+               && (string.Equals(route, prefix, StringComparison.OrdinalIgnoreCase)
+                   || route.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string Describe(RouteEndpoint endpoint)
     {

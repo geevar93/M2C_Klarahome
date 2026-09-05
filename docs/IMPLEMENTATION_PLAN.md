@@ -1,8 +1,8 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 7)
-> **Last updated:** 2026-09-05 (Step 7 complete)
+> **Status:** APPROVED — in execution (Step 8)
+> **Last updated:** 2026-09-05 (Step 8 complete)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -90,7 +90,7 @@ describes *what* to build; this document describes *when* and *in what order*, a
 | 6 | Platform module — tenancy, settings, branding, audit | B | ✅ DONE | 2026-09-05 | Tenant, typed settings store, feature flags, partitioned append-only audit trail and Indian reference data; 7 endpoints; 252 tests green, 92.44% line coverage. All three criteria met and demonstrated against the running stack. **Admin endpoints declare their permissions but nothing enforces them until Step 7** — the host refuses to start outside Development while that is true |
 | 7 | Identity & Access module | B | ✅ DONE | 2026-09-05 | Customer OTP, staff/vendor password + mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope in the data layer, profiles and Indian addresses; 50 routes across the two surfaces; 421 tests green, 89.06% line / 80.58% branch coverage. All three acceptance criteria met and demonstrated against a containerised stack. **Closes the Step 6 gap:** every admin endpoint that declared a permission is now behind a policy that checks it |
 | 7A | External identity providers & degraded-delivery mode | B | ✅ DONE | 2026-09-05 | Google sign-in for customers (server-side code + PKCE), four runtime flags that turn the SMS- and email-dependent features off, administrator-issued temporary passwords with a forced change. Facebook configured and disabled. 511 tests green, 89.8% line / 81.2% branch. **Nothing from Step 7 changed behaviour** — every flag ships on. Spec changed first: ADR-014 |
-| 8 | Media, file storage & Notifications module | B | ⬜ NOT STARTED | | |
+| 8 | Media, file storage & Notifications module | B | ✅ DONE | 2026-09-05 | Media module and `media` schema (ADR-016); S3 storage, content-based validation, imgproxy renditions, signed private links, a PDF pipeline on PDFsharp + MigraDoc (ADR-015); Notifications module with templates, a partitioned delivery log, a retrying queue drained by a new worker container, preferences and the DLT registry. **A channel with no provider is suppressed, not failed** (ADR-017). 613 tests green, 89.91% line / 80.86% branch. All three criteria met and demonstrated against the containerised stack. **Closes the Step 7 debt:** one-time codes are no longer logged, and no longer stored either |
 | 9 | Vendor / Seller module | C | ⬜ NOT STARTED | | |
 | 10 | Catalog module | C | ⬜ NOT STARTED | | |
 | 11 | Inventory & Warehouse module | C | ⬜ NOT STARTED | | |
@@ -1383,7 +1383,98 @@ Each card is the contract for that step. Do not treat anything outside "Delivera
   - Document generation service (invoices, credit notes, labels) — PDF pipeline.
 - **Acceptance criteria:** An image uploads and returns responsive variants; a templated
   transactional email and SMS are dispatched and logged; failures retry with backoff.
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** ✅ **DONE 2026-09-05.** All three criteria met and demonstrated against the
+  containerised stack: an image uploaded through `POST /admin/media` came back with three renditions
+  and imgproxy served one of them from the real MinIO object; a templated email was queued by the
+  API, dispatched by the worker and recorded as `Sent`; a transient refusal retried three times with
+  growing, jittered delays and then gave up. The SMS half is met in the only way it can be —
+  see the deviation below and ADR-017.
+
+  **Two modules, not one.** `Media` owns the `media` schema and `Notifications` owns
+  `notifications`. Media was not in the module list at all, though eight columns across six schemas
+  hold a `file_id` and `BrandingSettings` already referred to "the Media module"; the alternatives
+  and the choice are recorded in **ADR-016**. Specification changed first, under protocol rule 8:
+  docs `01`, `02`, `03`, `04`, `07` and `08` were amended before any code was written.
+
+  **Media.** `IFileStorage` over the S3 API in the shared layer — MinIO today, S3 or R2 by
+  configuration — and everything that knows what a product image *is* in the module above it. A file
+  is identified from its own bytes rather than from what the caller called it, so a `.png` carrying a
+  PHP script is refused and the extension a download is offered under comes from the content. The
+  storage key is generated and date-prefixed, never built from the uploaded name: that one decision
+  answers the path-traversal, collision and bucket-listing questions at once. Renditions are computed
+  and never stored — the imgproxy URL *is* the instruction — and private documents have no URL at
+  all until somebody's authorisation has been checked and one is signed.
+
+  **Notifications.** Templates are data an operator edits without a deploy; a caller names an
+  *event*. The delivery log is partitioned monthly like the audit trail, and is the queue: the worker
+  claims due rows with `FOR UPDATE SKIP LOCKED`, so more than one worker is safe by construction.
+  Backoff doubles with jitter — the jitter matters more than the doubling, because without it a
+  backlog released by a recovering SMTP host arrives in one second.
+
+  **The Step 7 debt is closed, not moved.** `LoggingOtpDispatcher` is deleted. A one-time code is
+  rendered from an editable template and handed straight to a provider **inline** — it cannot wait
+  for a poll, and its body must not be stored for one — and the row that records the attempt keeps
+  neither the body nor any variable's value. Proven against the real database: `body` null, `payload`
+  `{"code":"[redacted]", …}`, and the code readable only in the message that was sent.
+
+  **Endpoints added**
+
+  | Method | Route | Notes |
+  |---|---|---|
+  | `GET`, `POST` | `/admin/media` | Multipart upload; `?visibility=private` for the documents bucket |
+  | `GET`, `DELETE` | `/admin/media/{id}` | Deleting retires the row and removes the object |
+  | `GET` | `/admin/media/{id}/link` | Short-lived signed URL, minted after the authorisation check |
+  | `GET`, `PUT` | `/admin/notification-templates[/{id}]` | Lists the placeholders each expects, and why an SMS would be dropped |
+  | `GET` | `/admin/notifications[/{id}]` | The delivery log. Recipients masked (§5) |
+  | `POST` | `/admin/notifications/{id}/retry` | Re-queues a failed or suppressed message |
+  | `POST` | `/admin/notifications/test` | Proves a channel through the real pipeline, not round it |
+  | `GET`, `PUT` | `/store/me/notification-preferences` | The §3.1 endpoint Step 7 deliberately left to this module |
+
+  **Deviations from the specification, and why**
+
+  1. **PDFsharp + MigraDoc, not QuestPDF** (ADR-015, User's decision). QuestPDF is free only below
+     USD 1 M revenue, which is an obligation that would travel with every redistributed copy —
+     exactly what ADR-009 exists to prevent. `01-architecture.md` §7 amended.
+
+  2. **A channel with no provider is `Suppressed`, a third terminal state** (ADR-017, User's
+     decision). `08-integrations.md` §7 says missing credentials are a `⛔ BLOCKED` condition, and
+     taken literally the programme would stop here until the client buys an SMS account. Instead the
+     pipeline is built, and a message nobody could send is recorded with a reason rather than
+     retried against nothing or dropped silently.
+
+  3. **A sensitive message is sent inline rather than queued.** The queue cannot hold what must not
+     be stored, and a sign-in code cannot wait five seconds for a poll. The consequence is accepted
+     and recorded: a failed OTP is not retried, because by then the person has pressed "resend".
+
+  4. **The DLT rule moved from the table to the sender.** It was first a database `CHECK`: an active
+     SMS template must carry a registered id. That is only true where an operator can drop the
+     message — and it made a local mobile sign-in impossible, which is precisely what ADR-017
+     promised it would not. The rule now lives where it bites: a sender that talks to an operator
+     declares `RequiresProviderTemplate`, the admin editor still refuses to activate an unregistered
+     SMS template, and the seeder still seeds them inactive **in Production**.
+
+  5. **Outside Production, an SMS is delivered to Mailpit** as `<digits>@sms.invalid`. It is bound to
+     `IHostEnvironment`, not to a setting, because a mistake here would send one customer's sign-in
+     code to an operations mailbox.
+
+  6. **Presigned URLs are signed against a second, public endpoint.** SigV4 covers the host, so a URL
+     signed for `http://minio:9000` is unreachable from a browser and cannot be rewritten. Found in
+     the live demonstration, not in a test — the tests substitute storage at the network boundary,
+     which is exactly the seam this defect hid behind.
+
+  7. **`notification_messages` carries no `xmin` concurrency token.** PostgreSQL cannot return a
+     system column from a partitioned table. A new `IPartitioned` marker says so — `IAppendOnly`
+     would have been a lie, because these rows *are* updated — and concurrency is pessimistic
+     instead.
+
+  #### What is still owed
+
+  Nothing scans an upload: `IVirusScanner` has one implementation that records `Skipped` rather than
+  pretending, and `Media:RequireVirusScan` turns that into a refusal. The SMS and WhatsApp rows of
+  `08-integrations.md` §7 are still incomplete, so both channels are suppressed in production; the
+  day an account exists it is one adapter and one setting. Retention — ninety days for message
+  bodies, and partition maintenance for both partitioned tables — belongs with the other operational
+  jobs at **Step 31**.
 
 ---
 
@@ -1924,11 +2015,11 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 6 | Reference tables (`states`, `pincodes`, `hsn_codes`) carry **no `tenant_id`**, a deliberate exception to the tenancy convention in `03-database-design.md` §1. | ℹ️ §1 governs *business* tables. These are identical in every deployment and nobody edits them; giving them a tenant would mean an address form that empties itself under a different tenant |
 | 2026-09-05 | Step 6 | Settings and feature-flag caches are **in-process**, invalidated by the writer. | ⏳ Exact at one replica, eventually-consistent within the TTL at two. Folded into the existing Redis/`HybridCache` item from Step 3 |
 
-| 2026-09-05 | Step 7 | **One-time codes and reset links are written to the API log.** `LoggingOtpDispatcher` is the only implementation of `IOtpDispatcher`, and logging an OTP is what `07-security-compliance.md` §3 forbids outright. | ⏳ **Step 8** replaces the registration. The seam, the throttle, the hashing and the attempt budget are all real; only delivery is missing. Unlike the Step 6 admin gap this cannot be made to refuse startup — a host with no dispatcher fails when somebody signs in, not at boot — so it is loud in the log instead |
+| 2026-09-05 | Step 7 | **One-time codes and reset links are written to the API log.** `LoggingOtpDispatcher` is the only implementation of `IOtpDispatcher`, and logging an OTP is what `07-security-compliance.md` §3 forbids outright. | ✅ **CLOSED at Step 8.** `LoggingOtpDispatcher` is deleted. A code is rendered from an editable template, handed to a provider inline, and the row recording the attempt keeps neither the body nor any variable's value — verified against the database, not only asserted (ADR-017) |
 | 2026-09-05 | Step 7 | **The breached-password check is a compiled-in list of ~60 entries, not the Have I Been Pwned range API.** | ⏳ Needs the SSRF allow-list from §3, a timeout policy and a decision about what to do when the API is down. Belongs to the step that builds the outbound HTTP policy; the offline list stays as the floor underneath it |
 | 2026-09-05 | Step 7 | **Impersonation is not built.** `07-security-compliance.md` §2 requires time-boxed, reason-carrying, audited support impersonation. It is not in the Step 7 deliverables. | ⏳ Needs a support workflow to hang off. Revisit when the admin app has one — **Step 26/27** at the earliest |
 | 2026-09-05 | Step 7 | **DPDP data export and erasure are not built.** `04-api-specification.md` §3.1 lists `POST /store/me/data-export` and `/delete-request`; §5 requires both. Not in the Step 7 deliverables, and erasure has to anonymise across schemas that do not exist yet. | ⏳ Cannot be finished before the modules holding the data exist. Belongs at **Step 29/31**, and is a launch-checklist item at Step 33 |
-| 2026-09-05 | Step 7 | **`GET /store/me/notification-preferences` is not built**, though §3.1 lists it under the account surface. | ℹ️ Correct: preferences belong to the Notifications module at **Step 8**, which owns the channels they select between |
+| 2026-09-05 | Step 7 | **`GET /store/me/notification-preferences` is not built**, though §3.1 lists it under the account surface. | ✅ **CLOSED at Step 8.** Built, with the categories a person may choose about and only the channels this deployment can actually deliver on |
 | 2026-09-05 | Step 7 | **A vendor user is confined to exactly one seller.** The token carries a single `vendor_id` and the filter compares that one value, so a user with grants in two sellers would silently see only the lowest-numbered. | ℹ️ Deliberate. One person across two sellers means a second account, which is also what an access review expects to find. The resolver orders deterministically rather than taking whichever row came back first |
 | 2026-09-05 | Step 7 | **Permissions are read from the access token, not the database, on every request.** A permission taken away therefore survives for up to one access-token lifetime unless something also ends the session. | ℹ️ Deliberate, and the reason the token is fifteen minutes. The paths that matter — a role change and a status change — revoke the sessions explicitly, so "revoked" means now for those |
 | 2026-09-05 | Step 7 | **An unrouted path is answered 404 by a middleware placed before `UseAuthorization`.** ASP.NET Core applies the fallback policy to non-endpoint requests, which would otherwise make every unknown URL a 401. | ℹ️ Recorded because it is a non-obvious framework behaviour, and because anyone reordering the pipeline would reintroduce it. `ErrorContractTests` fails if it comes back |
@@ -1957,6 +2048,22 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | Step 7A | **`external_logins` rows are never pruned**, including for accounts that are soft-deleted. | ⏳ Joins the refresh-token and OTP retention item at **Step 31**. A DPDP erasure will need to anonymise them too, which belongs to the same work |
 | 2026-09-05 | Step 7A | **The Angular storefront does not exist yet**, so the redirect flow has been proved with `curl` and an integration test rather than a browser. The `SameSite=Lax` cookie behaviour in particular is asserted by its attributes, not by a real navigation. | ⏳ **Step 23** builds the storefront shell and is the first chance to drive this from a browser. Worth an explicit check there rather than assuming |
 | 2026-09-05 | Step 7A | `AdminUserResponse` gained `mustChangePassword` and `passwordSetupPending`. Additive, so no client breaks, but the generated Angular client will regenerate at **Step 22**. | ℹ️ Recorded so the diff is expected rather than investigated |
+| 2026-09-05 | Step 8 | **Nothing scans an upload.** `IVirusScanner` has one implementation, which records `scan_state = 'skipped'` and scans nothing. | ⏳ A ClamAV adapter is the intended second implementation and is not in Step 8's deliverables. `Media:RequireVirusScan` turns the gap into a refusal for a deployment that cannot accept it; the default is off, because a deployment that refused every upload would be useless |
+| 2026-09-05 | Step 8 | **The SMS and WhatsApp rows of `08-integrations.md` §7 are still incomplete**, so both channels are suppressed in production. | ⛔ **Open — needs the client.** Everything above the adapter is built and exercised: templates, DLT registry, queue, retry, preferences, delivery log. The day an account exists it is one adapter and one setting |
+| 2026-09-05 | Step 8 | **The seeded SMS templates carry no DLT template id**, so they are seeded inactive in Production. | ⛔ Same owner as the row above. They are shape-validated, and a test asserts each would satisfy the length rules the moment a registration exists |
+| 2026-09-05 | Step 8 | **A failed one-time code is not retried.** Sensitive messages are sent inline and their bodies are not stored, so there is nothing to re-send. | ℹ️ Deliberate. By the time a retry ran the person would have pressed "resend" and been issued a different code, and holding the plaintext to retry with is what this design refuses to do. The admin retry endpoint refuses these explicitly rather than failing oddly |
+| 2026-09-05 | Step 8 | **`notification_messages` and its partitions are never pruned**, and §8 requires message bodies to be retained for ninety days rather than for ever. | ⏳ **Step 31**, with the audit-log partition maintenance and the refresh-token and OTP retention already parked there. Two years of monthly partitions plus a default partition exist, so nothing fails before then |
+| 2026-09-05 | Step 8 | **`media.files` rows are never pruned, and nothing counts references.** A file deleted while a product still points at it leaves a dangling id; a file nobody points at is never collected. | ⏳ Deliberate for now — deletion is soft so a stored id resolves to nothing rather than to an error (ADR-016). An orphan sweep needs the modules that hold the references to exist, so it belongs at **Step 31** |
+| 2026-09-05 | Step 8 | **imgproxy URLs are unsigned in the development stack**, because `IMGPROXY_KEY` and `IMGPROXY_SALT` are blank. | ⏳ Fine on a loopback, a defect anywhere else: unsigned, imgproxy resizes for anybody who finds it, on this deployment's bandwidth and domain. **Step 32** must generate a pair per environment; `.env.example` and `dev-setup.md` §3 both say so |
+| 2026-09-05 | Step 8 | **A presigned URL is signed for a different host from the one the API writes through**, which needed a second S3 client. | ℹ️ Recorded because it looks like duplication and is not: SigV4 covers the host, so a URL signed for the internal address cannot simply be rewritten. AWS S3 and R2 need no second client, because their addresses already agree |
+| 2026-09-05 | Step 8 | **The configuration binder *appends* to a collection-typed property that already has a value.** A default of four rendition widths plus the same four in `appsettings.json` produced eight, and a response reading "thumb, small, thumb, small". | ℹ️ Found by an integration test, fixed by normalising in the builder rather than by trusting the binder. Worth knowing before the next `IReadOnlyList<T>` setting is added |
+| 2026-09-05 | Step 8 | **A blank `Auth:Tokens:SigningKeys:0:PrivateKeyPem` was parsed as a malformed key**, so a Development stack answered every request with "No supported key formats were found" instead of minting the ephemeral key the compose file documents. | ℹ️ **Fixed in passing**, one line: a blank entry is now treated as absent. Out of Step 8's scope, but it blocked the step's own demonstration and the behaviour was already documented as working |
+| 2026-09-05 | Step 8 | **The admin surface test matched route prefixes with `StartsWith`**, so `/admin/media` counted as part of the `/admin/me` self-service surface and was required to declare no permission. | ℹ️ Fixed to match on whole path segments. The test was right about the rule and wrong about which endpoints it covered — the failure mode of a prefix check nobody had a collision for yet |
+| 2026-09-05 | Step 8 | **`ChannelTest` messages accumulate in the delivery log**, one per press of "send test". | ℹ️ Harmless and deliberate: a test message is a real message, and hiding it would make the log a partial record. Folded into the Step 31 retention work |
+| 2026-09-05 | Step 8 | **The delivery log has no metrics or alert.** "How many messages are we failing to send" is a query an operator has to run. | ⏳ **Step 31** owns observability. The counters are cheap once there is somewhere to send them, and the suppression reason is already the dimension worth grouping by |
+| 2026-09-05 | Step 8 | **A rendition wider than the original is not offered**, so a small logo has fewer variants than a photograph. | ℹ️ Deliberate: upscaling costs bandwidth to deliver a blurrier picture. Recorded because a storefront that assumes four renditions will be surprised by two — **Step 24** should read the list rather than assume it |
+| 2026-09-05 | Step 8 | **`Documents__FontDirectories` decides what an invoice looks like**, and the container image supplies the font at build time rather than the repository carrying one. | ℹ️ A statutory document that renders differently per host is the failure this avoids; the renderer refuses to start rather than emitting empty boxes. Worth re-checking at **Step 32** if the base image changes |
+| 2026-09-05 | Step 8 | **The worker has no health check and publishes no port**, so "is it working" is answered by the queues draining rather than by a probe. | ⏳ Correct for a background host, and it means a stuck worker is invisible until a backlog builds. **Step 31** adds the backlog-age alert that makes it visible |
 
 ---
 
@@ -1977,6 +2084,8 @@ with the User at the step boundary. Do not act on these items without explicit a
 | 2026-09-05 | 7 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `src/backend/Directory.Build.props`, `infra/compose/docker-compose.dev.yml`, `infra/docker/*.Dockerfile`, `tools/ef.ps1`, `tools/ef.sh` | Step 7 closed as DONE. The Identity module built: authentication for all three actor classes, mandatory TOTP, rotating refresh tokens with reuse detection, permission-based deny-by-default authorisation, vendor scope enforced in the data layer, customer profiles and Indian addresses. Sign-in, the bootstrap administrator and the Step 8 OTP-delivery gap documented in the README and `dev-setup.md`; `AUTH_*` added to the environment and wired through compose; eight new troubleshooting rows. **Eight deviations and nineteen Parking Lot items recorded**, and two carried-forward Step 6 items closed or advanced. Two packages added (`Microsoft.AspNetCore.Authentication.JwtBearer`, `Konscious.Security.Cryptography.Argon2`); `Directory.Build.props` silences CA1861 in test projects. One Step 6 endpoint changed: `GET /store/states` now returns each state's id, which an address needs. No change to docs `01`-`10` | — |
 
 | 2026-09-05 | 7A | **`07-security-compliance.md` §1 and §3, `04-api-specification.md` §3.1, `03-database-design.md` §4.2, `08-integrations.md` §3.5 and §7**, `docs/adr/ADR-014` (new), `IMPLEMENTATION_PLAN.md` | **Second specification change since Step 0.** The client has no budget for an SMS gateway or a transactional email provider, so two of the three Step 7 credentials cannot reach a real person in production, and `LoggingOtpDispatcher` is not shippable. External identity providers (Google now, Facebook designed for) added for **customers only**; the paid-provider features moved behind four runtime feature flags rather than being removed; administrator-issued temporary passwords added as the recovery route while email is off. Four decisions taken by the User, recorded in ADR-014, including the knowingly weaker temporary-password control. Step 7A inserted so steps 8-33 keep their numbers | **User** (chose all four options; ADR-014 accepted) |
+| 2026-09-05 | 8 | **`01-architecture.md` §4.1, §7 and §9, `02-domain-model.md` §2, `03-database-design.md` §2, §4.16 and §4.17 (new), `04-api-specification.md` §4, `07-security-compliance.md` §1, `08-integrations.md` §3 and §4**, `docs/adr/ADR-015`, `ADR-016`, `ADR-017` (all new), `IMPLEMENTATION_PLAN.md` | **Third specification change since Step 0, made before any code was written (protocol rule 8).** Three decisions: **ADR-015** replaces QuestPDF with PDFsharp + MigraDoc, because QuestPDF's licence is free only below USD 1 M revenue and that obligation would travel with every redistributed copy; **ADR-016** adds Media as an eighteenth module with its own schema, because eight columns across six schemas already held a `file_id` that pointed at nothing; **ADR-017** makes a channel with no provider *suppressed* rather than failed, which is what lets the platform be operated before the SMS and email rows of §7 are complete. Two decisions taken by the User (PDF library, degraded delivery); ADR-016 taken as a routine architectural judgement and recorded | **User** (ADR-015, ADR-017) |
+| 2026-09-05 | 8 | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `infra/compose/docker-compose.dev.yml`, `infra/docker/{api,migrator}.Dockerfile`, `infra/docker/worker.Dockerfile` (new), `tools/ci.ps1`, `tools/ef.ps1`, `tools/ef.sh` | Step 8 closed as DONE. Two modules built — Media (`media` schema: registry, content-based validation, virus-scan seam, imgproxy renditions, signed private links, PDF pipeline) and Notifications (`notifications` schema: templates, monthly-partitioned delivery log, retrying queue, preferences, DLT registry). A **worker container** was added: it drains the outbox, which nothing in the dev stack had been doing, and the notification queue. An **imgproxy container** was added. Three packages (`AWSSDK.S3`, `MailKit`, `PDFsharp-MigraDoc`); the licensing guard in `Directory.Packages.props` names QuestPDF as a third example. `LoggingOtpDispatcher` deleted. **Seven deviations and sixteen Parking Lot items recorded**, and two carried-forward Step 7 items closed. CI floors raised to 380/14/180 and the worker image added to the scan list; 613 tests, 89.91% line coverage | — |
 | 2026-09-05 | 7A | `IMPLEMENTATION_PLAN.md`, `README.md`, `docs/dev-setup.md`, `.env.example`, `infra/compose/docker-compose.dev.yml` | Step 7A closed as DONE. External identity providers built behind `IExternalIdentityProvider` (Google wired, Facebook configured and disabled); the first outbound HTTP client, with the timeout and host allow-list `07` §3 requires; `IFeatureFlagSource` so a module can declare a flag without writing to the Platform schema, and `RequireFeature` to gate an endpoint on one; temporary passwords with a `password-change-required` challenge. Sign-in, the degraded mode and the recovery route documented in the README and `dev-setup.md`; `AUTH_GOOGLE_*` and `AUTH_EXTERNAL_*` added and wired through compose; six new troubleshooting rows. **Four deviations and twelve Parking Lot items recorded**, two of them `BLOCKED` on the client owning a Google OAuth client and publishing a privacy policy. Docs `01`-`10` were amended by the preceding entry, not by this one | — |
 ---
 

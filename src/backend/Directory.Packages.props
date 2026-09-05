@@ -16,6 +16,10 @@
                             assert with xUnit's built-in Assert, so no assertion library can
                             ever impose a licence on this product.
                             See docs/adr/ADR-012-no-assertion-library.md.
+      * QuestPDF         -> dual-licensed; free only below USD 1M revenue, which is a per-client
+                            obligation a redistributed deployment cannot carry.
+                            Use PDFsharp + MigraDoc (MIT), pinned below.
+                            See docs/adr/ADR-015-pdfsharp-migradoc-for-documents.md.
   -->
 
   <PropertyGroup>
@@ -60,6 +64,28 @@
       nobody remembers to test.
     -->
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Media, storage and documents (Step 8)">
+    <!--
+      The S3 API client. Apache-2.0, by AWS. MinIO, Cloudflare R2 and S3 itself all speak this
+      protocol, which is what makes the move off the VPS a configuration change rather than a
+      rewrite (docs/08-integrations.md #4, ADR-010). The `Minio` .NET SDK would have tied us to
+      one server implementation for no gain.
+    -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.5" />
+    <!--
+      SMTP. MIT, by the author of the MIME parser the .NET ecosystem standardised on.
+      System.Net.Mail.SmtpClient is documented by Microsoft as obsolete for new development and
+      does not support the modern authentication and TLS negotiation an email host expects.
+    -->
+    <PackageVersion Include="MailKit" Version="4.17.0" />
+    <!--
+      PDF generation. MIT since 6.0 - one package carrying both PDFsharp (the renderer) and
+      MigraDoc (the document model: sections, tables with repeating headers, page numbering).
+      See ADR-015 for why this and not QuestPDF.
+    -->
+    <PackageVersion Include="PDFsharp-MigraDoc" Version="6.2.4" />
   </ItemGroup>
 
   <ItemGroup Label="Validation">

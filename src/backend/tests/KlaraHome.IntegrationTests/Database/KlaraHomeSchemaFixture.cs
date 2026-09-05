@@ -4,6 +4,8 @@ using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Persistence.Migrations;
 using KlaraHome.Modules.Identity;
+using KlaraHome.Modules.Media;
+using KlaraHome.Modules.Notifications;
 using KlaraHome.Modules.Platform;
 using KlaraHome.SharedKernel.Time;
 using Microsoft.Extensions.Configuration;
@@ -31,6 +33,22 @@ namespace KlaraHome.IntegrationTests.Database;
 /// </remarks>
 public sealed class KlaraHomeSchemaFixture : IAsyncLifetime
 {
+    /// <summary>
+    /// Every module assembly, exactly as the three hosts compose them.
+    /// </summary>
+    /// <remarks>
+    /// Listed once rather than at each call site, because a module missing here is a module whose
+    /// schema is never migrated — and the failure would surface as a "relation does not exist" in
+    /// whichever test happened to touch it first.
+    /// </remarks>
+    private static readonly System.Reflection.Assembly[] ModuleAssemblies =
+    [
+        typeof(PlatformModule).Assembly,
+        typeof(IdentityModule).Assembly,
+        typeof(MediaModule).Assembly,
+        typeof(NotificationsModule).Assembly,
+    ];
+
     /// <summary>The tenant code every test in this collection runs as.</summary>
     public const string TenantCode = "klarahome-tests";
 
@@ -159,10 +177,10 @@ public sealed class KlaraHomeSchemaFixture : IAsyncLifetime
 
         // The dispatcher and the validators, so the tests drive the same handlers the API does
         // rather than calling into the services underneath them.
-        services.AddMessaging(typeof(PlatformModule).Assembly, typeof(IdentityModule).Assembly);
+        services.AddMessaging(ModuleAssemblies);
 
         services.AddKlaraHomePersistence(configuration, httpContextAvailable: false);
-        services.AddModules(configuration, [typeof(PlatformModule).Assembly, typeof(IdentityModule).Assembly]);
+        services.AddModules(configuration, ModuleAssemblies);
         services.AddSingleton<MigrationRunner>();
 
         return services.BuildServiceProvider();

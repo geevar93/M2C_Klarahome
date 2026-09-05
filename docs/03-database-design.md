@@ -38,7 +38,8 @@
 | `platform` | Platform | Tenants, settings, feature flags, audit, reference data, outbox |
 | `identity` | Identity | Users, roles, sessions, addresses |
 | `vendors` | Vendors | Sellers, KYC, commission plans, pickup locations |
-| `catalog` | Catalog | Taxonomy, products, variants, listings, media |
+| `media` | Media | Stored-file registry: keys, checksums, dimensions, scan state, visibility |
+| `catalog` | Catalog | Taxonomy, products, variants, listings, media links |
 | `inventory` | Inventory | Warehouses, stock, ledger, reservations, POs |
 | `pricing` | Pricing | Price lists, tax rules, promotions, coupons, wallet |
 | `carts` | Cart | Carts, lines, checkout sessions |
@@ -339,13 +340,36 @@ preview and rollback.
 
 **`notification_templates`** — `event_key`, `channel` (`email|sms|whatsapp|push|inapp`),
 `locale`, `subject`, `body`, `provider_template_id` (**DLT template id for Indian SMS**),
-`is_active`, `version`.
-**`notification_messages`** — `template_id`, `recipient`, `channel`, `payload jsonb`,
-`status` (`queued|sent|delivered|failed|bounced`), `provider_message_id`, `attempts`,
-`error`, `sent_at`, `delivered_at`.
+`is_active`, `version`, `category` (the preference bucket it is opted out of), `is_sensitive`
+(a one-time code: its rendered body is never persisted — ADR-017), `is_transactional`
+(a transactional message ignores preferences; a marketing one does not).
+Unique `(tenant_id, event_key, channel, locale)`.
+**`notification_messages`** — `template_id`, `event_key`, `recipient`, `channel`, `payload jsonb`
+(variables, redacted for a sensitive template), `subject`, `body`, `status`
+(`queued|sending|sent|delivered|failed|bounced|suppressed`), `suppression_reason`
+(`NoProvider|ChannelDisabled|OptedOut|NoRecipient|null`), `provider_message_id`, `attempts`,
+`next_attempt_at`, `error`, `sent_at`, `delivered_at`, `user_id`, `correlation_id`.
+Partitioned monthly by `created_at` (§8). Polled with
+`FOR UPDATE SKIP LOCKED` on `(status, next_attempt_at)`, so more than one worker is safe by
+construction; a partitioned table cannot return `xmin`, so it carries no optimistic-concurrency
+token and does not need one.
 **`notification_preferences`** — `user_id`, `category`, per-channel opt-in flags.
+Unique `(tenant_id, user_id, category)`.
 
-### 4.17 `reporting`
+### 4.17 `media`
+
+**`files`** — `storage_key` (the object key, unique per tenant per bucket), `visibility`
+(`public|private`, which selects the bucket), `original_file_name`, `content_type`, `byte_size`,
+`checksum_sha256`, `width`, `height`, `status` (`ready|quarantined|deleted`), `scan_state`
+(`skipped|pending|clean|infected`), `scanned_at`, `owner_type` / `owner_id` (a soft reference back
+to whatever the file belongs to, for the orphan sweep at Step 31), `uploaded_by`.
+Unique `(tenant_id, visibility, storage_key)`; index `(tenant_id, created_at desc)`.
+
+> No foreign key points at this table. Eight columns across six other schemas hold a `file_id`, and
+> a cross-schema foreign key is forbidden (§1) — so those are **soft references**, resolved through
+> `IMediaLibrary`, and a deleted file resolves to nothing rather than breaking a join (ADR-016).
+
+### 4.18 `reporting`
 
 Materialised views refreshed on schedule, plus rollup tables for anything needing history:
 `mv_daily_sales`, `mv_vendor_performance`, `mv_category_sales`, `mv_inventory_ageing`,

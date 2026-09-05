@@ -279,6 +279,21 @@ GET/PUT      /admin/feature-flags
 GET/POST/PUT /admin/users | /roles
 GET          /admin/audit-logs                      ?entityType= &entityId= &actorId=
 GET          /admin/reports/{reportKey}             ?from= &to= &groupBy= &format=json|csv
+
+# Media
+GET          /admin/media                           ?visibility= &contentType= &cursor= &size=
+POST         /admin/media                           (multipart) -> { fileId, url, variants }
+GET          /admin/media/{id}
+GET          /admin/media/{id}/link                 -> { url, expiresAt }  short-lived, private files
+DELETE       /admin/media/{id}                      soft delete; the object is removed too
+
+# Notifications
+GET          /admin/notification-templates          ?channel= &eventKey=
+GET/PUT      /admin/notification-templates/{id}
+GET          /admin/notifications                   ?status= &channel= &eventKey= &from= &to=
+GET          /admin/notifications/{id}
+POST         /admin/notifications/{id}/retry        re-queues a failed message
+POST         /admin/notifications/test              { eventKey, channel, to, variables } - staff only
 ```
 
 ---

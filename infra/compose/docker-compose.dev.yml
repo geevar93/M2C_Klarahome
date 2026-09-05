@@ -340,6 +340,44 @@ services:
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
       Cors__AllowedOrigins__0: https://${DEV_DOMAIN:-klarahome.localhost}
       Cors__AllowedOrigins__1: https://admin.${DEV_DOMAIN:-klarahome.localhost}
+      # Media, storage and documents (Step 8). Path-style addressing because MinIO is reached by a
+      # bare host name; the public base URL is what a browser fetches, so it is the Traefik address
+      # rather than the internal one the API writes through.
+      Storage__Endpoint: http://minio:9000
+      Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
+      Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
+      Storage__Bucket: ${STORAGE_PUBLIC_BUCKET:-media-public}
+      Storage__PrivateBucket: ${STORAGE_PRIVATE_BUCKET:-docs-private}
+      Storage__ForcePathStyle: "true"
+      Storage__PublicBaseUrl: https://s3.${DEV_DOMAIN:-klarahome.localhost}/${STORAGE_PUBLIC_BUCKET:-media-public}
+      # Presigned URLs are signed for the address a browser will use, not the one the API writes
+      # through: SigV4 covers the host, so a URL signed for http://minio:9000 is unreachable and
+      # cannot be rewritten. MinIO accepts it because MINIO_SERVER_URL names the same host.
+      Storage__SignedUrlEndpoint: https://s3.${DEV_DOMAIN:-klarahome.localhost}
+      Media__RequireVirusScan: ${MEDIA_REQUIRE_VIRUS_SCAN:-false}
+      Media__Imgproxy__BaseUrl: https://img.${DEV_DOMAIN:-klarahome.localhost}
+      Media__Imgproxy__SourceBaseUrl: http://minio:9000/${STORAGE_PUBLIC_BUCKET:-media-public}
+      Media__Imgproxy__Key: ${IMGPROXY_KEY:-}
+      Media__Imgproxy__Salt: ${IMGPROXY_SALT:-}
+      # Notifications (Step 8). The dispatcher runs in the worker and nowhere else; every API
+      # replica polling the same queue would multiply the work and contend for the same rows.
+      Notifications__DispatcherEnabled: "false"
+      Email__Provider: ${EMAIL_PROVIDER:-smtp}
+      Email__FromAddress: ${EMAIL_FROM_ADDRESS:-no-reply@klarahome.localhost}
+      Email__FromName: ${EMAIL_FROM_NAME:-}
+      Email__Smtp__Host: ${EMAIL_SMTP_HOST:-mailpit}
+      Email__Smtp__Port: ${EMAIL_SMTP_PORT:-1025}
+      Email__Smtp__UserName: ${EMAIL_SMTP_USERNAME:-}
+      Email__Smtp__Password: ${EMAIL_SMTP_PASSWORD:-}
+      # Mailpit speaks plain SMTP on the compose network. Never false outside development.
+      Email__Smtp__UseTls: ${EMAIL_SMTP_USE_TLS:-false}
+      # Empty, because there is no SMS account (docs/08-integrations.md section 7). Outside
+      # Production an SMS is delivered to Mailpit instead, so a developer can complete an OTP
+      # sign-in; Production records it as Suppressed / NoProvider (ADR-017).
+      Sms__Provider: ${SMS_PROVIDER:-}
+      Sms__ApiKey: ${SMS_API_KEY:-}
+      Sms__SenderId: ${SMS_SENDER_ID:-}
+      Sms__DltEntityId: ${SMS_DLT_ENTITY_ID:-}
     networks:
       - edge
       - data
@@ -362,6 +400,138 @@ services:
       - traefik.http.routers.api.tls=true
       - traefik.http.routers.api.middlewares=security-headers@file,compression@file
       - traefik.http.services.api.loadbalancer.server.port=8080
+
+  # ---------------------------------------------------------------------------
+  # imgproxy - on-the-fly image resizing and re-encoding (Step 8).
+  # docs/08-integrations.md section 4: the storefront asks for exactly the
+  # rendition a viewport needs and imgproxy produces it from the original in the
+  # public bucket. Nothing is stored: the URL is the instruction.
+  #
+  # IMGPROXY_KEY / IMGPROXY_SALT are what stop this being an open image proxy for
+  # anybody who finds the host - bandwidth billed here, under this domain. Leave
+  # them blank in development and URLs are unsigned; SET THEM in any deployed
+  # environment (Step 32), and set the matching Media__Imgproxy__* on the API.
+  # ---------------------------------------------------------------------------
+  imgproxy:
+    <<: *defaults
+    image: ghcr.io/imgproxy/imgproxy:v3.30
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-imgproxy
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      IMGPROXY_BIND: ":8080"
+      IMGPROXY_KEY: ${IMGPROXY_KEY:-}
+      IMGPROXY_SALT: ${IMGPROXY_SALT:-}
+      # Only the media bucket. Without an allow-list imgproxy will fetch and resize
+      # any URL it is handed, which is a server-side request forgery with a CDN in
+      # front of it (docs/07-security-compliance.md section 3).
+      IMGPROXY_ALLOWED_SOURCES: http://minio:9000/${STORAGE_PUBLIC_BUCKET:-media-public}/
+      # 64 megapixels. A decompression bomb is cheap to upload and expensive to
+      # decode; the registry caps dimensions on the way in and this caps them again
+      # on the way out, because imgproxy also serves originals stored before that
+      # limit existed.
+      IMGPROXY_MAX_SRC_RESOLUTION: "64"
+      IMGPROXY_MAX_ANIMATION_FRAMES: "1"
+      IMGPROXY_TTL: "2592000"
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_LOG_FORMAT: json
+    networks:
+      - data
+      - edge
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      - traefik.http.routers.imgproxy.rule=Host(`img.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.imgproxy.entrypoints=websecure
+      - traefik.http.routers.imgproxy.tls=true
+      - traefik.http.services.imgproxy.loadbalancer.server.port=8080
+
+  # ---------------------------------------------------------------------------
+  # Worker - background host (Step 8).
+  # Drains the transactional outbox (Step 4) and the notification queue (Step 8).
+  # It publishes no port and carries no Traefik label: nothing may reach it.
+  #
+  # It is the ONLY host with Outbox__Enabled and Notifications__DispatcherEnabled
+  # set. Two hosts polling the same queues would contend for the same rows for no
+  # gain - the claims are safe (FOR UPDATE SKIP LOCKED), the duplication is waste.
+  # ---------------------------------------------------------------------------
+  worker:
+    <<: *defaults
+    build:
+      context: ../..
+      dockerfile: infra/docker/worker.Dockerfile
+      args:
+        BUILD_CONFIGURATION: ${API_BUILD_CONFIGURATION:-Release}
+    image: klarahome/worker:${API_IMAGE_TAG:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      APP_ROLE: worker
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-klarahome};Username=${POSTGRES_USER:-klarahome};Password=${POSTGRES_PASSWORD:-klarahome_dev_password}
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:-klarahome_dev_password}
+      Tenant__Code: ${TENANT_CODE:-klarahome}
+      Tenant__Name: ${TENANT_NAME:-Klara Home}
+      Tenant__Id: ${TENANT_ID:-}
+      Tenant__DefaultLocale: ${TENANT_DEFAULT_LOCALE:-en-IN}
+      Tenant__DefaultTimeZone: ${TENANT_DEFAULT_TIMEZONE:-Asia/Kolkata}
+      Database__MigrateOnStartup: "false"
+      Database__RunSeeders: "false"
+      Observability__ServiceName: klarahome-worker
+      Observability__OtlpEndpoint: ${OBSERVABILITY_OTLP_ENDPOINT:-}
+      Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
+      Outbox__Enabled: "true"
+      Notifications__DispatcherEnabled: "true"
+      Storage__Endpoint: http://minio:9000
+      Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
+      Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
+      Storage__Bucket: ${STORAGE_PUBLIC_BUCKET:-media-public}
+      Storage__PrivateBucket: ${STORAGE_PRIVATE_BUCKET:-docs-private}
+      Storage__ForcePathStyle: "true"
+      Storage__PublicBaseUrl: https://s3.${DEV_DOMAIN:-klarahome.localhost}/${STORAGE_PUBLIC_BUCKET:-media-public}
+      # Presigned URLs are signed for the address a browser will use, not the one the API writes
+      # through: SigV4 covers the host, so a URL signed for http://minio:9000 is unreachable and
+      # cannot be rewritten. MinIO accepts it because MINIO_SERVER_URL names the same host.
+      Storage__SignedUrlEndpoint: https://s3.${DEV_DOMAIN:-klarahome.localhost}
+      Email__Provider: ${EMAIL_PROVIDER:-smtp}
+      Email__FromAddress: ${EMAIL_FROM_ADDRESS:-no-reply@klarahome.localhost}
+      Email__FromName: ${EMAIL_FROM_NAME:-}
+      Email__Smtp__Host: ${EMAIL_SMTP_HOST:-mailpit}
+      Email__Smtp__Port: ${EMAIL_SMTP_PORT:-1025}
+      Email__Smtp__UserName: ${EMAIL_SMTP_USERNAME:-}
+      Email__Smtp__Password: ${EMAIL_SMTP_PASSWORD:-}
+      Email__Smtp__UseTls: ${EMAIL_SMTP_USE_TLS:-false}
+      Sms__Provider: ${SMS_PROVIDER:-}
+      Sms__ApiKey: ${SMS_API_KEY:-}
+      Sms__SenderId: ${SMS_SENDER_ID:-}
+      Sms__DltEntityId: ${SMS_DLT_ENTITY_ID:-}
+    networks:
+      - data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
 
   # ---------------------------------------------------------------------------
   # Migrator - one-shot database migration job (Step 4).

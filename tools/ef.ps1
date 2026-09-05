@@ -45,6 +45,8 @@ $ErrorActionPreference = 'Stop'
 $Contexts = @{
     'Platform' = 'PlatformDbContext'
     'Identity' = 'IdentityDbContext'
+    'Media' = 'MediaDbContext'
+    'Notifications' = 'NotificationsDbContext'
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

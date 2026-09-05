@@ -84,12 +84,11 @@ public sealed class IdentityModule : IModule
         services.AddScoped<Application.Account.AddressWriter>();
         services.AddScoped<Application.Administration.AdminUserScope>();
 
-        // No SMS or email transport exists until the Notifications module at Step 8, so the code is
-        // written to the log where a developer can read it. The registration is unconditional
-        // because the alternative — a host with no dispatcher at all — fails at the moment somebody
-        // tries to sign in rather than at startup; LoggingOtpDispatcher itself is what says, loudly,
-        // that this is not a production arrangement.
-        services.AddScoped<IOtpDispatcher, LoggingOtpDispatcher>();
+        // Delivery goes through the Notifications module, over INotifier in KlaraHome.Contracts —
+        // this module has no reference to it and does not know it exists. That module also owns the
+        // decision that a one-time code is never persisted, which is what finally retired the
+        // development dispatcher that wrote codes to the log (ADR-017).
+        services.AddScoped<IOtpDispatcher, NotificationOtpDispatcher>();
 
         AddExternalIdentityProviders(services, configuration);
 

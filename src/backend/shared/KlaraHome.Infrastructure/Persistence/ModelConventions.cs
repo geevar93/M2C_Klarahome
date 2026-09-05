@@ -126,8 +126,9 @@ public static class ModelConventions
     private static void ApplyConcurrencyToken(IMutableEntityType entity)
     {
         // An append-only table has no lost update to detect, and a partitioned one cannot return a
-        // system column at all - see IAppendOnly.
-        if (typeof(IAppendOnly).IsAssignableFrom(entity.ClrType))
+        // system column at all - see IAppendOnly and IPartitioned.
+        if (typeof(IAppendOnly).IsAssignableFrom(entity.ClrType)
+            || typeof(IPartitioned).IsAssignableFrom(entity.ClrType))
         {
             return;
         }

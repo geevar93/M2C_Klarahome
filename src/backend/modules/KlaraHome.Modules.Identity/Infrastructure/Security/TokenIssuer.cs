@@ -45,6 +45,18 @@ internal sealed partial class SigningKeyRing
 
         foreach (var configured in options.Value.Tokens.SigningKeys)
         {
+            // A blank entry is treated as absent rather than as a malformed key. Configuration
+            // arrays are populated from environment variables, and a compose file that passes
+            // `SigningKeys__0__PrivateKeyPem: ${AUTH_SIGNING_KEY_PEM:-}` creates the element with an
+            // empty value whether or not anybody set the variable. Parsing that produced "No
+            // supported key formats were found" on the first request of a Development stack — an
+            // opaque failure for a host that is documented to mint an ephemeral key when no key is
+            // configured, which is what the next block does.
+            if (string.IsNullOrWhiteSpace(configured.PrivateKeyPem))
+            {
+                continue;
+            }
+
             var rsa = RSA.Create();
             rsa.ImportFromPem(configured.PrivateKeyPem);
             _keys.Add(new RsaSecurityKey(rsa) { KeyId = configured.KeyId });

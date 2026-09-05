@@ -35,6 +35,8 @@ COPY src/backend/shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj          
 COPY src/backend/shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj src/backend/shared/KlaraHome.Infrastructure/
 COPY src/backend/modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj src/backend/modules/KlaraHome.Modules.Platform/
 COPY src/backend/modules/KlaraHome.Modules.Identity/KlaraHome.Modules.Identity.csproj src/backend/modules/KlaraHome.Modules.Identity/
+COPY src/backend/modules/KlaraHome.Modules.Media/KlaraHome.Modules.Media.csproj       src/backend/modules/KlaraHome.Modules.Media/
+COPY src/backend/modules/KlaraHome.Modules.Notifications/KlaraHome.Modules.Notifications.csproj src/backend/modules/KlaraHome.Modules.Notifications/
 COPY src/backend/host/KlaraHome.Api/KlaraHome.Api.csproj                        src/backend/host/KlaraHome.Api/
 
 # PublishReadyToRun has to be set at restore time as well: it is what pulls in the
@@ -44,6 +46,14 @@ RUN dotnet restore src/backend/host/KlaraHome.Api/KlaraHome.Api.csproj \
     -p:PublishReadyToRun=true
 
 COPY src/backend/ src/backend/
+
+# Fonts for the PDF renderer (Step 8, ADR-015). PDFsharp embeds the glyphs it draws, so it needs a
+# real font file - and the chiselled runtime image has no fonts, no package manager and no shell to
+# install one with. The SDK stage does, so the family is installed here and copied across.
+# DejaVu is unencumbered and covers Latin plus the currency symbols an Indian invoice needs.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN dotnet publish src/backend/host/KlaraHome.Api/KlaraHome.Api.csproj \
     --configuration $BUILD_CONFIGURATION \
@@ -74,6 +84,9 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
 
 WORKDIR /app
 COPY --from=build /app/publish .
+
+# Documents:FontDirectories looks here first. Four files, about 2 MB.
+COPY --from=build /usr/share/fonts/truetype/dejavu/ /app/fonts/
 
 # The chiseled image already defines a non-root `app` user (UID 64198).
 USER $APP_UID

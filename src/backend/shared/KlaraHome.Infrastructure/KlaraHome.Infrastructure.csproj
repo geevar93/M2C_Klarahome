@@ -40,6 +40,13 @@
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
     <PackageReference Include="AspNetCore.HealthChecks.Redis" />
+    <!--
+      Object storage and document rendering (Step 8). Both are transport-level concerns that belong
+      here for the same reason EF Core does: a module states what it wants stored or rendered, and
+      no module names an AWS or a MigraDoc type. See docs/08-integrations.md #4 and ADR-015.
+    -->
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="PDFsharp-MigraDoc" />
   </ItemGroup>
 
   <ItemGroup>

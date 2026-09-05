@@ -69,6 +69,10 @@ rules theatre.
 10 minutes per mobile, 20 per hour per IP, exponential back-off, never logged, never returned
 in any response.
 
+> From Step 8 the code is delivered by the Notifications module and is **not persisted either**:
+> a template marked sensitive has its rendered body handed to the provider and to nothing else, and
+> `notification_messages.payload` keeps the variable names with their values redacted (ADR-017).
+
 **Brute-force & abuse:** progressive lockout, CAPTCHA on repeated failure, device
 fingerprint-lite risk signals feeding COD eligibility and review-posting rules.
 

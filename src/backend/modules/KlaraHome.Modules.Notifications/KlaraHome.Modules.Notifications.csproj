@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Notifications (Step 8): templates, the delivery queue and its retry, per-recipient preferences,
+    the DLT template registry for Indian SMS, and the delivery log that records what could not be
+    sent as well as what was (ADR-017).
+
+    This is the module that retires LoggingOtpDispatcher: a one-time code is rendered from an
+    editable template and delivered without ever being logged or stored.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Notifications</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SMTP. The one transport this platform can deliver on with no paid account, which is why the
+      whole degraded mode rests on it (docs/08-integrations.md #3.3).
+    -->
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

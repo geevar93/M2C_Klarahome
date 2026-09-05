@@ -77,13 +77,14 @@ $TestResultsDir = Join-Path $ArtifactsDir 'test-results'
 # tripwire. It exists so a suite that silently discovers nothing cannot be mistaken for a pass.
 # Raise these when a step adds tests; never lower one to make a build go green.
 $TestSuites = [ordered]@{
-    'UnitTests'         = @{ Minimum = 90; NeedsDocker = $false }
-    'ArchitectureTests' = @{ Minimum = 10; NeedsDocker = $false }
-    'IntegrationTests'  = @{ Minimum = 55; NeedsDocker = $true }
+    'UnitTests'         = @{ Minimum = 380; NeedsDocker = $false }
+    'ArchitectureTests' = @{ Minimum = 14; NeedsDocker = $false }
+    'IntegrationTests'  = @{ Minimum = 180; NeedsDocker = $true }
 }
 
 $DockerImages = [ordered]@{
     'klarahome/api'      = 'infra/docker/api.Dockerfile'
+    'klarahome/worker'   = 'infra/docker/worker.Dockerfile'
     'klarahome/migrator' = 'infra/docker/migrator.Dockerfile'
 }
 

@@ -48,6 +48,18 @@ internal static class PermissionCatalog
     /// <summary>Create roles and change what they grant.</summary>
     public const string IdentityRoleManage = "identity.role.manage";
 
+    /// <summary>Browse the media library and read one file's entry.</summary>
+    public const string MediaFileRead = "media.file.read";
+
+    /// <summary>Upload and delete files.</summary>
+    public const string MediaFileManage = "media.file.manage";
+
+    /// <summary>Read and rewrite notification templates, and send a test message.</summary>
+    public const string NotificationTemplateManage = "notifications.template.manage";
+
+    /// <summary>Read the delivery log and re-queue a message.</summary>
+    public const string NotificationLogRead = "notifications.log.read";
+
     /// <summary>Every declared permission, in the order the admin UI lists them.</summary>
     public static readonly IReadOnlyList<PermissionDescriptor> All =
     [
@@ -58,6 +70,10 @@ internal static class PermissionCatalog
         new(IdentityRoleRead, "Users & access", "List roles and the permissions they grant."),
         new(IdentityRoleManage, "Users & access", "Create roles and change what they grant."),
         new(IdentityRoleAssign, "Users & access", "Grant and revoke a user's roles."),
+        new(MediaFileRead, "Media", "Browse the media library."),
+        new(MediaFileManage, "Media", "Upload files and delete them."),
+        new(NotificationTemplateManage, "Notifications", "Edit the wording of transactional messages."),
+        new(NotificationLogRead, "Notifications", "Read the delivery log and re-queue a message."),
     ];
 
     /// <summary>Whether a code is one this platform declares.</summary>
@@ -139,13 +155,19 @@ internal static class SystemRoles
             "Support",
             RoleScope.Platform,
             "Reads customer and order data to answer queries; acts only where explicitly permitted.",
-            [PermissionCatalog.IdentityUserRead]),
+            [
+                PermissionCatalog.IdentityUserRead,
+
+                // "Did they get the email" is the second question of nearly every support
+                // conversation, and it is a read of masked data.
+                PermissionCatalog.NotificationLogRead,
+            ]),
         new(
             CatalogManager,
             "Catalog manager",
             RoleScope.Platform,
             "Owns the taxonomy and moderates listings.",
-            []),
+            [PermissionCatalog.MediaFileRead, PermissionCatalog.MediaFileManage]),
         new(
             Operations,
             "Operations",

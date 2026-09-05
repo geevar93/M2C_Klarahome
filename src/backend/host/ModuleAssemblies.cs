@@ -26,5 +26,7 @@ internal static class ModuleAssemblies
     [
         typeof(Modules.Platform.PlatformModule).Assembly,
         typeof(Modules.Identity.IdentityModule).Assembly,
+        typeof(Modules.Media.MediaModule).Assembly,
+        typeof(Modules.Notifications.NotificationsModule).Assembly,
     ];
 }

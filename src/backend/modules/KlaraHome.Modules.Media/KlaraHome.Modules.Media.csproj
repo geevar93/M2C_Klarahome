@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Media (Step 8): the stored-file registry and everything around it - validation by content,
+    the virus-scan seam, responsive image derivatives, signed access to private documents, and
+    the pipeline that renders invoices and labels into the private bucket.
+
+    Why this is a module and not a service in KlaraHome.Infrastructure: ADR-016. The S3 wrapper
+    is infrastructure; knowing that a 12 MB TIFF is not a product image is not.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Media</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

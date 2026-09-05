@@ -91,6 +91,19 @@ the same interface.
 
 ## 3. Communications
 
+> **A channel with no provider is *suppressed*, not failed (ADR-017).** Every notification is
+> rendered, queued and recorded whether or not a provider exists to carry it. A message nobody
+> could send ends `Suppressed` with a reason — `NoProvider`, `ChannelDisabled`, `OptedOut`,
+> `NoRecipient` — which does not retry and is not an incident. This is what lets the platform be
+> built and operated before the SMS and email rows of §7 are complete, and what makes "what did we
+> fail to tell people" a query rather than a guess.
+>
+> **A one-time code is never persisted and never logged.** A template marked sensitive has its
+> rendered body passed to the provider and to nothing else; the stored payload holds the variable
+> names with values redacted. Outside Production only, a channel with no provider is routed to the
+> SMTP sender so a developer receives an SMS in Mailpit — which is what retired
+> `LoggingOtpDispatcher` rather than relocating it.
+
 ### 3.1 SMS (India, DLT-regulated)
 
 **Interface:** `ISmsProvider` — `SendAsync(to, templateId, variables)`, delivery-receipt webhook.
@@ -165,6 +178,17 @@ replacement for the second factor. Both are decisions, recorded in ADR-014.
   storefront can request exactly the variant a viewport needs.
 - Private documents are served only via short-lived signed URLs generated after an
   authorisation check — never by a public path.
+- **Validation is server-side and by content, not by extension:** a MIME allow-list per intent, a
+  magic-number check against the declared type, a byte-size cap and a pixel-dimension cap. A file
+  whose bytes disagree with its declared type is refused, because the declaration comes from the
+  caller and the bytes do not.
+- **Virus scanning is a seam, not a promise.** `IVirusScanner` has one implementation in v1 that
+  scans nothing and records `scan_state = 'skipped'`. Setting `Media:RequireVirusScan` makes a
+  deployment refuse uploads while no real scanner is registered, so "we thought it was scanning"
+  cannot happen quietly. A ClamAV adapter is the intended second implementation.
+- **Generated documents** (invoices, credit notes, labels, manifests) are rendered by
+  `IDocumentRenderer` — PDFsharp + MigraDoc, ADR-015 — straight into `docs-private`, registered in
+  `media.files` like any other file, and reached only through a signed URL.
 
 ---
 
@@ -200,9 +224,9 @@ replacement for the second factor. Both are decisions, recorded in ADR-014.
 | Payments | Razorpay | Client | ☐ | ☐ | ☐ | Route enablement to be confirmed |
 | Payouts | Razorpay Route / X | Client | ☐ | ☐ | ☐ | |
 | Logistics | TBC | Client | ☐ | ☐ | ☐ | Aggregator recommended |
-| SMS | TBC | Client | ☐ | ☐ | ☐ | DLT entity + templates needed. **Deferred:** no budget; `identity.mobile-otp-login` is off |
-| WhatsApp | TBC | Client | ☐ | ☐ | ☐ | Optional for v1 |
-| Email | TBC | Client | ☐ | ☐ | ☐ | Domain DNS access required. **Deferred:** no budget; `identity.email-verification` and `identity.password-reset-email` are off |
+| SMS | TBC | Client | ☐ | ☐ | ☐ | DLT entity + templates needed. **Deferred:** no budget. Pipeline built at Step 8; the channel is `Suppressed / NoProvider` until a row here is complete (ADR-017) |
+| WhatsApp | TBC | Client | ☐ | ☐ | ☐ | Optional for v1. Same state as SMS: interface and templates exist, no adapter, channel suppressed |
+| Email | ✅ **SMTP** | Client | ✅ Mailpit | ☐ | — | The one channel that needs no paid account: any SMTP host will do, Mailpit in development. A managed provider (SES/Postmark) is still wanted for deliverability, DKIM and bounce handling, and remains **deferred: no budget** |
 | Identity provider | Google | Client | ☐ | ☐ | — | OAuth client + consent screen. Needs the published privacy policy the screen links to |
 | VPS | TBC | Client | — | ☐ | ☐ | India region recommended |
 | Domain / DNS | TBC | Client | — | ☐ | ☐ | |

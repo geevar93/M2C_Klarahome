@@ -149,6 +149,7 @@ src/backend/
   modules/
     KlaraHome.Modules.Platform/
     KlaraHome.Modules.Identity/
+    KlaraHome.Modules.Media/
     KlaraHome.Modules.Vendors/
     KlaraHome.Modules.Catalog/
     KlaraHome.Modules.Inventory/
@@ -205,7 +206,7 @@ KlaraHome.Modules.Catalog/
 | Logging | Serilog → JSON stdout → Promtail/Loki | Container-native |
 | Telemetry | OpenTelemetry (traces, metrics, logs) | Vendor-neutral; Prometheus + Tempo on the VPS |
 | Auth | ASP.NET Core Identity + self-issued JWT; OpenIddict if a standards-compliant auth server is later required | Fewest moving parts for v1, documented upgrade path |
-| PDF | QuestPDF | Invoices, credit notes, manifests |
+| PDF | **PDFsharp 6 + MigraDoc** (MIT) | Invoices, credit notes, manifests. QuestPDF was the original choice and is dual-licensed above USD 1 M revenue, which a redistributed deployment cannot carry — see ADR-015 |
 | Testing | xUnit, FluentAssertions, Testcontainers, NSubstitute, Playwright, k6 | — |
 
 > **Licensing note:** MediatR and AutoMapper moved to commercial licences in 2024–25. Both are
@@ -326,6 +327,9 @@ KlaraHome/
 | ADR-008 | Razorpay hosted checkout only — no card data on our servers (SAQ-A) | Accepted |
 | ADR-009 | Avoid commercially licensed libraries (MediatR, AutoMapper) | Accepted |
 | ADR-010 | MinIO with the S3 API, so cloud object storage is a config swap | Accepted |
+| ADR-015 | PDFsharp + MigraDoc for generated documents, not QuestPDF | Accepted (Step 8) |
+| ADR-016 | Media is its own module, with its own `media` schema | Accepted (Step 8) |
+| ADR-017 | A notification channel with no provider is suppressed, not failed | Accepted (Step 8) |
 
 ADRs are maintained in `docs/adr/` from Step 1 onward; any change to the above requires a new
 ADR and User approval.

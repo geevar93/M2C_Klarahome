@@ -74,16 +74,24 @@ waits for every service to report **healthy**, and prints the URLs.
 | MinIO — console | same | `http://127.0.0.1:9001` | `https://minio.klarahome.localhost` |
 | Mailpit — SMTP | `axllent/mailpit:v1.31.0` | `127.0.0.1:1025` | — |
 | Mailpit — UI | same | `http://127.0.0.1:8025` | `https://mail.klarahome.localhost` |
+| imgproxy | `ghcr.io/imgproxy/imgproxy:v3.30` | — | `https://img.klarahome.localhost` |
 | Traefik dashboard | `traefik:v3.6.25` | — | `https://traefik.klarahome.localhost` |
 | **API** | `klarahome/api:dev` (built locally) | — | `https://api.klarahome.localhost` |
+| **Worker** | `klarahome/worker:dev` (built locally) | — | none, by design |
 
 The API deliberately publishes **no host port**: Traefik is the only way in, exactly as on the
-VPS. Its useful endpoints:
+VPS. The **worker** publishes no port and carries no Traefik label at all: nothing may reach it. It
+drains the transactional outbox and the notification queue, and it is the only host with
+`Outbox__Enabled` and `Notifications__DispatcherEnabled` set — two hosts polling the same queues
+would contend for the same rows for no gain. `docker logs klarahome-dev-worker` is where a message
+that will not send explains itself.
+
+The API's useful endpoints:
 
 | Endpoint | Purpose |
 |---|---|
 | `/health/live` | Liveness. Answers while the process is running; used by the container HEALTHCHECK |
-| `/health/ready` | Readiness. Also probes PostgreSQL and Redis |
+| `/health/ready` | Readiness. Also probes PostgreSQL, Redis and both object-storage buckets |
 | `/api/v1/meta` | API version, build version, environment, server time |
 | `/openapi/v1.json` | The OpenAPI 3.1 document — the contract the Angular client is generated from |
 | `/scalar` | Browsable API reference. Non-production only |
@@ -104,6 +112,17 @@ setup. Production credentials never live in a file in this repository — see
 Buckets are created automatically by the one-shot `minio-init` container:
 `media-public` (anonymous read) and `docs-private` (private, versioning on), per
 [`08-integrations.md`](08-integrations.md) §4.
+
+**imgproxy is unsigned locally.** `IMGPROXY_KEY` and `IMGPROXY_SALT` are blank in `.env.example`, so
+variant URLs carry `/insecure/`. That is fine on a loopback and is a defect anywhere else: unsigned,
+imgproxy resizes for anybody who finds it. Generate a pair with `openssl rand -hex 32` and set both
+the container's variables and the API's `Media__Imgproxy__Key` / `__Salt` — they must match, because
+the API signs the URL and imgproxy verifies it.
+
+**Presigned URLs are signed for `https://s3.klarahome.localhost`, not for `http://minio:9000`.**
+SigV4 covers the host, so a URL signed for the address the API writes through would be unreachable
+from a browser and could not be rewritten. `Storage__SignedUrlEndpoint` is what makes the two
+differ; MinIO accepts it because `MINIO_SERVER_URL` names the same host.
 
 ---
 
@@ -201,10 +220,9 @@ redirect URI, then set `AUTH_GOOGLE_ENABLED=true` with the client id and secret.
 real Google from the dev stack — the only outbound host the API is allowed to reach is the provider
 allow-list, so nothing else is reachable even by mistake.
 
-**One-time codes are written to the API log** while the flags are on, because there is no SMS or
-email transport until the Notifications module at Step 8. `docker logs klarahome-dev-api | grep "DEVELOPMENT ONLY"` shows the
-customer OTP or the reset link token. This dispatcher is what
-`docs/07-security-compliance.md` §3 forbids in production, and replacing it is a Step 8 deliverable.
+**One-time codes are no longer written to any log** (Step 8). They are rendered from a template,
+handed straight to a provider, and the delivery-log row keeps neither the body nor any variable's
+value. See §4.4 for where to read them locally.
 
 `AUTH_REFRESH_COOKIE_SECURE=false` in the dev stack: a browser will not return a `Secure` cookie
 over plain http, and sign-in would appear to fail with nothing in any log. It is never false in
@@ -214,6 +232,58 @@ staging or production.
 > but not a change of code — every row already written keeps the old id and becomes invisible.
 > Set it explicitly on anything holding data. The `platform-tenant` readiness check reports that
 > mismatch rather than letting the API serve an empty catalogue.
+
+### Media, documents and notifications (Step 8)
+
+**Uploading.** `POST /api/v1/admin/media` takes a multipart `file` and answers `201` with the file's
+id, its public URL and its renditions. `?visibility=private` puts it in `docs-private` instead,
+where it has no URL at all and is reached only through `GET /admin/media/{id}/link`.
+
+```bash
+curl -k -X POST https://api.klarahome.localhost/api/v1/admin/media \
+     -H "Authorization: Bearer $TOKEN" -F file=@hero.png
+```
+
+The bytes decide what a file is. A `.png` carrying a script is refused with
+`422 MEDIA_UNSUPPORTED_TYPE`, and the extension a download is offered under comes from the content
+rather than from the upload. Nothing scans uploads: `scanState` reads `Skipped`, and
+`Media__RequireVirusScan=true` refuses uploads rather than accepting them unchecked.
+
+**Reading mail.** Everything this stack sends goes to Mailpit —
+[`https://mail.klarahome.localhost`](https://mail.klarahome.localhost) or
+`http://127.0.0.1:8025`. Nothing leaves the machine.
+
+**Reading an SMS.** There is no SMS account (`08-integrations.md` §7), so outside Production an SMS
+is delivered to Mailpit instead, addressed to `<digits>@sms.invalid` with a subject naming the
+number and the event. **This is how you complete a mobile-OTP sign-in locally**, and it is why the
+code is neither logged nor stored:
+
+```bash
+POST /api/v1/store/auth/otp/request   { "mobile": "+919876500456" }
+# then open https://mail.klarahome.localhost and read 919876500456@sms.invalid
+```
+
+In Production that same message is recorded as `Suppressed / NoProvider` and nothing is sent — the
+development route is bound to the environment, not to a setting.
+
+**Watching the queue.** The worker polls every five seconds. A message is `Queued`, then `Sent`;
+a one-time code skips the queue and is sent inline, because it cannot wait for a poll and its body
+must not be stored for one.
+
+```bash
+# What was sent, what was not, and why. Recipients are masked.
+GET /api/v1/admin/notifications?status=Suppressed
+GET /api/v1/admin/notifications/{id}
+
+# Prove a channel end to end, through the real pipeline rather than round it.
+POST /api/v1/admin/notifications/test   { "channel": "Email", "to": "you@example.com" }
+```
+
+**Editing what a message says.** Templates are data: `GET /admin/notification-templates` lists them
+with the placeholders each expects, and `PUT` rewrites one. A missing placeholder value fails the
+message and names what was missing rather than rendering a gap. An **active SMS template must carry
+its DLT id** — outside Production they are seeded active without one because no operator is
+involved, but the editor refuses to activate one and the `dltViolation` field says why.
 
 ---
 
@@ -473,6 +543,17 @@ A reset drops the database, so run the migrator again before expecting the API t
 | `404` from `https://api.klarahome.localhost` | Traefik has not picked the router up yet, or the container is not on the `edge` network | `dev logs traefik`, then check the dashboard router list |
 | `/health/ready` is `Unhealthy` but `/health/live` is fine | PostgreSQL or Redis is down | That is the probe working. `dev status` and restart the offending service |
 | API image build fails on an analyzer warning | The image build runs with warnings-as-errors, as CI does | Fix the warning; `dotnet build` locally shows the same message as a warning |
+| A notification sits at `Queued` for ever | The worker is not running; the API never drains the queue | `dev status`, then `docker logs klarahome-dev-worker`. Only the worker has `Notifications__DispatcherEnabled` |
+| A mobile OTP never arrives | There is no SMS account, and outside Production the message goes to the mail catcher instead | Open `https://mail.klarahome.localhost` and read `<digits>@sms.invalid` |
+| An SMS is `Suppressed / NoProvider` | Correct, and expected: no SMS account is provisioned (ADR-017) | Nothing to fix. Set `Sms__Provider` and write the adapter when an account exists |
+| An SMS is `Suppressed / NoTemplate` | The template for that event and channel is inactive — in Production, because it has no DLT id | Register the id in `PUT /admin/notification-templates/{id}` and activate it |
+| A message is `Failed` with "missing values for: x" | The caller did not supply a placeholder the template uses | Fix the caller. A missing value fails the message rather than rendering a gap |
+| `MEDIA_UNSUPPORTED_TYPE` for a file that opens fine | The bytes are not what the extension claims, or it is a format not on the allow-list (JPEG, PNG, GIF, WebP; PDF for documents) | Convert it. The declared type is never trusted |
+| `MEDIA_STORAGE_UNAVAILABLE` | MinIO is down, or `Storage__AccessKey` / `__SecretKey` are unset | `dev status`; `/health/ready` names the buckets it could not reach |
+| An imgproxy URL answers `422` | The stored original is not a decodable image — a truncated upload, usually | Re-upload. imgproxy reports the reason in `docker logs klarahome-dev-imgproxy` |
+| An imgproxy URL answers `403` | The signature does not match | `IMGPROXY_KEY`/`IMGPROXY_SALT` and `Media__Imgproxy__Key`/`__Salt` must be the same pair |
+| A signed document link answers `SignatureDoesNotMatch` | The URL was signed for a different host from the one it was fetched over | `Storage__SignedUrlEndpoint` must be the address the browser uses, and MinIO's `MINIO_SERVER_URL` must agree |
+| `No usable font was found for PDF rendering` | The container has no font family, or `Documents__FontDirectories` points somewhere empty | The image copies DejaVu into `/app/fonts` at build time; rebuild it, or point the setting at a directory that has one |
 | `dotnet test` reports `Zero tests ran` but the suites have tests | The Microsoft.Testing.Platform runner talks to the test host over a loopback JSON-RPC connection; a firewall or endpoint-security agent can block it silently, and the orchestrator reports zero rather than an error | Run the test executable directly — it is the same runner without the RPC hop: `./tests/KlaraHome.UnitTests/bin/Debug/net10.0/KlaraHome.UnitTests.exe`. Verify with `<exe> --help`: if that works, the tests are fine and only the orchestrator is blocked |
 | `Cannot load library libgssapi_krb5.so.2` from the migrator | Npgsql probes for Kerberos; a chiseled image has no krb5 | Harmless. Authentication proceeds over SCRAM. Not a failure and not worth an image change — the `-extra` chiseled variant does not carry krb5 either |
 | `relation "platform.outbox_messages" does not exist` | The migrator has not been run against this database | Run the `migrator` job (§6). After `dev reset` it always has to be run again |

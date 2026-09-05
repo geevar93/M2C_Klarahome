@@ -98,3 +98,26 @@ public interface IVendorScoped
     /// <summary>The owning seller, or null for a row that belongs to the platform itself.</summary>
     Guid? VendorId { get; }
 }
+
+/// <summary>
+/// A row in a PostgreSQL <em>partitioned</em> table. Declaring it removes the optimistic-concurrency
+/// convention, because the database cannot supply one: PostgreSQL refuses to return a system column
+/// from a partitioned table, so an <c>INSERT ... RETURNING xmin</c> — which is what mapping
+/// <c>xmin</c> as a concurrency token produces — fails outright with
+/// <c>0A000: cannot retrieve a system column in this context</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="IAppendOnly"/> covers the same ground for a table that is never updated, and the audit
+/// trail is both. This marker exists for the table that is partitioned <em>and</em> updated —
+/// <c>notifications.notification_messages</c>, whose rows move from queued to sent — where the
+/// append-only marker would be a lie.
+/// </para>
+/// <para>
+/// A partitioned, updatable table needs a different answer to the lost-update problem than a
+/// version column. The notification queue's answer is pessimistic: rows are claimed with
+/// <c>FOR UPDATE SKIP LOCKED</c>, so two dispatchers never hold the same row and there is no
+/// concurrent update to lose.
+/// </para>
+/// </remarks>
+public interface IPartitioned;

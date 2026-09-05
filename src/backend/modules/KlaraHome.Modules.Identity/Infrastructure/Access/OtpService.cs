@@ -13,10 +13,10 @@ namespace KlaraHome.Modules.Identity.Infrastructure.Access;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The seam the Notifications module fills at Step 8. Until it exists there is no SMS provider,
-/// no DLT template registry and no email transport, and inventing a private one here would be
-/// work thrown away — so the module states the dependency as an interface and ships an
-/// implementation that is honest about what it does.
+/// The seam the Notifications module fills. <see cref="NotificationOtpDispatcher"/> is the only
+/// implementation: it renders an operator-editable template and hands the result to a provider,
+/// and because every template these events map to is marked sensitive, the code is not stored on
+/// the way out either (ADR-017).
 /// </para>
 /// <para>
 /// The code is passed to the dispatcher and to nothing else. It is never returned in a response,
@@ -38,41 +38,6 @@ internal interface IOtpDispatcher
         OtpPurpose purpose,
         string code,
         CancellationToken cancellationToken);
-}
-
-/// <summary>
-/// The Development dispatcher: writes the code to the log so a developer can sign in, and refuses
-/// to exist anywhere else.
-/// </summary>
-/// <remarks>
-/// Registered only outside Production, and the module says so at startup rather than leaving it to
-/// be discovered. Logging an OTP is precisely what §3's logging hygiene forbids — that is why this
-/// class cannot be reached by a deployed host, and why replacing it is a Step 8 deliverable rather
-/// than an optional improvement.
-/// </remarks>
-/// <param name="logger">Where the code is written.</param>
-internal sealed partial class LoggingOtpDispatcher(ILogger<LoggingOtpDispatcher> logger) : IOtpDispatcher
-{
-    public Task DispatchAsync(
-        string destination,
-        OtpChannel channel,
-        OtpPurpose purpose,
-        string code,
-        CancellationToken cancellationToken)
-    {
-        OtpDispatched(logger, purpose.ToString(), channel.ToString(), destination, code);
-        return Task.CompletedTask;
-    }
-
-    [LoggerMessage(EventId = 1402, Level = LogLevel.Warning,
-        Message = "DEVELOPMENT ONLY — {OtpPurpose} code for {OtpChannel} {OtpDestination} is {OtpCode}. "
-                  + "The Notifications module replaces this dispatcher at Step 8.")]
-    private static partial void OtpDispatched(
-        ILogger logger,
-        string otpPurpose,
-        string otpChannel,
-        string otpDestination,
-        string otpCode);
 }
 
 /// <summary>Why a code could not be issued.</summary>

@@ -13,6 +13,8 @@
     <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Identity/KlaraHome.Modules.Identity.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Media/KlaraHome.Modules.Media.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Notifications/KlaraHome.Modules.Notifications.csproj" />
   </ItemGroup>
 
   <ItemGroup>

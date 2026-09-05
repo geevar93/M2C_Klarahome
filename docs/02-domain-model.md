@@ -52,6 +52,7 @@ graph LR
 |---|---|---|
 | **Platform** | Tenant, store settings, feature flags, audit log, reference data (states, PIN codes, HSN) | Anything transactional |
 | **Identity** | Users, credentials, sessions, roles, permissions, customer profile, addresses | Vendor business data |
+| **Media** | Stored files: the registry, validation, virus-scan state, image derivatives, signed access, generated documents (ADR-016) | What a file *means* — the module that stores its id owns that |
 | **Vendors** | Seller entity, KYC, commission plans, vendor settings, pickup locations | Vendor's products (Catalog owns them) |
 | **Catalog** | Categories, brands, attributes, products, variants, vendor listings/offers, media links, compliance fields | Stock quantity, price calculation |
 | **Inventory** | Warehouses, stock ledger, reservations, purchase orders, GRN, stock takes | Product definition |
@@ -65,7 +66,7 @@ graph LR
 | **Search** | Search projection, facets, synonyms, query log | Source-of-truth catalog data |
 | **Content** | Pages, blocks, banners, menus, collections, redirects, SEO metadata | Products |
 | **Reviews** | Reviews, ratings, Q&A, wishlist, back-in-stock subscriptions | Orders |
-| **Notifications** | Templates, channels, delivery log, preferences | Business events |
+| **Notifications** | Templates, channels, delivery log, preferences, the DLT template registry | Business events; the *decision* to notify (a module publishes a fact, this one renders it) |
 | **Reporting** | Read models, aggregates, exports | Writes to any other context |
 
 ---
