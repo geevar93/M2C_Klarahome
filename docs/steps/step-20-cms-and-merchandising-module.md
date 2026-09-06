@@ -40,8 +40,10 @@
 
 The storefront a merchandiser can change without a deployment. One module,
 `KlaraHome.Modules.Content`, owning the `content` schema and nine tables; **51 endpoints**, five
-permissions, five feature flags, three event subscriptions and two background workers. Build clean at
-**0 warnings**; **910 unit tests green** (102 new).
+permissions, five feature flags, three event subscriptions and two background workers. This module
+compiles with **0 warnings**; **910 unit tests green** (102 new). A clean solution rebuild emits
+eight warnings in total, all of them the pre-existing ones in `KlaraHome.Modules.Payments` that the
+Parking Lot has carried since Step 19 and that **Step 28A** owns.
 
 ### What was built
 
