@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pricing (Step 12): what a basket costs, and why.
+
+    Price lists with their windows, vendors and quantity tiers; the GST engine that resolves a rate
+    from an HSN, decides the place of supply and back-calculates the split out of a tax-inclusive
+    price; the promotion engine and its stacking, scoping and usage limits; the store-credit wallet;
+    and the one quote engine that cart, checkout, orders and invoices all share. It owns *what it
+    costs*. What a thing is belongs to Catalog, how many there are to Inventory, and who sells it to
+    Vendors - this module holds a plain listing_id and asks those modules across a contract.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Pricing</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

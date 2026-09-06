@@ -314,10 +314,20 @@ services:
       Auth__Tokens__SigningKeys__0__PrivateKeyPem: ${AUTH_SIGNING_KEY_PEM:-}
       Auth__Encryption__CurrentKeyId: ${AUTH_ENCRYPTION_KEY_ID:-dev}
       Auth__Encryption__Keys__dev: ${AUTH_ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
+      # Column encryption (Step 9), for values the application must read back but must not store in
+      # the clear - a seller's bank account number. Same dev key material as Auth__Encryption above
+      # so a developer has one key to rotate, and a separate section because it protects business
+      # data rather than credentials. Generate a distinct pair per environment at Step 32.
+      Encryption__CurrentKeyId: ${ENCRYPTION_KEY_ID:-dev}
+      Encryption__Keys__dev: ${ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
       # False because the dev stack is reachable over plain http through Traefik's local
       # certificate; a browser will not return a Secure cookie over http and sign-in would appear
       # to fail silently. Never false in staging or production.
       Auth__Tokens__RefreshCookieSecure: ${AUTH_REFRESH_COOKIE_SECURE:-false}
+      # The anonymous basket's cookie (Step 13). Secure for the same reason and with the same
+      # exception as the refresh cookie above: a browser will not return a Secure cookie over the
+      # dev stack's plain http, and the shopper's basket would silently empty on every request.
+      Carts__CartCookieSecure: ${CART_COOKIE_SECURE:-false}
       Auth__Bootstrap__Email: ${AUTH_BOOTSTRAP_EMAIL:-}
       Auth__Bootstrap__Password: ${AUTH_BOOTSTRAP_PASSWORD:-}
       # Identity providers (Step 7A). Unconfigured by default: a provider with no client id is
@@ -359,6 +369,26 @@ services:
       Media__Imgproxy__SourceBaseUrl: http://minio:9000/${STORAGE_PUBLIC_BUCKET:-media-public}
       Media__Imgproxy__Key: ${IMGPROXY_KEY:-}
       Media__Imgproxy__Salt: ${IMGPROXY_SALT:-}
+      # Payments (Step 15). Blank credentials are the shippable state: with no key pair the gateway
+      # adapter reports itself unusable, a prepaid placement answers 503 naming the reason, and cash
+      # on delivery keeps working. Filling RAZORPAY_* into .env is the whole of turning it on.
+      # The key id is publishable by design - it is what the browser widget is initialised with.
+      # The other two never leave the server.
+      Razorpay__KeyId: ${RAZORPAY_KEY_ID:-}
+      Razorpay__KeySecret: ${RAZORPAY_KEY_SECRET:-}
+      Razorpay__WebhookSecret: ${RAZORPAY_WEBHOOK_SECRET:-}
+      Razorpay__AccountNumber: ${RAZORPAY_ACCOUNT_NUMBER:-}
+      Razorpay__RouteEnabled: ${RAZORPAY_ROUTE_ENABLED:-false}
+      Razorpay__BaseUrl: ${RAZORPAY_BASE_URL:-https://api.razorpay.com/v1/}
+      Payments__Provider: ${PAYMENTS_PROVIDER:-razorpay}
+      Payments__RetryWindowHours: ${PAYMENTS_RETRY_WINDOW_HOURS:-24}
+      Payments__AutoRefundOnCancellation: ${PAYMENTS_AUTO_REFUND_ON_CANCELLATION:-true}
+      # The three payment loops run in the worker and nowhere else, for the same reason the outbox
+      # and notification dispatchers do: every API replica polling would multiply the work and race
+      # for the same rows. The webhook endpoint itself is served here - it only stores and answers.
+      Payments__EventProcessorEnabled: "false"
+      Payments__ReconciliationEnabled: "false"
+      Payments__SettlementIngestionEnabled: "false"
       # Notifications (Step 8). The dispatcher runs in the worker and nowhere else; every API
       # replica polling the same queue would multiply the work and contend for the same rows.
       Notifications__DispatcherEnabled: "false"
@@ -502,6 +532,23 @@ services:
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
       Outbox__Enabled: "true"
       Notifications__DispatcherEnabled: "true"
+      # Payments (Step 15). Blank credentials are the shippable state: with no key pair the gateway
+      # adapter reports itself unusable, a prepaid placement answers 503 naming the reason, and cash
+      # on delivery keeps working. Filling RAZORPAY_* into .env is the whole of turning it on.
+      # The key id is publishable by design - it is what the browser widget is initialised with.
+      # The other two never leave the server.
+      Razorpay__KeyId: ${RAZORPAY_KEY_ID:-}
+      Razorpay__KeySecret: ${RAZORPAY_KEY_SECRET:-}
+      Razorpay__WebhookSecret: ${RAZORPAY_WEBHOOK_SECRET:-}
+      Razorpay__AccountNumber: ${RAZORPAY_ACCOUNT_NUMBER:-}
+      Razorpay__RouteEnabled: ${RAZORPAY_ROUTE_ENABLED:-false}
+      Razorpay__BaseUrl: ${RAZORPAY_BASE_URL:-https://api.razorpay.com/v1/}
+      Payments__Provider: ${PAYMENTS_PROVIDER:-razorpay}
+      Payments__RetryWindowHours: ${PAYMENTS_RETRY_WINDOW_HOURS:-24}
+      Payments__AutoRefundOnCancellation: ${PAYMENTS_AUTO_REFUND_ON_CANCELLATION:-true}
+      Payments__EventProcessorEnabled: "true"
+      Payments__ReconciliationEnabled: "true"
+      Payments__SettlementIngestionEnabled: "true"
       Storage__Endpoint: http://minio:9000
       Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
@@ -581,6 +628,12 @@ services:
       Auth__Bootstrap__Password: ${AUTH_BOOTSTRAP_PASSWORD:-}
       Auth__Encryption__CurrentKeyId: ${AUTH_ENCRYPTION_KEY_ID:-dev}
       Auth__Encryption__Keys__dev: ${AUTH_ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
+      # Column encryption (Step 9), for values the application must read back but must not store in
+      # the clear - a seller's bank account number. Same dev key material as Auth__Encryption above
+      # so a developer has one key to rotate, and a separate section because it protects business
+      # data rather than credentials. Generate a distinct pair per environment at Step 32.
+      Encryption__CurrentKeyId: ${ENCRYPTION_KEY_ID:-dev}
+      Encryption__Keys__dev: ${ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
       Database__RunSeeders: ${DATABASE_RUN_SEEDERS:-true}
       Observability__ServiceName: klarahome-migrator
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}

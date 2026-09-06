@@ -20,5 +20,5 @@ onward are written here as full files, at the step that raises them.
 | [017](ADR-017-unprovisioned-channels-are-suppressed.md) | A notification channel with no provider is suppressed, not failed | ✅ Accepted | Step 8 |
 
 > **Backlog:** ADR-001 – ADR-010 exist only as table rows. Expanding them into individual files
-> is in the Parking Lot of `../IMPLEMENTATION_PLAN.md`; it is documentation debt, not a decision
+> is in `../PARKING_LOT.md`; it is documentation debt, not a decision
 > gap — the decisions themselves are recorded and accepted.

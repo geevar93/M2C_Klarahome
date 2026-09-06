@@ -19,6 +19,13 @@ context_for() {
         Identity) echo "IdentityDbContext" ;;
         Media) echo "MediaDbContext" ;;
         Notifications) echo "NotificationsDbContext" ;;
+        Vendors) echo "VendorsDbContext" ;;
+        Catalog) echo "CatalogDbContext" ;;
+        Inventory) echo "InventoryDbContext" ;;
+        Pricing) echo "PricingDbContext" ;;
+        Carts) echo "CartsDbContext" ;;
+        Orders) echo "OrdersDbContext" ;;
+        Payments) echo "PaymentsDbContext" ;;
         *) return 1 ;;
     esac
 }

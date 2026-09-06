@@ -6,13 +6,17 @@ other businesses on separate infrastructure.
 **Status:** Specification approved (Step 0). Execution is under way — see the Master Status
 Table in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for what is actually done.
 
+Steps 9-28 run as an **MVP build sprint**: production code is written, integration tests are
+deferred to Step 29 and recorded in [TEST_DEBT.md](TEST_DEBT.md). See
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §3.
+
 ---
 
 ## Read in this order
 
 | # | Document | What it answers |
 |---|---|---|
-| ⭐ | **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** | **The 33-step gated execution plan and live status. Read this first and last, every time.** |
+| ⭐ | **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** | **The gated execution plan and live status - the tracker. Read this first and last, every time. Step details live in [steps/](steps/), one file per step; open only the step you are working on.** |
 | 01 | [01-architecture.md](01-architecture.md) | System architecture, containers, module boundaries, technology choices, ADRs |
 | 02 | [02-domain-model.md](02-domain-model.md) | Bounded contexts, aggregates, invariants, state machines, integration events, India-specific domain rules |
 | 03 | [03-database-design.md](03-database-design.md) | PostgreSQL schema design, tables, indexes, constraints, migrations, retention |
@@ -32,6 +36,18 @@ Written as the corresponding step lands, not up front.
 |---|---|---|
 | [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting. Extended at Step 3 with the API container |
 | [ci-pipeline.md](ci-pipeline.md) | Step 5 | The quality gates: what each one checks, running them locally with `tools/ci.sh`, how coverage is measured and enforced, the GitHub branch-protection setup they need, and what is deliberately deferred to a later step |
+
+### Plan files and ledgers
+
+Split out of `IMPLEMENTATION_PLAN.md` so a working turn loads the tracker and one step card,
+not the whole history.
+
+| File | What it holds | Render when |
+|---|---|---|
+| [steps/](steps/) | One file per step: objective, deliverables, acceptance criteria, outcome notes | You are working on **that** step - never the folder as a whole |
+| [PARKING_LOT.md](PARKING_LOT.md) | Out-of-step discoveries and their decisions | Closing a step; reviewing debt |
+| [CHANGE_LOG.md](CHANGE_LOG.md) | Every specification change and who approved it | A design doc changes |
+| [TEST_DEBT.md](TEST_DEBT.md) | Every test deferred during the build sprint, and Step 29's worklist | Deferring a test; working Step 29 |
 
 ### Architecture decision records
 
@@ -60,9 +76,9 @@ Written as the corresponding step lands, not up front.
 
 ## ⛔ The working agreement
 
-**After completing any step, implementation stops.** The implementer updates
-`IMPLEMENTATION_PLAN.md` (status, completion date, outcome notes) and then **asks the User for
-explicit permission** before starting the next step. No step is started, scaffolded, or
+**After completing any step, implementation stops.** The implementer updates the tracker
+(`IMPLEMENTATION_PLAN.md`: status and completion date) **and** that step's file in `steps/`
+(outcome notes), then **asks the User for explicit permission** before starting the next step. No step is started, scaffolded, or
 "prepared" ahead of approval.
 
 The full protocol is Section "⛔ MANDATORY EXECUTION PROTOCOL" in
@@ -85,4 +101,4 @@ items 2–3 become blocking at Step 15 (Razorpay) and Step 16 (logistics).
 6. Confirm the legal entity details, GSTIN and grievance officer for compliance pages.
 7. Have the tax treatment (GST, TCS §52, TDS §194-O) reviewed by the client's chartered
    accountant.
-8. Confirm the target go-live date so the 33 steps can be sequenced against it.
+8. Confirm the target go-live date so the steps can be sequenced against it.

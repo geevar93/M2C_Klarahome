@@ -1,0 +1,353 @@
+using KlaraHome.Contracts.Inventory;
+using KlaraHome.Infrastructure.Persistence;
+using KlaraHome.Modules.Inventory.Domain;
+using KlaraHome.Modules.Inventory.Infrastructure.Persistence;
+using KlaraHome.SharedKernel.Time;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace KlaraHome.Modules.Inventory.Infrastructure.Stock;
+
+/// <summary>
+/// The published face of this module: what other modules may read and do
+/// (docs/01-architecture.md §2.1).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Availability is aggregated across warehouses, because that is the question a cart and a product
+/// page actually have. A hold, by contrast, has to land on one row — units are on a shelf, not in an
+/// abstraction — so <see cref="HoldAsync"/> walks the seller's locations in priority order and takes
+/// the first that can supply the whole quantity.
+/// </para>
+/// <para>
+/// It deliberately does not split a hold across locations. A line fulfilled from two warehouses is
+/// two parcels, two dispatch SLAs and two shipping charges, and deciding that is Shipping's problem
+/// at Step 16 rather than something to be implied here by a convenience.
+/// </para>
+/// </remarks>
+/// <param name="context">The Inventory data context.</param>
+/// <param name="ledger">Applies the movement atomically.</param>
+/// <param name="options">The reservation TTL bounds.</param>
+/// <param name="clock">The sanctioned clock.</param>
+/// <param name="logger">Reports refusals, which are the interesting half.</param>
+internal sealed partial class StockAvailabilityService(
+    InventoryDbContext context,
+    StockLedgerService ledger,
+    IOptions<InventoryOptions> options,
+    IClock clock,
+    ILogger<StockAvailabilityService> logger) : IStockAvailability
+{
+    /// <inheritdoc />
+    public async ValueTask<StockAvailability> FindAsync(
+        Guid listingId,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await context.StockItems
+            .AsNoTracking()
+            .IgnoreQueryFilters([ModelConventions.VendorFilter])
+            .Where(item => item.ListingId == listingId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Aggregate(listingId, rows);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<IReadOnlyDictionary<Guid, StockAvailability>> FindManyAsync(
+        IReadOnlyCollection<Guid> listingIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(listingIds);
+
+        if (listingIds.Count == 0)
+        {
+            return new Dictionary<Guid, StockAvailability>();
+        }
+
+        var distinct = listingIds.Distinct().ToArray();
+
+        var rows = await context.StockItems
+            .AsNoTracking()
+            .IgnoreQueryFilters([ModelConventions.VendorFilter])
+            .Where(item => distinct.Contains(item.ListingId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var byListing = rows
+            .GroupBy(item => item.ListingId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        // Every requested id is present, tracked or not: "no stock row" is an answer a cart has to
+        // render, and a caller that had to distinguish "absent" from "zero" would get it wrong.
+        return distinct.ToDictionary(
+            listingId => listingId,
+            listingId => Aggregate(
+                listingId,
+                byListing.TryGetValue(listingId, out var items) ? items : []));
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<Guid?> HoldAsync(
+        Guid listingId,
+        int quantity,
+        string referenceType,
+        Guid referenceId,
+        Guid lineReferenceId,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (quantity <= 0)
+        {
+            return null;
+        }
+
+        // A hold that outlives the ceiling would keep the last unit off sale for as long as the
+        // caller felt like asking for, so the ceiling is applied here rather than trusted.
+        var now = clock.UtcNow;
+        var ceiling = now.AddMinutes(options.Value.MaxReservationMinutes);
+        var expiry = expiresAt <= now ? now.AddMinutes(options.Value.DefaultReservationMinutes)
+            : expiresAt > ceiling ? ceiling
+            : expiresAt;
+
+        var existing = await context.Reservations
+            .FirstOrDefaultAsync(
+                reservation => reservation.ListingId == listingId
+                               && reservation.ReferenceType == referenceType
+                               && reservation.ReferenceId == referenceId
+                               && reservation.LineReferenceId == lineReferenceId
+                               && reservation.Status == ReservationStatus.Held,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // Idempotent on the line: a retried checkout gets its own hold back rather than taking the
+        // stock a second time. The expiry is pushed out, because the shopper is evidently still
+        // there.
+        if (existing is not null)
+        {
+            if (existing.Quantity >= quantity)
+            {
+                existing.ExtendTo(expiry);
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return existing.Id;
+            }
+
+            // They want more than they hold. Release what they have and take the whole quantity
+            // afresh, so the outcome is one hold of the requested size rather than two of unclear
+            // provenance.
+            await SettleOneAsync(existing, ReservationOutcome.Released, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var locations = await context.StockItems
+            .IgnoreQueryFilters([ModelConventions.VendorFilter])
+            .Where(item => item.ListingId == listingId)
+            .Join(
+                context.Warehouses.AsNoTracking().IgnoreQueryFilters([ModelConventions.VendorFilter]),
+                item => item.WarehouseId,
+                warehouse => warehouse.Id,
+                (item, warehouse) => new { item, warehouse.Priority, warehouse.Code, warehouse.IsActive })
+            .Where(row => row.IsActive)
+            .OrderBy(row => row.Priority)
+            .ThenBy(row => row.Code)
+            .Select(row => row.item)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var item in locations)
+        {
+            var result = await ledger
+                .ReserveAsync(item, quantity, referenceType, referenceId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!result.Applied)
+            {
+                continue;
+            }
+
+            var reservation = StockReservation.Hold(
+                item.Id,
+                listingId,
+                quantity,
+                referenceType,
+                referenceId,
+                lineReferenceId,
+                expiry);
+
+            context.Reservations.Add(reservation);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            return reservation.Id;
+        }
+
+        HoldRefused(logger, listingId, quantity, locations.Count);
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<int> SettleAsync(
+        string referenceType,
+        Guid referenceId,
+        ReservationOutcome outcome,
+        CancellationToken cancellationToken = default)
+    {
+        var held = await context.Reservations
+            .Where(reservation => reservation.ReferenceType == referenceType
+                                  && reservation.ReferenceId == referenceId
+                                  && reservation.Status == ReservationStatus.Held)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Count == 0)
+        {
+            return 0;
+        }
+
+        var now = clock.UtcNow;
+        var settled = 0;
+
+        foreach (var reservation in held)
+        {
+            if (await SettleOneAsync(reservation, outcome, now, cancellationToken).ConfigureAwait(false))
+            {
+                settled++;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return settled;
+    }
+
+    /// <summary>
+    /// Settles one hold: moves the stock, then marks the row. In that order, because a row marked
+    /// settled whose units never moved is a hold nothing will ever release.
+    /// </summary>
+    private async Task<bool> SettleOneAsync(
+        StockReservation reservation,
+        ReservationOutcome outcome,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var item = await context.StockItems
+            .IgnoreQueryFilters([ModelConventions.VendorFilter])
+            .FirstOrDefaultAsync(candidate => candidate.Id == reservation.StockItemId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (item is null)
+        {
+            // The stock row is gone, so there is nothing to give back. Close the hold rather than
+            // leaving it live for ever against a row that no longer exists.
+            return reservation.Settle(ReservationStatus.Released, now);
+        }
+
+        var movement = outcome == ReservationOutcome.Committed
+            ? await ledger
+                .CommitAsync(
+                    item,
+                    reservation.Quantity,
+                    reservation.ReferenceType,
+                    reservation.ReferenceId,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await ledger
+                .ReleaseAsync(
+                    item,
+                    reservation.Quantity,
+                    reservation.ReferenceType,
+                    reservation.ReferenceId,
+                    note: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        if (!movement.Applied)
+        {
+            // A commit can be refused when the units were written off underneath the hold. The hold
+            // is released instead: the sale has to be dealt with by Orders, and stranding the row
+            // would make the shortfall permanent as well as unexplained.
+            CommitRefused(logger, reservation.Id, item.Id, reservation.Quantity);
+
+            await ledger
+                .ReleaseAsync(
+                    item,
+                    reservation.Quantity,
+                    reservation.ReferenceType,
+                    reservation.ReferenceId,
+                    "Commit refused: the units were no longer on hand.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return reservation.Settle(ReservationStatus.Released, now);
+        }
+
+        return reservation.Settle(
+            outcome == ReservationOutcome.Committed ? ReservationStatus.Committed : ReservationStatus.Released,
+            now);
+    }
+
+    /// <summary>Rolls the rows for one offer into the one answer a caller wants.</summary>
+    private static StockAvailability Aggregate(Guid listingId, List<StockItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return new StockAvailability(listingId, 0, 0, 0, false, false, null, IsTracked: false);
+        }
+
+        var onHand = 0;
+        var reserved = 0;
+        var available = 0;
+        var backorder = false;
+        var preorder = false;
+        DateTimeOffset? preorderAt = null;
+
+        foreach (var item in items)
+        {
+            onHand += item.QuantityOnHand;
+            reserved += item.QuantityReserved;
+
+            // Summed per row rather than taken from the totals, because on hand less reserved is
+            // floored at zero on each shelf: a backordered row in deficit must not eat into what
+            // another location genuinely has.
+            available += item.QuantityAvailable;
+
+            backorder |= item.AllowBackorder;
+            preorder |= item.AllowPreorder;
+
+            // The soonest promise across the locations that make one. A shopper is told the
+            // earliest date anybody can meet, not the latest.
+            if (item.AllowPreorder
+                && item.PreorderAvailableAt is { } at
+                && (preorderAt is null || at < preorderAt))
+            {
+                preorderAt = at;
+            }
+        }
+
+        return new StockAvailability(
+            listingId,
+            onHand,
+            reserved,
+            available,
+            backorder,
+            preorder,
+            preorderAt,
+            IsTracked: true);
+    }
+
+    [LoggerMessage(
+        EventId = 7100,
+        Level = LogLevel.Information,
+        Message = "No location could hold {Quantity} of listing {ListingId}; {Locations} considered")]
+    private static partial void HoldRefused(ILogger logger, Guid listingId, int quantity, int locations);
+
+    [LoggerMessage(
+        EventId = 7101,
+        Level = LogLevel.Warning,
+        Message = "Reservation {ReservationId} could not commit {Quantity} from stock item {StockItemId}")]
+    private static partial void CommitRefused(
+        ILogger logger,
+        Guid reservationId,
+        Guid stockItemId,
+        int quantity);
+}

@@ -73,6 +73,10 @@ public sealed class IdentityModule : IModule
         services.AddScoped<SecretProtector>();
         services.AddScoped<TokenIssuer>();
 
+        // The published contract: who a shopper is and where they want their parcel. Cart, Checkout
+        // and Orders all read it; none of them may join to identity.addresses.
+        services.AddScoped<Contracts.Identity.ICustomerDirectory, Infrastructure.Directory.CustomerDirectory>();
+
         services.AddScoped<AccessResolver>();
         services.AddScoped<SessionService>();
         services.AddScoped<SignInCoordinator>();

@@ -47,6 +47,13 @@ $Contexts = @{
     'Identity' = 'IdentityDbContext'
     'Media' = 'MediaDbContext'
     'Notifications' = 'NotificationsDbContext'
+    'Vendors' = 'VendorsDbContext'
+    'Catalog' = 'CatalogDbContext'
+    'Inventory' = 'InventoryDbContext'
+    'Pricing' = 'PricingDbContext'
+    'Carts' = 'CartsDbContext'
+    'Orders' = 'OrdersDbContext'
+    'Payments' = 'PaymentsDbContext'
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

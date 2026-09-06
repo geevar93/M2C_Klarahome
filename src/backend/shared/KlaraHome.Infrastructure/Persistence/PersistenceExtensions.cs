@@ -153,7 +153,23 @@ public static class PersistenceExtensions
 
         // Resolved per context: an outbox write must join the transaction of the context the
         // caller is already using, so there is one IOutbox per context, not one per host.
+        //
+        // The unkeyed registration is first-wins, which means it belongs to whichever module
+        // registered first — the Platform module, in this solution. That is correct for exactly one
+        // module and silently wrong for every other: a handler in another module that enqueued
+        // through it would add the row to a *different* context's change tracker, its own
+        // SaveChangesAsync would not write it, and the event would be lost with no error anywhere.
+        // So the keyed registration below is the one a module must ask for by name, and the unkeyed
+        // one is kept only for callers that hold the first-registered context anyway.
         services.TryAddScoped<IOutbox>(provider => new DbContextOutbox(
+            provider.GetRequiredService<TContext>(),
+            provider.GetRequiredService<ITenantContext>(),
+            provider.GetRequiredService<Correlation.ICorrelationContext>(),
+            provider.GetRequiredService<SharedKernel.Time.IClock>()));
+
+        // Keyed by the context type, so a module publishes into its own transaction and says so:
+        //     [FromKeyedServices(typeof(MyDbContext))] IOutbox outbox
+        services.AddKeyedScoped<IOutbox>(typeof(TContext), (provider, _) => new DbContextOutbox(
             provider.GetRequiredService<TContext>(),
             provider.GetRequiredService<ITenantContext>(),
             provider.GetRequiredService<Correlation.ICorrelationContext>(),

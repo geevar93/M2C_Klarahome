@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Orders (Step 14): the record of what was agreed, and its life from payment to settlement.
+
+    The order aggregate split the way a marketplace needs it - one order per shopper, one sub-order
+    per seller, lines frozen at placement; the sub-order state machine with its transition table and
+    per-role permissions; cancellation, partial cancellation and the stock and money they give back;
+    the append-only timeline and internal notes; GST-compliant per-vendor tax invoices with a gapless
+    series per financial year; and the order surfaces for shoppers, sellers and platform staff.
+
+    It re-prices nothing. Every figure comes from the quote Cart handed over, because a second
+    calculation is how an invoice and a settlement come to disagree about what a customer paid.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Orders</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

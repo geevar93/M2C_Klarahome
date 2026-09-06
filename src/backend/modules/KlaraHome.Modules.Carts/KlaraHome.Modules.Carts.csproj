@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Carts (Step 13): from "add to cart" to a validated, priced, ready-to-pay checkout.
+
+    The persistent and anonymous basket and the merge between them; cart validation with reasons a
+    shopper can act on; multi-vendor grouping with per-seller shipping and dispatch SLA; the
+    checkout session and its address, shipping and payment-method choices; COD eligibility; the
+    idempotent place-order command that holds stock and hands the agreed basket to Orders; and
+    abandoned-cart capture. It owns *the shopper's intent*. What a thing is belongs to Catalog, how
+    many there are to Inventory, what it costs to Pricing, and what was agreed to Orders - this
+    module holds plain ids and asks those modules across a contract.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Carts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

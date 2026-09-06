@@ -5,10 +5,19 @@
 This project is executed through the gated plan in
 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
+The plan itself is a small tracker; each step's detail lives in its own file under
+[`docs/steps/`](docs/steps/). Open the tracker and the one step you are working on - not the
+whole folder.
+
 **Work only on the step that has been explicitly authorised.** When a step's acceptance
-criteria are met: stop, update the plan (status, date, outcome notes), then ask the User for
-permission before starting the next step. Anything discovered outside the current step's
-scope goes to the plan's Parking Lot — it is not fixed inline.
+criteria are met: stop, update the tracker (status, date) and the step's file (outcome notes),
+then ask the User for permission before starting the next step. Anything discovered outside the
+current step's scope goes to [`docs/PARKING_LOT.md`](docs/PARKING_LOT.md) — it is not fixed
+inline.
+
+**Steps 9-28 are an MVP build sprint:** write production code, do not write integration tests,
+and record every deferred test in [`docs/TEST_DEBT.md`](docs/TEST_DEBT.md). Step 28A repairs the
+build, Step 29 pays the test debt down. The rules are in the plan, section 3.
 
 Aesthetics (colour, typography, imagery, motion) are **out of scope until Step 30**.
 

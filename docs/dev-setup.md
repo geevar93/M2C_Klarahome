@@ -156,7 +156,8 @@ re-distributable:
 | | Lives in | Changed by |
 |---|---|---|
 | Which business this deployment is | `.env`: `TENANT_CODE`, `TENANT_NAME`, `TENANT_ID`, `TENANT_DEFAULT_LOCALE`, `TENANT_DEFAULT_TIMEZONE` | A redeploy |
-| Secrets: signing key, encryption key, first administrator | `.env`: `AUTH_SIGNING_KEY_*`, `AUTH_ENCRYPTION_KEY*`, `AUTH_BOOTSTRAP_*` | A redeploy, and a key rotation |
+| Secrets: signing key, encryption keys, first administrator | `.env`: `AUTH_SIGNING_KEY_*`, `AUTH_ENCRYPTION_KEY*` (credentials), `ENCRYPTION_KEY*` (business columns — a vendor's bank account), `AUTH_BOOTSTRAP_*` | A redeploy, and a key rotation |
+| What a marketplace demands of a seller before they trade | `.env` / `appsettings.json`: `Vendors:RequireGstin`, `RequireVerifiedKyc`, `RequireVerifiedBankAccount`, `RequirePickupLocation` | A redeploy. Deliberately **not** a store setting — a shopkeeper must not be able to lower the platform's compliance posture from an admin screen |
 | Everything that business would want to change | `platform.store_settings` | `PUT /api/v1/admin/settings/{key}`, audited |
 | Whether a feature is on | `platform.feature_flags` | `PUT /api/v1/admin/feature-flags/{key}`, audited |
 | Who may do what | `identity.roles` and `identity.user_roles` | `PUT /api/v1/admin/roles/{id}`, `PUT /api/v1/admin/users/{id}/roles`, audited |
@@ -284,6 +285,68 @@ with the placeholders each expects, and `PUT` rewrites one. A missing placeholde
 message and names what was missing rather than rendering a gap. An **active SMS template must carry
 its DLT id** — outside Production they are seeded active without one because no operator is
 involved, but the editor refuses to activate one and the `dltViolation` field says why.
+
+### Taking a payment locally (Step 15)
+
+**Without credentials — which is how it arrives.** `RAZORPAY_KEY_ID` is blank in `.env.example`, so
+a prepaid `place-order` answers `503 PAYMENT_PROVIDER_UNAVAILABLE` and says so in the body. Cash on
+delivery is unaffected and works end to end today, which is enough to exercise the whole order
+lifecycle without a merchant account.
+
+**With a test key pair.** Razorpay has no separate sandbox host: a **Test** key pair against the live
+API *is* the sandbox, and a Test key can be generated before the account is activated.
+
+1. `dashboard.razorpay.com` -> Settings -> API Keys -> **Generate Test Key**.
+2. Put the pair and a webhook secret of your own choosing into `.env`:
+
+```bash
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxx
+RAZORPAY_KEY_SECRET=xxxxxxxx
+RAZORPAY_WEBHOOK_SECRET=pick-something-long
+```
+
+3. `docker compose -f infra/compose/docker-compose.dev.yml up -d --force-recreate api worker`
+4. Place a prepaid order. The response now carries a real `providerOrderId` and the publishable key.
+
+**Webhooks on a laptop.** Razorpay cannot reach `*.localhost`, so nothing will confirm the order by
+itself. Two ways round it, and the second is the one to reach for:
+
+```bash
+# 1. A tunnel: point the dashboard webhook at <tunnel>/api/v1/webhooks/razorpay with the same
+#    secret, and the real path runs.
+
+# 2. No tunnel: let reconciliation find the payment. It asks the gateway about every collection
+#    open longer than 20 minutes, and confirms the order exactly as a webhook would - which is
+#    also the production recovery path for a webhook that was never delivered.
+POST /api/v1/admin/payments/reconcile        # runs the sweep now, needs payments.gateway.manage
+POST /api/v1/admin/payments/{id}/sync        # or re-read one collection
+```
+
+An attempt whose `source` reads `Reconciliation` is one no webhook ever arrived for. A run of them
+in production means the webhook endpoint has stopped working.
+
+**Watching what arrived.** Every webhook is stored before it is processed, verified or not:
+
+```bash
+GET  /api/v1/admin/gateway-events                        # the log
+GET  /api/v1/admin/gateway-events?status=DeadLettered    # what could not be applied, after 8 tries
+GET  /api/v1/admin/gateway-events/{id}                   # the raw body, exactly as it arrived
+POST /api/v1/admin/gateway-events/{id}/replay            # re-queue one after fixing the cause
+```
+
+A forged webhook is stored with `signatureValid: false`, answered `401`, and can **never** be
+processed — replaying it does not re-verify it.
+
+**Refunds.** Anything at or below the `payments` settings section's `refundApprovalThreshold`
+(5,000 by default) is sent immediately; anything above waits in `GET /admin/refunds?status=Requested`
+for somebody else to approve. Approving your own is refused by the handler and by a check
+constraint, so testing the two-person path needs two accounts.
+
+```bash
+POST /api/v1/admin/payments/{id}/refunds      -H "Idempotency-Key: $(uuidgen)"      -d '{ "amount": 100, "reason": "Damaged on arrival" }'
+```
+
+---
 
 ---
 
@@ -569,6 +632,9 @@ A reset drops the database, so run the migrator again before expecting the API t
 | `Auth:Encryption:CurrentKeyId is '...', which is not in Auth:Encryption:Keys` | Two-factor enrolment needs a key to protect the secret with | Set `AUTH_ENCRYPTION_KEY` to base64 of exactly 32 bytes: `openssl rand -base64 32` |
 | An enrolled authenticator stops being accepted after a config change | `AUTH_ENCRYPTION_KEY` changed, so the stored secret no longer decrypts | Put the old key back, or keep it listed alongside the new one — the key id travels in each stored value so both can be read |
 | A vendor user sees an empty list where rows plainly exist | The vendor query filter, comparing the row's `vendor_id` to the token's | Working as intended. Check the `vendor_id` claim in the token and on the row |
+| `Encryption:CurrentKeyId is '...', which is not a 32-byte base64 key in Encryption:Keys` | A vendor bank account cannot be stored without a column-encryption key | Set `ENCRYPTION_KEY` to base64 of exactly 32 bytes: `openssl rand -base64 32`. Every other Vendors endpoint works without one, so this is refused per request rather than at boot |
+| `POST /admin/vendors/{id}/activate` answers 422 `VENDOR_NOT_READY` | An onboarding requirement is unmet | `GET /admin/vendors/{id}/readiness` lists every blocker at once. The requirements themselves are the `Vendors:Require*` settings |
+| A seller's KYC upload is refused with "must be uploaded as a private file" | The scan went to the public bucket, where a PAN card would be served to anybody with the URL | Upload with `visibility=private`, then post the returned file id |
 | A `{id}` route answers 404 for a resource you can see in `psql` | Object-level scope. Out-of-scope resources answer 404 rather than 403 so existence is not leaked | Working as intended (`docs/07-security-compliance.md` §2) |
 | `The AuthorizationPolicy named: 'perm:...' was not found` | Something replaced `IAuthorizationPolicyProvider` after `AddKlaraHomeAuthorization`, or registered it with `TryAdd` | The provider manufactures every `perm:` policy. It is registered with `Replace` for exactly this reason |
 | No OTP arrives anywhere | There is no SMS or email transport until Step 8 | Read it from the API log: `docker logs klarahome-dev-api \| grep "DEVELOPMENT ONLY"` |

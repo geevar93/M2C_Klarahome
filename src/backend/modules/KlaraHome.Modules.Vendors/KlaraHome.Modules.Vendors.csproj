@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Vendors (Step 9): the sellers that make this a marketplace, and everything that governs them -
+    the onboarding state machine, KYC capture and verification, bank accounts, commission plans and
+    their resolution, and the per-seller operational settings that fulfilment later reads.
+
+    It owns who a seller is. It does not own what they sell (Catalog), what they hold (Inventory),
+    or what they are owed (Settlements); those modules hold a plain vendor_id and ask this one
+    through KlaraHome.Contracts.Vendors.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Vendors</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

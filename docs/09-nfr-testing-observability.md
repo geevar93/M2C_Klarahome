@@ -128,7 +128,8 @@ not silently assumed.
 - [ ] Logging, metrics and audit entries added for new significant actions
 - [ ] No new analyzer/lint warnings; no new critical/high vulnerabilities
 - [ ] Documentation updated (`docs/`, ADR if a decision changed)
-- [ ] **`IMPLEMENTATION_PLAN.md` status updated and User permission requested**
+- [ ] **`IMPLEMENTATION_PLAN.md` status updated, the step's file in `docs/steps/` filled in,
+      any deferred test recorded in `TEST_DEBT.md`, and User permission requested**
 
 ---
 

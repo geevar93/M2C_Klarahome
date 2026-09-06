@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Inventory (Step 11): how many there are, and where.
+
+    Warehouses, one stock item per (listing, warehouse), an append-only ledger from which both
+    quantity caches are reconcilable, time-limited reservations that cannot oversell under
+    concurrency, and the replenishment paperwork - suppliers, purchase orders, goods receipts and
+    stock takes. It owns *quantity*; it does not own what a thing is (Catalog), what it costs
+    (Pricing), or who sells it (Vendors) - it holds a plain listing_id or vendor_id and asks across
+    a contract.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Inventory</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

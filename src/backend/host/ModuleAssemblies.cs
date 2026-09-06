@@ -28,5 +28,12 @@ internal static class ModuleAssemblies
         typeof(Modules.Identity.IdentityModule).Assembly,
         typeof(Modules.Media.MediaModule).Assembly,
         typeof(Modules.Notifications.NotificationsModule).Assembly,
+        typeof(Modules.Vendors.VendorsModule).Assembly,
+        typeof(Modules.Catalog.CatalogModule).Assembly,
+        typeof(Modules.Inventory.InventoryModule).Assembly,
+        typeof(Modules.Pricing.PricingModule).Assembly,
+        typeof(Modules.Carts.CartsModule).Assembly,
+        typeof(Modules.Orders.OrdersModule).Assembly,
+        typeof(Modules.Payments.PaymentsModule).Assembly,
     ];
 }

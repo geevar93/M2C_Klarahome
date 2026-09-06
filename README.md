@@ -11,11 +11,16 @@ Angular (mobile-first, SSR) · .NET 10 · PostgreSQL · Docker on VPS
 
 Execution follows the gated plan in **[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)**.
 
-After each step: implementation **stops**, the plan is updated with status and outcome, and
-the User is asked for explicit permission before the next step begins. Read
+After each step: implementation **stops**, the tracker and that step's file in
+[`docs/steps/`](docs/steps/) are updated with status and outcome, and the User is asked for
+explicit permission before the next step begins. Read
 [`CONTRIBUTING.md`](CONTRIBUTING.md) before making any change.
 
-**Current status: Step 3 complete — awaiting authorisation for Step 4.**
+Steps 9-28 run as an **MVP build sprint** — production code first, integration tests batched
+into Step 29 and tracked in [`docs/TEST_DEBT.md`](docs/TEST_DEBT.md). See
+[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) section 3.
+
+**Current status: Step 8 complete — awaiting authorisation for Step 9.**
 
 ---
 
@@ -25,7 +30,7 @@ Start with [`docs/README.md`](docs/README.md). The specification set:
 
 | Doc | Subject |
 |---|---|
-| [IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md) | The 33-step gated plan and live status |
+| [IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md) | The gated plan and live status. Per-step detail is in [`docs/steps/`](docs/steps/); the ledgers are [`PARKING_LOT`](docs/PARKING_LOT.md), [`CHANGE_LOG`](docs/CHANGE_LOG.md) and [`TEST_DEBT`](docs/TEST_DEBT.md) |
 | [01 Architecture](docs/01-architecture.md) | Containers, modules, technology choices, ADRs |
 | [02 Domain model](docs/02-domain-model.md) | Bounded contexts, aggregates, state machines |
 | [03 Database](docs/03-database-design.md) | PostgreSQL schema, indexes, migrations |
@@ -380,6 +385,61 @@ wait for a poll and its body must not be stored for one.
 When an SMS account is bought: write the adapter, set `Sms__Provider`, and register a DLT template id
 against each SMS template. An active SMS template with no id is refused, because an Indian operator
 **drops** a non-conforming message rather than rejecting it.
+
+### Taking payments
+
+Prepaid goes through **Razorpay hosted checkout**, and no card data ever reaches these servers
+(ADR-008 — the merchant stays in PCI-DSS SAQ-A scope). Cash on delivery is a second provider behind
+the same interface, with nothing on the other side of it.
+
+**It ships with no credentials, and that is the correct state for a fresh deployment.** With
+`RAZORPAY_KEY_ID` blank, the adapter reports itself unusable, a prepaid `place-order` answers
+`503 PAYMENT_PROVIDER_UNAVAILABLE` naming the reason, and cash on delivery works end to end. Turning
+online payment on is three values in `.env` and a restart:
+
+```bash
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxx      # publishable; the browser widget needs it
+RAZORPAY_KEY_SECRET=xxxxxxxx           # never leaves the server
+RAZORPAY_WEBHOOK_SECRET=xxxxxxxx       # yours to choose; paste the same value into the dashboard
+```
+
+Then add the webhook in the Razorpay dashboard, pointing at
+`<public API origin>/api/v1/webhooks/razorpay`, subscribed to `payment.authorized`,
+`payment.captured`, `payment.failed`, `order.paid`, `refund.created`, `refund.processed`,
+`refund.failed` and `settlement.processed`.
+
+**Order truth comes from the webhook plus an API re-fetch, and from nothing else.** The browser
+callback is a UX signal: `POST /store/payments/orders/{id}/verify` checks the gateway's handshake
+signature, records the attempt and confirms nothing. A webhook body is likewise never trusted on its
+own — the signature proves who sent a claim, not that the claim is current — so every event is
+resolved to a payment and then re-read from the gateway's API before an order moves.
+
+Three loops in the **worker** make that survivable when a webhook goes missing:
+
+| Loop | Cadence | What it is for |
+|---|---|---|
+| Gateway event processor | 5 s | Applies stored webhooks, retries failures, dead-letters what will never work |
+| Reconciliation | 15 min | Asks the gateway about collections open longer than 20 minutes. **Recovers a lost webhook** |
+| Settlement ingestion | daily | Imports the payout reports and matches them line by line against what was captured |
+
+**A mismatch is alerted and never repaired.** A short capture does not confirm an order; a settled
+line that does not agree with our figure becomes an addressable row and a
+`PaymentMismatchDetected` event. Rewriting our number to match the gateway's would destroy the only
+evidence the two ever disagreed.
+
+```bash
+GET  /api/v1/admin/payments?q=KH-2609-000184      # every collection against an order
+POST /api/v1/admin/payments/{id}/sync             # re-read from the gateway. The repair for a lost webhook
+POST /api/v1/admin/payments/{id}/refunds          # Idempotency-Key required
+POST /api/v1/admin/refunds/{id}/approve           # the second signature, above the threshold
+GET  /api/v1/admin/gateway-events?status=DeadLettered   # webhooks that could not be applied
+POST /api/v1/admin/cod-collections/remit          # a courier's remittance, matched in one batch
+```
+
+**Refunds above a threshold need two people.** The value lives in the `payments` store-settings
+section rather than in configuration, because it is a governance decision a business revisits — and
+a refund whose approver is the person who raised it is refused by the handler *and* by a check
+constraint.
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

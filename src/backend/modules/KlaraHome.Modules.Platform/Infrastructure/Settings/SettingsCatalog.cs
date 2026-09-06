@@ -153,6 +153,24 @@ internal static class SettingsCatalog
         new SettingsSectionDescriptor<SupportSettings>(),
         new SettingsSectionDescriptor<LocalizationSettings>(),
         new SettingsSectionDescriptor<CommerceSettings>(),
+
+        // Added by Step 10: the buy-box rule is a commercial decision the operator makes, and
+        // docs/03-database-design.md §4.4 puts it here rather than in the Catalog module's own
+        // configuration. Not public - a shopper is shown the winning offer, never the reason.
+        new SettingsSectionDescriptor<BuyBoxSettings>(),
+
+        // Added by Step 12: the COD fee, the tax on delivery, the loyalty rate and the store-credit
+        // ceiling are all commercial choices, and docs/03-database-design.md §4.6 puts them here
+        // rather than in the Pricing module's configuration. Not public - a shopper sees the fee on
+        // their quote, never the rule behind it.
+        new SettingsSectionDescriptor<PricingSettings>(),
+
+        // Added by Step 15: when a refund needs a second signature, and whether a cancelled order
+        // is refunded without anybody asking, are governance decisions the business revisits -
+        // usually after an incident - and they must not need a deployment
+        // (docs/07-security-compliance.md 4). Not public: the approval threshold is the shape of an
+        // abuse.
+        new SettingsSectionDescriptor<PaymentSettings>(),
     ];
 
     private static readonly Dictionary<string, ISettingsSectionDescriptor> ByKey =

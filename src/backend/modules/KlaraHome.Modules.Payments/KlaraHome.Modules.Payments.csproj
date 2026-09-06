@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Payments (Step 15): take money safely, and reconcile it.
+
+    The Razorpay adapter behind an interface this platform owns, hosted checkout only so no card
+    data ever reaches these servers (ADR-008, SAQ-A); cash on delivery as a second provider through
+    the same interface; the payment aggregate with its attempts and refunds; the webhook receiver
+    with signature verification, replay protection, raw-payload persistence and a dead-letter queue;
+    and the reconciliation and settlement-ingestion jobs that recover from a webhook nobody ever
+    delivered.
+
+    It never re-prices anything. The figure a gateway is asked for is the order's amount payable,
+    copied across the seam, because a second calculation here is how a payment and an invoice come
+    to disagree about what a customer owes.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Payments</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
