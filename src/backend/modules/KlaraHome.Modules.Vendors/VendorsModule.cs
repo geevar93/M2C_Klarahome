@@ -79,6 +79,11 @@ public sealed class VendorsModule : IModule
         services.AddScoped<IVendorDirectory, VendorDirectory>();
         services.AddScoped<ICommissionResolver, CommissionResolver>();
 
+        // Added at Step 16. Where a seller's parcels are collected from, and the one field another
+        // module writes back into this schema: the courier's own id for that address, which only the
+        // module that talks to couriers can learn.
+        services.AddScoped<IVendorPickupPoints, VendorPickupPoints>();
+
         // The Razorpay Route seam, with the implementation that is honest about creating nothing.
         // Step 18 replaces this registration and nothing else.
         services.AddScoped<IVendorPayoutAccounts, UnprovisionedPayoutAccounts>();

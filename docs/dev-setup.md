@@ -348,6 +348,75 @@ POST /api/v1/admin/payments/{id}/refunds      -H "Idempotency-Key: $(uuidgen)"  
 
 ---
 
+### Dispatching a parcel locally (Step 16)
+
+**Without an aggregator account — which is how it arrives.** `SHIPPING_PROVIDER` is blank in
+`.env.example`, so the manual adapter takes over and a parcel is booked from an air waybill you
+supply. That is the whole flow: the order ships, the timeline fills in, the cash reconciles.
+
+A confirmed sub-order opens a draft parcel by itself, so start from the pick list:
+
+```bash
+GET  /api/v1/admin/shipments/pick-list                # what is waiting to be packed
+
+POST /api/v1/admin/sub-orders/{subOrderId}/shipments \
+     -d '{ "weight": 750, "dimensions": { "lengthCm": 30, "widthCm": 20, "heightCm": 10 },
+           "manualAwb": "TESTAWB0001", "manualCourier": "Local courier" }'
+
+POST /api/v1/admin/shipments/{id}/dispatch            # the courier has it: this ships the order
+POST /api/v1/admin/shipments/{id}/tracking \
+     -d '{ "status": "OutForDelivery", "remark": "On the van" }'
+POST /api/v1/admin/shipments/{id}/tracking \
+     -d '{ "status": "Delivered" }'                   # closes the parcel, starts the return window
+```
+
+The last call is what proves the seams: it moves the **sub-order** through the ordering state
+machine, writes the order's timeline, and — on a cash-on-delivery order — marks the
+`payments.cod_collections` row collected. Check all three:
+
+```bash
+GET /api/v1/admin/orders/{orderId}                    # timeline, and the sub-order at Delivered
+GET /api/v1/admin/cod-collections?status=Collected    # the cash the courier is now carrying
+```
+
+**With an aggregator account.** Set `SHIPPING_PROVIDER`, `SHIPPING_BASE_URL` and either
+`SHIPPING_API_KEY` or the `SHIPPING_API_USER`/`SHIPPING_API_SECRET` pair, then restart. Omit
+`manualAwb` from the booking call above and the parcel goes to the aggregator instead.
+
+`SHIPPING_BASE_URL` is **also the outbound allow-list**: the client refuses to talk to any other
+host, so a wrong value fails at the socket rather than at somebody else's server with your token in
+the header.
+
+**Webhooks on a laptop.** An aggregator cannot reach `*.localhost`, so nothing will move a parcel by
+itself. Three options, same as payments:
+
+```bash
+# 1. A tunnel: point their dashboard webhook at <tunnel>/api/v1/webhooks/shipping/aggregator
+#    with the same secret as SHIPPING_WEBHOOK_SECRET.
+# 2. Ask the courier directly, which is what the polling fallback does anyway:
+POST /api/v1/admin/shipments/{id}/sync
+# 3. Record the movement by hand, exactly as the manual flow above does.
+```
+
+A forged webhook is stored with `signatureValid: false`, answered `401`, and can **never** be
+processed — replaying it does not re-verify it. `GET /api/v1/admin/courier-events?status=DeadLettered`
+is the queue of what could not be applied.
+
+**Rates and serviceability.** One catch-all zone in three weight bands is seeded, so checkout offers
+a real delivery charge from the first order. `GET /api/v1/store/shipping/serviceability/560001` reads
+a cache and never calls a courier; with no aggregator configured it answers optimistically, because
+refusing an order for a destination nobody has checked is worse than one apology.
+
+```bash
+GET  /api/v1/admin/shipping/zones                     # the map, in the precedence order it is applied
+GET  /api/v1/admin/shipping/rates                     # the tariff
+POST /api/v1/admin/shipping/serviceability/560001/refresh   # ask now, rather than waiting for the job
+```
+
+**A failed delivery** is the one courier outcome that needs a person. `GET /api/v1/admin/ndr` is the
+queue; `POST /api/v1/admin/ndr/{id}/action` takes `Reattempt`, `Rescheduled`, `AddressUpdated` or
+`ReturnToOrigin`. A parcel delivered on a later attempt closes its own report.
+
 ---
 
 ## 5. Hostnames and TLS

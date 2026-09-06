@@ -54,6 +54,7 @@ $Contexts = @{
     'Carts' = 'CartsDbContext'
     'Orders' = 'OrdersDbContext'
     'Payments' = 'PaymentsDbContext'
+    'Shipping' = 'ShippingDbContext'
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

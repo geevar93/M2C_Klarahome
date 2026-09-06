@@ -1,8 +1,8 @@
 using FluentValidation;
+using KlaraHome.Contracts.Catalog;
 using KlaraHome.Contracts.Identity;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Shipping;
-using KlaraHome.Contracts.Catalog;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Modules.Carts.Domain;
 using KlaraHome.Modules.Carts.Infrastructure;

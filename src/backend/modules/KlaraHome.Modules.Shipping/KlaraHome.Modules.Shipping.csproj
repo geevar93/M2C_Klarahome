@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shipping (Step 16): get parcels moving, and keep everybody informed.
+
+    Zones and rate rules with per-seller overrides and volumetric weight; PIN-code serviceability
+    cached off the hot path; the logistics aggregator behind an interface this platform owns, with a
+    manual-AWB adapter beside it so a deployment with no aggregator account can still dispatch; the
+    packing workflow from pick list to weight capture to a booked AWB; the tracking receiver, its
+    dead-letter queue and the polling fallback; the NDR queue; and the cash a courier is carrying.
+
+    It never re-prices anything and it never decides an order's status by itself. What the customer
+    pays for delivery comes from this module's own rate card; what the platform pays comes from the
+    aggregator; and every movement of a sub-order goes back through the ordering state machine over
+    IOrderFulfilment, so a courier scan and an operator's click do the same things.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Shipping</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

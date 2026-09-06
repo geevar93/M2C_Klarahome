@@ -1,9 +1,9 @@
 using FluentValidation;
 using KlaraHome.Contracts.Catalog;
 using KlaraHome.Contracts.Platform;
-using KlaraHome.Infrastructure.Tenancy;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
+using KlaraHome.Infrastructure.Tenancy;
 using KlaraHome.Modules.Inventory.Domain;
 using KlaraHome.Modules.Inventory.Infrastructure;
 using KlaraHome.Modules.Inventory.Infrastructure.Persistence;

@@ -100,6 +100,12 @@ public sealed class PaymentsModule : IModule
         // refusal Orders registers with TryAdd for a deployment that has no Payments module.
         services.AddScoped<IPaymentInitiation, PaymentInitiationService>();
 
+        // The seam Shipping reaches cash on delivery through, added at Step 16. Only the module that
+        // books couriers knows which consignment the cash is on and what became of it; the ledger
+        // stays here, because two answers to "what has the courier not remitted" is how a seller
+        // ends up settled out of money nobody collected.
+        services.AddScoped<ICodCollections, Infrastructure.Cod.CodCollections>();
+
         AddEventHandlers(services);
 
         // All three off in the API and on in the worker, exactly as the outbox dispatcher, the

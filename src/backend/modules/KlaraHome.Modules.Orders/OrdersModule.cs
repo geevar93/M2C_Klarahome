@@ -6,6 +6,7 @@ using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Orders.Endpoints;
 using KlaraHome.Modules.Orders.Infrastructure;
 using KlaraHome.Modules.Orders.Infrastructure.Events;
+using KlaraHome.Modules.Orders.Infrastructure.Fulfilment;
 using KlaraHome.Modules.Orders.Infrastructure.Invoicing;
 using KlaraHome.Modules.Orders.Infrastructure.Jobs;
 using KlaraHome.Modules.Orders.Infrastructure.Lifecycle;
@@ -95,6 +96,11 @@ public sealed class OrdersModule : IModule
         // and there is no other implementation of it — a deployment without Payments simply never
         // calls it.
         services.AddScoped<IOrderPaymentSync, OrderPaymentSyncService>();
+
+        // The same arrangement for logistics, added at Step 16: how Shipping reads what a parcel is
+        // booked from and relays a courier's word back into the state machine. One implementation,
+        // registered unconditionally, for the same reason.
+        services.AddScoped<IOrderFulfilment, OrderFulfilmentService>();
 
         // Off in the API and on in the worker, exactly as the catalogue job runner, the notification
         // dispatcher, the reservation sweeper and the abandoned-cart sweeper are configured.

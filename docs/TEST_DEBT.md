@@ -183,6 +183,24 @@ Outcome / Notes, and this row links to it.
 | 15 | Every payments endpoint enforces its declared permission, and a shopper cannot read another shopper's payment by any route | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
 | 15 | `POST /store/payments/orders/{id}/verify` never confirms an order, however valid the handshake — the order stays `PendingPayment` until a webhook or a re-fetch says otherwise | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
 | 15 | The migration applies against a live PostgreSQL and re-runs clean; the partial unique index and every check constraint are created as written | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | **A confirmed order produces a shipment with an air waybill in the provider sandbox** — the step's own full acceptance criterion, end to end through `POST /admin/sub-orders/{id}/shipments` | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | **Tracking updates flow into the order timeline and trigger notifications** — the second half of the same criterion. The timeline half is buildable now; the notification half needs a consumer that does not yet exist | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | A courier webhook is verified, stored, answered `200`, drained by the worker and applied exactly once — and a **redelivery of the same scan changes nothing**, colliding on `(shipment, provider_event_id, occurred_at)` | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | A webhook whose signature does not verify is **stored, marked ignored, answered `401`, and never processed** — including after an operator replays it | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | A delivery scan on a cash-on-delivery parcel marks the `payments.cod_collections` row collected, and a return to origin waives it — **through `ICodCollections`, in the Payments schema** | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | A courier remittance file matched by air waybill apportions a short total across the parcels it covers and leaves an already-remitted one untouched | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | `IOrderFulfilment.AdvanceAsync` moves a sub-order through the **ordering** state machine as `System`, writes its timeline and raises its events — and is **refused** for an edge the machine does not have | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | Two partial shipments against one sub-order cannot between them pack more units than were ordered, and the second is refused with `SHIPMENT_TOO_MANY_UNITS` | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | A vendor caller cannot read, pack, book, label or cancel another seller's parcel, cannot work another seller's failed deliveries, and cannot write a platform-wide rate rule — every route answers 404, not 403 | security | `IntegrationTests` (authorisation matrix) | 🔴 | ⬜ OPEN |
+| 16 | The `shipping` migration applies against a live database and re-runs clean; `tracking_events` is created **partitioned**, its append-only trigger refuses `UPDATE` and `DELETE` from `psql`, and its `DEFAULT` partition accepts a scan outside every range | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | The aggregator adapter against a **sandbox account**: serviceability, booking, label, manifest, pickup, cancel and tracking, plus one token refresh on a `401` | contract | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | The outbound client **refuses any host but the configured base URL**, so a label link from a third party cannot become a server-side request forgery | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 16 | `IShippingOptions` returns priced services at checkout, an unserviceable PIN code returns none, and a COD basket is offered nothing on a service that refuses cash | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 16 | The serviceability cache is read on the hot path and **never** calls a courier; the nightly job refreshes the oldest answers and upserts rather than appending | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 16 | The tracking poll picks up only booked, unfinished parcels silent for the configured window, and running two workers produces no duplicate scans | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 16 | Every `CHECK` constraint refuses what it is meant to — a booked parcel with no waybill, an inverted weight band, a negative freight, a resolved report with no action | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 16 | Every permission the Shipping endpoints declare appears in `PermissionCatalog` (the two lists are kept in step by hand today) | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 16 | The rendered 4×6 label and the manifest PDF are produced, stored privately, and reachable only through a signed link that expires | integration | `IntegrationTests` | 🟢 | ⬜ OPEN |
 
 ---
 

@@ -235,6 +235,36 @@ internal static class PermissionCatalog
     /// </summary>
     public const string CodManage = "payments.cod.manage";
 
+    /// <summary>
+    /// List parcels and read one, with everywhere it has been. A read of a delivery address and a
+    /// telephone number, and what support needs beyond what the order timeline already says.
+    /// </summary>
+    public const string ShipmentRead = "shipping.shipment.read";
+
+    /// <summary>
+    /// Pack a parcel, weigh it, book it with a courier, print its label and hand it over. The
+    /// seller's daily work, and Operations doing it for them; one permission because it is one job.
+    /// </summary>
+    public const string ShipmentManage = "shipping.shipment.manage";
+
+    /// <summary>
+    /// Work the failed-delivery queue: reattempt, reschedule, correct an address, or send the goods
+    /// back. A different decision from dispatching, and usually a different person.
+    /// </summary>
+    public const string NdrManage = "shipping.ndr.manage";
+
+    /// <summary>
+    /// Edit the delivery map and the rate card. What delivery costs is a commercial decision and is
+    /// deliberately not the packer's.
+    /// </summary>
+    public const string ShippingRateManage = "shipping.rate.manage";
+
+    /// <summary>
+    /// Read the courier webhook log and its dead-letter queue, replay an event, refresh
+    /// serviceability, and record a courier's cash remittance. The plumbing.
+    /// </summary>
+    public const string ShippingCourierManage = "shipping.courier.manage";
+
     /// <summary>Every declared permission, in the order the admin UI lists them.</summary>
     public static readonly IReadOnlyList<PermissionDescriptor> All =
     [
@@ -287,6 +317,11 @@ internal static class PermissionCatalog
         new(RefundApprove, "Payments", "Approve or refuse a refund above the threshold."),
         new(PaymentGatewayManage, "Payments", "Work the webhook log, import settlements and run reconciliation."),
         new(CodManage, "Payments", "Record cash taken at the door and a courier's remittance."),
+        new(ShipmentRead, "Shipping", "List parcels and read one, with everywhere it has been."),
+        new(ShipmentManage, "Shipping", "Pack, weigh, book, label and hand over parcels."),
+        new(NdrManage, "Shipping", "Work the failed-delivery queue."),
+        new(ShippingRateManage, "Shipping", "Edit the delivery zones and the rate card."),
+        new(ShippingCourierManage, "Shipping", "Work the courier webhook log and record cash remittances."),
     ];
 
     /// <summary>Whether a code is one this platform declares.</summary>
@@ -393,6 +428,11 @@ internal static class SystemRoles
                 // and reading the payment is the only way to answer it. Repairing one is
                 // Operations', raising a refund is Finance's, and neither is support's.
                 PermissionCatalog.PaymentRead,
+
+                // Step 16. "Where is my parcel" is the same call as "where is my order" and cannot
+                // be answered from the order alone once a courier has it. Reading a parcel is a
+                // read; packing, booking and working failed deliveries are all Operations'.
+                PermissionCatalog.ShipmentRead,
             ]),
         new(
             CatalogManager,
@@ -471,6 +511,15 @@ internal static class SystemRoles
                 PermissionCatalog.PaymentManage,
                 PermissionCatalog.PaymentGatewayManage,
                 PermissionCatalog.CodManage,
+
+                // Step 16. Fulfilment is what this team runs: the parcels a seller has not packed,
+                // the failed deliveries somebody has to decide about, and the courier plumbing when
+                // this platform and an aggregator disagree. The rate card is deliberately absent -
+                // what delivery costs is a commercial decision and it is Finance's.
+                PermissionCatalog.ShipmentRead,
+                PermissionCatalog.ShipmentManage,
+                PermissionCatalog.NdrManage,
+                PermissionCatalog.ShippingCourierManage,
             ]),
         new(
             Merchandiser,
@@ -545,6 +594,13 @@ internal static class SystemRoles
                 PermissionCatalog.PaymentRead,
                 PermissionCatalog.RefundInitiate,
                 PermissionCatalog.RefundApprove,
+
+                // Step 16. What delivery costs a customer is a commercial decision, and it belongs
+                // with the people who reconcile what it costs the platform. Reading parcels comes
+                // with it: the freight charged and the freight billed are both on the parcel, and
+                // the difference is the margin they are answerable for.
+                PermissionCatalog.ShippingRateManage,
+                PermissionCatalog.ShipmentRead,
             ]),
         new(
             VendorOwner,
@@ -585,6 +641,14 @@ internal static class SystemRoles
                 PermissionCatalog.OrderTransition,
                 PermissionCatalog.OrderCancel,
                 PermissionCatalog.InvoiceManage,
+
+                // Step 16. Their own parcels, confined by the vendor scope, and their own rate
+                // overrides - a seller who has negotiated their own delivery pricing sets it here.
+                // The platform-wide card is not theirs, and the vendor filter is what enforces that.
+                PermissionCatalog.ShipmentRead,
+                PermissionCatalog.ShipmentManage,
+                PermissionCatalog.NdrManage,
+                PermissionCatalog.ShippingRateManage,
             ]),
         new(
             VendorStaff,
@@ -615,6 +679,12 @@ internal static class SystemRoles
                 // is the owner's — as is raising a tax invoice by hand.
                 PermissionCatalog.OrderRead,
                 PermissionCatalog.OrderTransition,
+
+                // Step 16. Staff pack, weigh, book and hand over - that is the whole of the job this
+                // role exists for. Working a failed delivery is a conversation with the customer and
+                // is the owner's, as is anything to do with what delivery costs.
+                PermissionCatalog.ShipmentRead,
+                PermissionCatalog.ShipmentManage,
             ]),
         new(
             Customer,

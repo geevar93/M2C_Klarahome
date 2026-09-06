@@ -389,6 +389,21 @@ services:
       Payments__EventProcessorEnabled: "false"
       Payments__ReconciliationEnabled: "false"
       Payments__SettlementIngestionEnabled: "false"
+      # Shipping (Step 16). Blank credentials are the shippable state here too: with no aggregator
+      # account the manual adapter books parcels from an air waybill an operator types in, and
+      # everything downstream - the label, the order timeline, the cash reconciliation - is
+      # unchanged. Filling SHIPPING_* into .env is the whole of turning an aggregator on.
+      Shipping__Provider: ${SHIPPING_PROVIDER:-}
+      Shipping__ApiKey: ${SHIPPING_API_KEY:-}
+      Shipping__ApiUser: ${SHIPPING_API_USER:-}
+      Shipping__ApiSecret: ${SHIPPING_API_SECRET:-}
+      Shipping__WebhookSecret: ${SHIPPING_WEBHOOK_SECRET:-}
+      Shipping__BaseUrl: ${SHIPPING_BASE_URL:-}
+      # The three shipping loops run in the worker and nowhere else, for the same reason the payment
+      # ones do. The webhook endpoint itself is served here - it only stores and answers.
+      Shipping__EventProcessorEnabled: "false"
+      Shipping__TrackingPollEnabled: "false"
+      Shipping__ServiceabilityRefreshEnabled: "false"
       # Notifications (Step 8). The dispatcher runs in the worker and nowhere else; every API
       # replica polling the same queue would multiply the work and contend for the same rows.
       Notifications__DispatcherEnabled: "false"
@@ -549,6 +564,18 @@ services:
       Payments__EventProcessorEnabled: "true"
       Payments__ReconciliationEnabled: "true"
       Payments__SettlementIngestionEnabled: "true"
+      # Shipping (Step 16). The same arrangement: blank credentials fall back to hand-booked air
+      # waybills, and the three loops - the courier webhook drain, the tracking poll that recovers a
+      # lost webhook, and the nightly serviceability refresh - run here and nowhere else.
+      Shipping__Provider: ${SHIPPING_PROVIDER:-}
+      Shipping__ApiKey: ${SHIPPING_API_KEY:-}
+      Shipping__ApiUser: ${SHIPPING_API_USER:-}
+      Shipping__ApiSecret: ${SHIPPING_API_SECRET:-}
+      Shipping__WebhookSecret: ${SHIPPING_WEBHOOK_SECRET:-}
+      Shipping__BaseUrl: ${SHIPPING_BASE_URL:-}
+      Shipping__EventProcessorEnabled: "true"
+      Shipping__TrackingPollEnabled: "true"
+      Shipping__ServiceabilityRefreshEnabled: "true"
       Storage__Endpoint: http://minio:9000
       Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}

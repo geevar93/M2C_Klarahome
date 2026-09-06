@@ -549,6 +549,7 @@
           "KlaraHome.Modules.Payments": "[0.1.0, )",
           "KlaraHome.Modules.Platform": "[0.1.0, )",
           "KlaraHome.Modules.Pricing": "[0.1.0, )",
+          "KlaraHome.Modules.Shipping": "[0.1.0, )",
           "KlaraHome.Modules.Vendors": "[0.1.0, )",
           "KlaraHome.SharedKernel": "[0.1.0, )",
           "Scalar.AspNetCore": "[2.17.2, )"
@@ -663,6 +664,14 @@
         }
       },
       "klarahome.modules.pricing": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.shipping": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",

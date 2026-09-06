@@ -441,5 +441,63 @@ section rather than in configuration, because it is a governance decision a busi
 a refund whose approver is the person who raised it is refused by the handler *and* by a check
 constraint.
 
+### Moving parcels
+
+Delivery is priced from **this platform's own rate card** and carried by whatever courier an
+aggregator picks. The two figures are deliberately different numbers and both land on the parcel:
+`freight_charged` is what the shopper paid, `freight_cost` is what the aggregator invoiced, and the
+margin on delivery is the difference. Weight is the same story — what the packer weighed and what the
+courier billed for are both kept, because that is what a weight dispute is argued from.
+
+**It ships with no aggregator account, and that is the correct state for a fresh deployment.** With
+`SHIPPING_PROVIDER` blank the manual adapter takes over: an operator books at a courier counter,
+types the air waybill in, and the label prints, the order ships, the timeline fills in and the cash
+reconciles exactly as they would through an API. Turning an aggregator on is four values in `.env`
+and a restart:
+
+```bash
+SHIPPING_PROVIDER=aggregator           # anything non-blank selects the aggregator adapter
+SHIPPING_BASE_URL=https://...          # also the outbound allow-list: no other host is reachable
+SHIPPING_API_USER=...                  # exchanged for a token; SHIPPING_API_KEY works for a static one
+SHIPPING_API_SECRET=...
+SHIPPING_WEBHOOK_SECRET=...            # yours to choose; paste the same value into their dashboard
+```
+
+Then add the webhook in the aggregator's dashboard, pointing at
+`<public API origin>/api/v1/webhooks/shipping/aggregator`.
+
+**A confirmed sub-order opens a parcel; a human closes it.** The draft appears on the pick list with
+its lines, its destination and its cash figure already on it, and nothing is asked of a courier until
+somebody has put the box on a scale — a booking made on a guessed weight is a dispute with a courier
+who has both the parcel and the invoice.
+
+**Serviceability is never asked on a request path.** A product page and a checkout read a cached
+table; a nightly job refreshes it. A live API call there would make every page view depend on
+somebody else's uptime.
+
+Three loops in the **worker**, for the same reason payments has three:
+
+| Loop | Cadence | What it is for |
+|---|---|---|
+| Courier event processor | 5 s | Applies stored webhooks, retries failures, dead-letters what will never work |
+| Tracking poll | 30 min | Asks couriers about parcels silent for 24 h. **Recovers a lost webhook** |
+| Serviceability refresh | daily | Re-asks about the PIN codes whose answers are oldest |
+
+```bash
+GET  /api/v1/store/shipping/serviceability/560001   # anonymous, cached, never calls a courier
+POST /api/v1/admin/sub-orders/{id}/shipments        # pack, weigh and book in one call
+GET  /api/v1/admin/shipments/pick-list              # what is waiting to be packed, soonest first
+GET  /api/v1/admin/shipments/{id}/label             # the courier's label, or ours; a signed link
+POST /api/v1/admin/shipments/{id}/dispatch          # the courier has it. This ships the order
+POST /api/v1/admin/manifests                        # the handover sheet a driver signs
+GET  /api/v1/admin/ndr                              # failed deliveries waiting for a decision
+POST /api/v1/admin/shipping/cod-remittances         # a courier's cash, matched by air waybill
+```
+
+**A courier's word never sets a status directly.** Every scan goes through the shipment machine and
+then through the ordering machine over `IOrderFulfilment`, so a webhook, the polling fallback and an
+operator's click all write the same timeline. A scan the machine has no edge for — a delivery on a
+parcel already returned — is recorded, marked unapplied, and left for a human rather than discarded.
+
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

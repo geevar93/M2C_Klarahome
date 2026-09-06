@@ -35,6 +35,7 @@
     <ProjectReference Include="../../modules/KlaraHome.Modules.Carts/KlaraHome.Modules.Carts.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Orders/KlaraHome.Modules.Orders.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Payments/KlaraHome.Modules.Payments.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Shipping/KlaraHome.Modules.Shipping.csproj" />
   </ItemGroup>
 
 </Project>

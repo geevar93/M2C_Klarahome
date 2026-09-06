@@ -209,7 +209,7 @@ internal sealed class SyncPaymentCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var payment = await Load(context, command.PaymentId, cancellationToken).ConfigureAwait(false);
+        var payment = await LoadAsync(context, command.PaymentId, cancellationToken).ConfigureAwait(false);
 
         if (payment is null)
         {
@@ -272,7 +272,7 @@ internal sealed class SyncPaymentCommandHandler(
                              ?? listed.Value.FirstOrDefault());
     }
 
-    internal static async Task<Payment?> Load(
+    internal static async Task<Payment?> LoadAsync(
         PaymentsDbContext context,
         Guid paymentId,
         CancellationToken cancellationToken)
@@ -328,7 +328,7 @@ internal sealed class CapturePaymentCommandHandler(
         ArgumentNullException.ThrowIfNull(command);
 
         var payment = await SyncPaymentCommandHandler
-            .Load(context, command.PaymentId, cancellationToken)
+            .LoadAsync(context, command.PaymentId, cancellationToken)
             .ConfigureAwait(false);
 
         if (payment is null)

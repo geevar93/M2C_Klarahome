@@ -35,5 +35,6 @@ internal static class ModuleAssemblies
         typeof(Modules.Carts.CartsModule).Assembly,
         typeof(Modules.Orders.OrdersModule).Assembly,
         typeof(Modules.Payments.PaymentsModule).Assembly,
+        typeof(Modules.Shipping.ShippingModule).Assembly,
     ];
 }
