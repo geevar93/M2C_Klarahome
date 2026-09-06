@@ -13,6 +13,7 @@ using KlaraHome.Modules.Payments.Infrastructure.Initiation;
 using KlaraHome.Modules.Payments.Infrastructure.Jobs;
 using KlaraHome.Modules.Payments.Infrastructure.Persistence;
 using KlaraHome.Modules.Payments.Infrastructure.Processing;
+using KlaraHome.Modules.Payments.Infrastructure.Refunds;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -105,6 +106,12 @@ public sealed class PaymentsModule : IModule
         // stays here, because two answers to "what has the courier not remitted" is how a seller
         // ends up settled out of money nobody collected.
         services.AddScoped<ICodCollections, Infrastructure.Cod.CodCollections>();
+
+        // The seam Returns sends money back through, added at Step 17. It resolves the collection
+        // itself rather than taking one, so a returns queue never has to know what an order was paid
+        // with — and it goes through the same threshold every other refund does, so a large one still
+        // waits for a second pair of eyes.
+        services.AddScoped<IRefundInitiation, RefundInitiationService>();
 
         AddEventHandlers(services);
 

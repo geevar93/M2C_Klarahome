@@ -312,6 +312,39 @@ internal static class AdminShippingEndpoints
             .RequireRateLimiting(RateLimitPolicies.AdminWrite)
             .Produces<ServiceabilityResponse>();
 
+        // The delivery area is read here and edited through PUT /admin/settings, where every other
+        // store policy is edited and where the audit trail and the validator already live (ADR-018).
+        // Reading it beside the parcels is what an operator wants; a second write path for one
+        // settings row is not.
+        group.MapGet("/coverage", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetDeliveryCoverageQuery(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminGetDeliveryCoverage")
+            .WithSummary("Where this store currently delivers.")
+            .RequirePermission(ShippingPermissions.CourierManage)
+            .Produces<DeliveryCoverageResponse>();
+
+        group.MapGet("/coverage/test/{pincode}", async (
+                string pincode,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new TestDeliveryCoverageQuery(pincode), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminTestDeliveryCoverage")
+            .WithSummary("Whether one address would be accepted, and which check refuses it.")
+            .RequirePermission(ShippingPermissions.CourierManage)
+            .Produces<ServiceabilityResponse>();
+
         group.MapPost("/cod-remittances", async (
                 CourierRemittanceBody body,
                 IDispatcher dispatcher,

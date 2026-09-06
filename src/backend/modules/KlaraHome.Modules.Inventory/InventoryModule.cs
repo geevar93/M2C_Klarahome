@@ -69,6 +69,11 @@ public sealed class InventoryModule : IModule
         // without a query that crosses a schema.
         services.AddScoped<IStockAvailability, StockAvailabilityService>();
 
+        // The seam goods come back through, added at Step 17. It is one direction only: taking stock
+        // out is what a sale does and already has its own path, and a returns queue must not be able
+        // to reach it.
+        services.AddScoped<IStockRestock, StockRestockService>();
+
         // Inventory reacts to an offer's life cycle: a listing that goes live gets a stock row, and
         // one whose SKU changes gets its label refreshed.
         services.AddScoped<ListingLifecycleHandlers>();

@@ -109,14 +109,15 @@ internal static partial class WebhookEndpoints
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
-        // Whichever header the aggregator signs with. Both spellings are read because they are the
-        // two this class of API uses, and an operator should not have to guess which.
-        var signature = context.Request.Headers["X-Shipping-Signature"].ToString();
-
-        if (string.IsNullOrWhiteSpace(signature))
-        {
-            signature = context.Request.Headers["X-Webhook-Signature"].ToString();
-        }
+        // Whichever header the courier proves itself with. Shiprocket sends the shared secret in
+        // `x-api-key` rather than an HMAC over the body (ADR-018); the two signature spellings are
+        // kept for an adapter that signs properly. The adapter decides what the value means — this
+        // endpoint only finds it, and an operator should not have to guess which header to configure.
+        var signature = FirstHeader(
+            context,
+            "X-Api-Key",
+            "X-Shipping-Signature",
+            "X-Webhook-Signature");
 
         var verified = provider.VerifyWebhookSignature(body, signature);
         var envelope = provider.ReadWebhook(body);
@@ -172,6 +173,24 @@ internal static partial class WebhookEndpoints
         await data.SaveChangesAsync().ConfigureAwait(false);
 
         return verified ? Results.Ok() : Results.Unauthorized();
+    }
+
+    /// <summary>The first of the named headers that carries anything.</summary>
+    /// <param name="context">The request.</param>
+    /// <param name="names">The header names, in the order they are preferred.</param>
+    private static string? FirstHeader(HttpContext context, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = context.Request.Headers[name].ToString();
+
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

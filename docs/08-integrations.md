@@ -47,6 +47,22 @@ selectable in configuration:
 
 RazorpayX is the fallback for direct bank payouts if Route is not enabled for the merchant.
 
+**Built at Step 18.** Both rails are adapters behind `IPayoutProvider`, keyed by the rail they are
+and selected by `Payouts:Provider` — the arrangement ADR-018 settled on for couriers, applied to
+money. Route posts `/v1/transfers` against the seller's linked account; X posts `/v1/payouts` from
+the merchant's own `Razorpay:AccountNumber` with `queue_if_low_balance` deliberately **false**, so a
+payout the gateway would hold for want of balance is refused rather than moved at a time the ledger
+cannot predict. A deployment with neither configured gets an adapter that sends nothing and says so:
+periods still close, batches are still built and approved, and the transfer answers
+`503 PAYOUT_PROVIDER_UNAVAILABLE`.
+
+Outcomes are learnt by **asking**, not only by being told. `transfer.processed` / `transfer.failed`
+webhooks are subscribed for latency; the floor under the answer is a fifteen-minute reconciliation
+sweep that re-reads every in-flight transfer from the gateway, because a webhook can be lost and a
+seller's money cannot be. A transfer neither processed nor failed for longer than
+`Settlements:StaleTransferHours` is *reported* and not touched — declaring it failed because it is
+slow would free its settlement cycle to be paid a second time.
+
 **Reconciliation (worker job):**
 1. Every 15 minutes, find orders in `PendingPayment` older than 20 minutes and query Razorpay
    for their true state — recovers from any lost webhook.
@@ -64,17 +80,82 @@ courier remittance reconciled against `cod_collections`.
 
 ---
 
-## 2. Logistics — aggregator (Shiprocket / Delhivery / Blue Dart class)
+## 2. Logistics — Shiprocket (v1), behind a switchable provider interface
+
+> **v1 courier: Shiprocket.** Chosen by the client at the Step 16 boundary and recorded in
+> **ADR-018**. It is named in **configuration only** — `Shipping:Provider=shiprocket` — and never in
+> a caller, a domain type or a database default. Everything below the interface is replaceable; a
+> direct Delhivery or Blue Dart contract is one adapter class and one configuration value.
 
 **Interface:** `IShippingProvider`
 `CheckServiceabilityAsync(pincode, weight, cod)`, `CreateShipmentAsync`, `GenerateLabelAsync`,
 `GenerateManifestAsync`, `SchedulePickupAsync`, `CancelShipmentAsync`, `TrackAsync`,
 `VerifyWebhookSignature`.
 
-Recommendation for v1: **an aggregator** (one integration, many couriers, automatic courier
-selection, COD supported) rather than a direct courier contract — faster to launch and easier
-for a redistributed deployment. A direct Delhivery/Blue Dart adapter can be added later behind
-the same interface.
+An aggregator (one integration, many couriers, automatic courier selection, COD supported) rather
+than a direct courier contract — faster to launch and easier for a redistributed deployment.
+
+### 2.1 Adapters are keyed by the courier they are
+
+Each adapter publishes its own key, and `Shipping:Provider` names the one that books **new**
+consignments. `ShippingProviderRegistry` resolves the key through DI; a blank or unknown key falls
+through to `manual`, which is always registered.
+
+| Key | Adapter | State |
+|---|---|---|
+| `shiprocket` | `ShiprocketShippingProvider` | ✅ v1. Active when `Shipping:Provider=shiprocket` and its credentials are present |
+| `manual` | `ManualShippingProvider` | ✅ Always registered. An operator types the air waybill their courier gave them; the label, the timeline, the tracking entries and the cash reconciliation are unchanged. It is the fallback when an adapter is unconfigured **and** the documented fallback when a booking fails |
+| `delhivery`, `bluedart`, … | — | Not built. One class, one key, no caller changes |
+
+**A shipment stores the key of the adapter that booked it.** Switching courier therefore leaves
+parcels already in flight talking to the courier that has them — tracking, labels, cancellation and
+cash follow the row, not the configuration.
+
+### 2.2 Shiprocket API surface
+
+Base URL `https://apiv2.shiprocket.in`, configured as `Shipping:BaseUrl` and doubling as the
+outbound allow-list.
+
+| Purpose | Call |
+|---|---|
+| Auth | `POST /v1/external/auth/login` with the API user's email and password → a bearer token valid for days, not years. Cached in memory; refreshed exactly once on a `401`, then the call is failed |
+| Serviceability + rates | `GET /v1/external/courier/serviceability/?pickup_postcode=&delivery_postcode=&weight=&cod=0\|1` → per-courier reachability, ETA and *our* cost |
+| PIN-code details | `GET /v1/external/open/postcode/details?postcode=` → city and state, used to fill `city`/`state` on the cache row |
+| Book | `POST /v1/external/orders/create/adhoc`, then `POST /v1/external/courier/assign/awb` — two calls, and the air waybill exists only after the second |
+| Label | `POST /v1/external/courier/generate/label` |
+| Manifest | `POST /v1/external/manifests/generate` |
+| Pickup | `POST /v1/external/courier/generate/pickup` |
+| Cancel | `POST /v1/external/orders/cancel` |
+| Track | `GET /v1/external/courier/track/awb/{awb}` |
+| Webhook | Shiprocket **POSTs to a URL registered in its dashboard with a shared secret in an `x-api-key` header** — not an HMAC over the body. Verified by constant-time comparison against `Shipping:WebhookSecret`; a body signature is still supported for an adapter that uses one |
+
+Pickup addresses are registered with Shiprocket per seller location and referenced by their label;
+the code they are registered under is written back to the vendor's pickup point the first time a
+parcel leaves it.
+
+> **Confirm the paths against Shiprocket's current documentation when the account is provisioned.**
+> They are recorded here so the adapter is written once, not so they are trusted blind.
+
+### 2.3 Serviceability and coverage are two different questions
+
+| | Serviceability | Coverage |
+|---|---|---|
+| Asks | Can a courier reach this PIN code, prepaid and/or COD? | Will **this store** sell to this PIN code? |
+| Owner | Shiprocket | The operator, in store settings |
+| Where it lives | `shipping.serviceability_cache`, refreshed nightly | `DeliveryCoverageSettings`, edited in admin, effective immediately |
+| Refusal | `PINCODE_NOT_SERVICEABLE` | `DELIVERY_AREA_NOT_COVERED` |
+
+An address must pass both, and the two are never merged into one flag: the first is a fact about
+India's logistics, the second is a decision the operator can reverse in a settings screen, and an
+operator reading a lost-order report has to be able to tell which one cost them the sale.
+
+**Coverage default: Hyderabad.** Cities `Hyderabad` and `Secunderabad`, PIN prefix `500`. The
+adjacent `501`/`502` outer-district ranges are excluded by default and are one edit away. Coverage
+is checked at five gates — the storefront PIN check, checkout address selection, cart validation,
+shipping-option quoting and `place-order` — because checking it only at the last one means taking
+money for an order the store cannot ship. Disabling coverage restores national trading. It is read
+at `GET /admin/shipping/coverage` and edited at `PUT /admin/settings/delivery-coverage`, with every
+other store policy.
 
 | Concern | Approach |
 |---|---|
@@ -222,8 +303,8 @@ replacement for the second factor. Both are decisions, recorded in ADR-014.
 | Integration | Provider | Account owner | Sandbox creds | Live creds | Contract signed | Notes |
 |---|---|---|---|---|---|---|
 | Payments | Razorpay | Client | ☐ | ☐ | ☐ | Route enablement to be confirmed |
-| Payouts | Razorpay Route / X | Client | ☐ | ☐ | ☐ | |
-| Logistics | TBC | Client | ☐ | ☐ | ☐ | Aggregator recommended |
+| Payouts | Razorpay Route / X | Client | ☐ | ☐ | ☐ | Both adapters built at Step 18 behind `IPayoutProvider`. Route additionally needs `Razorpay__RouteEnabled=true` and a **linked account per seller**; X needs the merchant's own `Razorpay__AccountNumber`, funded. Until the row is complete `Payouts__Provider` is blank, batches are built and approved but send nothing, and the ledger goes on saying to the paisa what every seller is owed |
+| Logistics | ✅ **Shiprocket** | Client | ☐ | ☐ | ☐ | Chosen at the Step 16 boundary (ADR-018). Needs an **API user** (Settings → API → Configure), each seller's **pickup address** registered, and a **webhook** at `<public API origin>/api/v1/webhooks/shipping/shiprocket` with the `x-api-key` secret this deployment chooses. Until the row is complete the `manual` adapter carries fulfilment and nothing is proved against a live courier |
 | SMS | TBC | Client | ☐ | ☐ | ☐ | DLT entity + templates needed. **Deferred:** no budget. Pipeline built at Step 8; the channel is `Suppressed / NoProvider` until a row here is complete (ADR-017) |
 | WhatsApp | TBC | Client | ☐ | ☐ | ☐ | Optional for v1. Same state as SMS: interface and templates exist, no adapter, channel suppressed |
 | Email | ✅ **SMTP** | Client | ✅ Mailpit | ☐ | — | The one channel that needs no paid account: any SMTP host will do, Mailpit in development. A managed provider (SES/Postmark) is still wanted for deliverability, DKIM and bounce handling, and remains **deferred: no budget** |

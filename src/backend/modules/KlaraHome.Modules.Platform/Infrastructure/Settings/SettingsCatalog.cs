@@ -171,6 +171,41 @@ internal static class SettingsCatalog
         // (docs/07-security-compliance.md 4). Not public: the approval threshold is the shape of an
         // abuse.
         new SettingsSectionDescriptor<PaymentSettings>(),
+
+        // Added by Step 16A: where the store is willing to deliver (ADR-018). Public, because the
+        // storefront has to be able to say so on a product page and because the refusal message is
+        // the operator's own words. It is deliberately not a shipping zone - a zone prices a parcel,
+        // and an unpriced destination and an undecided one must not look the same.
+        new SettingsSectionDescriptor<DeliveryCoverageSettings>(),
+
+        // Added by Step 17: who pays to send goods back, what is approved without a human, where the
+        // money goes and what becomes of the goods. Every one of them is a policy a business
+        // revisits after a month of returns costs more than it budgeted for, so none is
+        // configuration. Not public - how long a shopper has is on `commerce` and is public; the
+        // rules behind an approval are the operator's.
+        new SettingsSectionDescriptor<ReturnsSettings>(),
+
+        // Added by Step 18: how often a seller is settled, what the platform keeps, and at what
+        // rates tax is collected and deducted at source. The statutory rates are here rather than in
+        // configuration for the reason the rest of this list is — a rate changes by a notification in
+        // the Gazette, and a deployment that needed a rebuild to follow one would file a wrong
+        // return. Not public: what the platform charges a seller is between the platform and that
+        // seller.
+        new SettingsSectionDescriptor<SettlementSettings>(),
+
+        // Added by Step 19: how the storefront finds things — the ranking weights, the price bands,
+        // the fuzzy threshold and whether queries are logged. Public, because the storefront applies
+        // several of them itself before the first response arrives, and settings rather than
+        // configuration because "our results feel stale" is a complaint a merchandiser answers on a
+        // Tuesday afternoon rather than in a release.
+        new SettingsSectionDescriptor<SearchSettings>(),
+
+        // Added by Step 20: the canonical host, whether this deployment wants to be indexed at all,
+        // the robots directives and the organisation identity a structured-data graph names. Public,
+        // because the storefront renders the canonical tag, the robots meta and the JSON-LD itself
+        // during server-side rendering. Settings rather than configuration because a staging site
+        // that has leaked into an index is a problem measured in minutes, not in releases.
+        new SettingsSectionDescriptor<SeoSettings>(),
     ];
 
     private static readonly Dictionary<string, ISettingsSectionDescriptor> ByKey =

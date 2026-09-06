@@ -445,6 +445,7 @@
           "KlaraHome.Infrastructure": "[0.1.0, )",
           "KlaraHome.Modules.Carts": "[0.1.0, )",
           "KlaraHome.Modules.Catalog": "[0.1.0, )",
+          "KlaraHome.Modules.Content": "[0.1.0, )",
           "KlaraHome.Modules.Identity": "[0.1.0, )",
           "KlaraHome.Modules.Inventory": "[0.1.0, )",
           "KlaraHome.Modules.Media": "[0.1.0, )",
@@ -453,6 +454,9 @@
           "KlaraHome.Modules.Payments": "[0.1.0, )",
           "KlaraHome.Modules.Platform": "[0.1.0, )",
           "KlaraHome.Modules.Pricing": "[0.1.0, )",
+          "KlaraHome.Modules.Returns": "[0.1.0, )",
+          "KlaraHome.Modules.Search": "[0.1.0, )",
+          "KlaraHome.Modules.Settlements": "[0.1.0, )",
           "KlaraHome.Modules.Shipping": "[0.1.0, )",
           "KlaraHome.Modules.Vendors": "[0.1.0, )",
           "KlaraHome.SharedKernel": "[0.1.0, )",
@@ -501,6 +505,14 @@
         }
       },
       "klarahome.modules.catalog": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.content": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",
@@ -568,6 +580,30 @@
         }
       },
       "klarahome.modules.pricing": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.returns": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.search": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.settlements": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",

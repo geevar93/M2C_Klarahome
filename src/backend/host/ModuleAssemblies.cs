@@ -36,5 +36,9 @@ internal static class ModuleAssemblies
         typeof(Modules.Orders.OrdersModule).Assembly,
         typeof(Modules.Payments.PaymentsModule).Assembly,
         typeof(Modules.Shipping.ShippingModule).Assembly,
+        typeof(Modules.Returns.ReturnsModule).Assembly,
+        typeof(Modules.Settlements.SettlementsModule).Assembly,
+        typeof(Modules.Search.SearchModule).Assembly,
+        typeof(Modules.Content.ContentModule).Assembly,
     ];
 }

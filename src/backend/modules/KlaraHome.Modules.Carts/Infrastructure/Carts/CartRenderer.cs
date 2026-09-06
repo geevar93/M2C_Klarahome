@@ -1,6 +1,7 @@
 using KlaraHome.Contracts.Catalog;
 using KlaraHome.Contracts.Inventory;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Shipping;
 using KlaraHome.Contracts.Vendors;
 using KlaraHome.Modules.Carts.Application.Carts;
 using KlaraHome.Modules.Carts.Domain;
@@ -55,11 +56,13 @@ internal sealed record CartRenderContext(
 /// <param name="vendors">Who sells them, and where they deliver.</param>
 /// <param name="stock">How many there are.</param>
 /// <param name="engine">The one calculation engine.</param>
+/// <param name="deliveries">Whether the store delivers to the chosen address at all.</param>
 internal sealed class CartRenderer(
     IProductCatalog catalog,
     IVendorDirectory vendors,
     IStockAvailability stock,
-    IPriceQuoteEngine engine)
+    IPriceQuoteEngine engine,
+    IShippingOptions deliveries)
 {
     /// <summary>Prices and validates a basket.</summary>
     /// <param name="cart">The basket.</param>
@@ -117,7 +120,33 @@ internal sealed class CartRenderer(
             issues.Add(new CartIssue(CartIssueCodes.CouponRejected, rejection, IsBlocking: false));
         }
 
-        var ready = lines.Count > 0 && !lines.SelectMany(line => line.Issues).Any(issue => issue.IsBlocking);
+        // The third of the five gates ADR-018 names, and the one a shopper meets first. It is a
+        // basket-level issue rather than a line-level one because it is not any seller's fault: the
+        // whole address is outside where this store has decided to deliver, or outside what any
+        // courier will carry to.
+        if (!string.IsNullOrWhiteSpace(context.Pincode))
+        {
+            var destination = await deliveries
+                .CheckDestinationAsync(context.Pincode, isCod: false, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!destination.Deliverable)
+            {
+                issues.Add(destination.Refusal == DeliveryRefusal.NotCovered
+                    ? new CartIssue(
+                        CartIssueCodes.NotCovered,
+                        destination.Message ?? "We do not deliver to that area yet.",
+                        IsBlocking: true)
+                    : new CartIssue(
+                        CartIssueCodes.NotServiceable,
+                        "No courier currently delivers to that PIN code.",
+                        IsBlocking: true));
+            }
+        }
+
+        var ready = lines.Count > 0
+                    && !issues.Any(issue => issue.IsBlocking)
+                    && !lines.SelectMany(line => line.Issues).Any(issue => issue.IsBlocking);
 
         return new CartResponse(
             cart.Id,

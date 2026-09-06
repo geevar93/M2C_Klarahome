@@ -265,6 +265,129 @@ internal static class PermissionCatalog
     /// </summary>
     public const string ShippingCourierManage = "shipping.courier.manage";
 
+    /// <summary>
+    /// List returns and read one, with its evidence. A read of a shopper's photographs and their
+    /// words about a product, so it is a grant rather than something every operator has.
+    /// </summary>
+    public const string ReturnRead = "returns.return.read";
+
+    /// <summary>
+    /// Approve a return, refuse it, book its collection and close it. The daily work of the returns
+    /// queue, and the permission a seller holds for their own goods.
+    /// </summary>
+    public const string ReturnManage = "returns.return.manage";
+
+    /// <summary>
+    /// Book a returned parcel in and grade what is in it. Deliberately separate and deliberately not
+    /// a seller's: grading decides whether a shopper is refunded and whether a seller is charged.
+    /// </summary>
+    public const string ReturnQc = "returns.qc.manage";
+
+    /// <summary>
+    /// Pay a refund out of a return and raise the credit note that goes with it. Finance's rather
+    /// than the queue's, and it sits on top of the refund approval threshold rather than replacing
+    /// it.
+    /// </summary>
+    public const string ReturnRefund = "returns.refund.manage";
+
+    /// <summary>
+    /// Edit the return reason codes and the policy each carries. A commercial decision — who pays
+    /// the freight, what is inspected, what is auto-approved — and staff-only.
+    /// </summary>
+    public const string ReturnReasonManage = "returns.reason.manage";
+
+    /// <summary>
+    /// Read settlement periods, ledger statements, payout batches and the statutory extracts. A
+    /// seller holds it for their own account, confined by the vendor query filter.
+    /// </summary>
+    public const string SettlementRead = "settlements.settlement.read";
+
+    /// <summary>
+    /// Close a settlement period by hand and post an adjustment to a seller's ledger. Finance's, and
+    /// deliberately not a seller's: an adjustment is a correction to somebody's money.
+    /// </summary>
+    public const string SettlementManage = "settlements.settlement.manage";
+
+    /// <summary>
+    /// Build a payout batch from closed periods, and abandon one nothing has left. The maker's half
+    /// of the control — a large amount of power and no money, because an unapproved batch sends
+    /// nothing.
+    /// </summary>
+    public const string PayoutManage = "settlements.payout.manage";
+
+    /// <summary>
+    /// Approve a payout batch and send it. The checker's half, and the one permission that moves
+    /// money out of the platform. Holding it is necessary and not sufficient: the batch itself
+    /// refuses an approval by the person who raised it.
+    /// </summary>
+    public const string PayoutApprove = "settlements.payout.approve";
+
+    /// <summary>
+    /// Read what shoppers have searched for, including the queries that found nothing. A buying
+    /// decision rather than a technical one, and support's second-most-used report.
+    /// </summary>
+    public const string SearchQueryRead = "search.query.read";
+
+    /// <summary>
+    /// Edit the store's search synonyms and stop words. A large amount of power over what shoppers
+    /// find, and deliberately a merchandiser's rather than an engineer's.
+    /// </summary>
+    public const string SearchVocabularyManage = "search.vocabulary.manage";
+
+    /// <summary>
+    /// Rebuild the search index and read its state. The one action here with a real operational
+    /// cost, so it sits with the people who run the catalogue.
+    /// </summary>
+    public const string SearchIndexManage = "search.index.manage";
+
+    /// <summary>
+    /// Write pages, menus, banners and collections, and read any of them, published or not.
+    /// </summary>
+    /// <remarks>
+    /// The merchandiser's permission. It covers everything about the storefront except putting a page
+    /// live, which is deliberately somebody else's.
+    /// </remarks>
+    public const string ContentManage = "content.content.manage";
+
+    /// <summary>
+    /// Publish, schedule, unpublish, archive and roll back a page.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="ContentManage"/>, and the only reason the editorial workflow means
+    /// anything: an agency or a seasonal hire can be given the first without the second, and a page
+    /// then cannot reach a shopper without somebody holding this looking at it.
+    /// </remarks>
+    public const string ContentPublish = "content.page.publish";
+
+    /// <summary>
+    /// Write a custom-HTML block.
+    /// </summary>
+    /// <remarks>
+    /// Its own permission because it is its own risk: arbitrary markup executed in every shopper's
+    /// browser is a stored cross-site-scripting vector, and the person who writes the store's copy is
+    /// not automatically the person who may embed a script.
+    /// </remarks>
+    public const string ContentCustomHtmlWrite = "content.custom-html.write";
+
+    /// <summary>
+    /// Edit the redirect manager.
+    /// </summary>
+    /// <remarks>
+    /// Routing rather than content. A wrong row here sends every visitor arriving on a good URL
+    /// somewhere else, and it does so without anything on screen looking wrong to whoever wrote it.
+    /// </remarks>
+    public const string ContentRedirectManage = "content.redirect.manage";
+
+    /// <summary>
+    /// Read the sitemap index, the robots document and a page's structured data.
+    /// </summary>
+    /// <remarks>
+    /// A read permission, because there is nothing here to write: the SEO settings belong to the
+    /// Platform module and its own permission. It exists so the admin app's SEO screen can show what a
+    /// crawler will be served without also granting the settings permission.
+    /// </remarks>
+    public const string ContentSeoRead = "content.seo.read";
+
     /// <summary>Every declared permission, in the order the admin UI lists them.</summary>
     public static readonly IReadOnlyList<PermissionDescriptor> All =
     [
@@ -322,6 +445,23 @@ internal static class PermissionCatalog
         new(NdrManage, "Shipping", "Work the failed-delivery queue."),
         new(ShippingRateManage, "Shipping", "Edit the delivery zones and the rate card."),
         new(ShippingCourierManage, "Shipping", "Work the courier webhook log and record cash remittances."),
+        new(ReturnRead, "Returns", "List returns and read one, with its evidence."),
+        new(ReturnManage, "Returns", "Approve and refuse returns, book their collection, and close them."),
+        new(ReturnQc, "Returns", "Book returned parcels in and grade what is in them."),
+        new(ReturnRefund, "Returns", "Refund a return and raise its credit note."),
+        new(ReturnReasonManage, "Returns", "Edit the return reason codes and the policy each carries."),
+        new(SettlementRead, "Settlements", "Read settlement periods, ledgers, payouts and the tax extracts."),
+        new(SettlementManage, "Settlements", "Close a settlement period and adjust a seller's ledger."),
+        new(PayoutManage, "Settlements", "Build a payout batch from closed periods, and cancel one."),
+        new(PayoutApprove, "Settlements", "Approve a payout batch and send the money."),
+        new(SearchQueryRead, "Search", "Read what shoppers searched for, and what they did not find."),
+        new(SearchVocabularyManage, "Search", "Edit the store's search synonyms and stop words."),
+        new(SearchIndexManage, "Search", "Rebuild the search index and read its state."),
+        new(ContentManage, "Content", "Write pages, menus, banners and collections, and read drafts."),
+        new(ContentPublish, "Content", "Publish, schedule, unpublish, archive and roll back a page."),
+        new(ContentCustomHtmlWrite, "Content", "Write custom HTML blocks."),
+        new(ContentRedirectManage, "Content", "Edit the redirect manager."),
+        new(ContentSeoRead, "Content", "Read the sitemap, the robots document and a page's structured data."),
     ];
 
     /// <summary>Whether a code is one this platform declares.</summary>
@@ -433,6 +573,10 @@ internal static class SystemRoles
                 // be answered from the order alone once a courier has it. Reading a parcel is a
                 // read; packing, booking and working failed deliveries are all Operations'.
                 PermissionCatalog.ShipmentRead,
+
+                // Step 19. "Why can't I find X on your site" is a support call, and the query log is
+                // the only thing that answers it. A read of what was typed and what came back.
+                PermissionCatalog.SearchQueryRead,
             ]),
         new(
             CatalogManager,
@@ -465,6 +609,12 @@ internal static class SystemRoles
                 PermissionCatalog.InventoryWarehouseManage,
                 PermissionCatalog.InventoryPurchasingManage,
                 PermissionCatalog.InventoryStockTakeManage,
+
+                // Step 19. The search index is a projection of the catalogue this role owns, so
+                // rebuilding it after a bulk import — and reading whether it has fallen behind — is
+                // their job. Editing the synonyms is the merchandiser's.
+                PermissionCatalog.SearchIndexManage,
+                PermissionCatalog.SearchQueryRead,
             ]),
         new(
             Operations,
@@ -549,6 +699,31 @@ internal static class SystemRoles
                 // Step 13. The abandoned-cart worklist is a merchandising instrument: what people
                 // put down before paying is the most direct evidence a campaign has.
                 PermissionCatalog.CartRead,
+
+                // Step 19. What shoppers searched for is the other half of that evidence, and the
+                // zero-result report is the most actionable list this platform produces. Editing the
+                // vocabulary comes with it: the person who notices that nobody finds "settee" is this
+                // role, and making them raise a ticket is how a store ends up with a search nobody
+                // trusts. Rebuilding the index is deliberately absent — it has an operational cost
+                // and belongs with the catalogue.
+                PermissionCatalog.SearchQueryRead,
+                PermissionCatalog.SearchVocabularyManage,
+
+                // Step 20. The storefront itself: pages, menus, banners, collections and the SEO
+                // surface. Publishing comes with it, because the role's description is "owns
+                // content" and a merchandiser who could write a campaign page but not put it live
+                // would be a merchandiser who needs somebody else present to run a sale. The
+                // editorial split is still real — the permission exists and can be withheld from a
+                // custom role built for an agency — it is simply not the split this role wants.
+                PermissionCatalog.ContentManage,
+                PermissionCatalog.ContentPublish,
+                PermissionCatalog.ContentRedirectManage,
+                PermissionCatalog.ContentSeoRead,
+
+                // Custom HTML is deliberately absent. It is arbitrary markup in every shopper's
+                // browser, and the person who writes the store's copy is not automatically the
+                // person who may embed a script (docs/07-security-compliance.md §3). A deployment
+                // that wants it grants it explicitly, to named people.
             ]),
         new(
             Finance,
@@ -601,6 +776,22 @@ internal static class SystemRoles
                 // the difference is the margin they are answerable for.
                 PermissionCatalog.ShippingRateManage,
                 PermissionCatalog.ShipmentRead,
+
+                // Step 17. A refund out of a return is money going back, and it is the same decision
+                // as any other refund; reading the return is what makes it possible to check the
+                // credit note against the invoice it credits. Approving and grading returns is
+                // Operations' work and deliberately absent.
+                PermissionCatalog.ReturnRead,
+                PermissionCatalog.ReturnRefund,
+
+                // Step 18. The role's whole description. Both halves of maker-checker are granted and
+                // the control still holds: the aggregate and a check constraint both refuse a batch
+                // approved by the person who raised it, so two people in this role are needed rather
+                // than two roles - exactly the arrangement the refund threshold already uses.
+                PermissionCatalog.SettlementRead,
+                PermissionCatalog.SettlementManage,
+                PermissionCatalog.PayoutManage,
+                PermissionCatalog.PayoutApprove,
             ]),
         new(
             VendorOwner,
@@ -649,6 +840,18 @@ internal static class SystemRoles
                 PermissionCatalog.ShipmentManage,
                 PermissionCatalog.NdrManage,
                 PermissionCatalog.ShippingRateManage,
+
+                // Step 17. Returns against their own goods: they see them, approve them and refuse
+                // them. Grading what came back is deliberately absent - a seller may not decide the
+                // condition of goods they are about to be charged for - and so is the refund.
+                PermissionCatalog.ReturnRead,
+                PermissionCatalog.ReturnManage,
+
+                // Step 18. Their own statement and their own payouts, confined by the vendor query
+                // filter in the data layer. Reading only: closing a period, adjusting a ledger and
+                // approving a payout are all the platform's, and a seller who could do any of them
+                // would be deciding what they are paid.
+                PermissionCatalog.SettlementRead,
             ]),
         new(
             VendorStaff,

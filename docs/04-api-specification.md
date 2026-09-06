@@ -128,10 +128,18 @@ POST   /store/me/delete-request         (DPDP)
 GET /store/categories                       ?parentId= &depth=
 GET /store/categories/{slug}
 GET /store/brands
-GET /store/products                         ?category= &brand= &q= &minPrice= &maxPrice=
-                                            &attr.color=beige &rating= &sort= &cursor= &size=
+GET /store/products                         ?q= &category= &brand= &vendor= &minPrice= &maxPrice=
+                                            &attr.color=beige &rating= &discount= &inStock=
+                                            &sort= &cursor= &size=
                                             → served from the Search projection (Step 19), not from
-                                              the catalog schema: the facet counts need it
+                                              the catalog schema: the facet counts need it.
+                                              `category` is a category id and matches that category
+                                              and everything beneath it. `brand`, `vendor` and each
+                                              `attr.*` accept a repeated parameter or one
+                                              comma-separated value. `sort` is one of relevance |
+                                              price-asc | price-desc | newest | discount | rating |
+                                              popularity. Facets are returned on the first page
+                                              only — they do not change as a shopper pages
 GET /store/products/{slug}                  → product + variants + buy-box listing + offers,
                                               with the mandatory disclosures (MRP, net quantity,
                                               country of origin, manufacturer/importer)
@@ -140,18 +148,29 @@ GET /store/products/{slug}/offers           ?variantId= → all vendor listings 
 GET /store/vendors/{slug}                   → a seller's public profile; 404 unless they are Active
 GET /store/products/{slug}/reviews          ?sort= &rating= &cursor=
 GET /store/products/{slug}/questions
-GET /store/search/suggest                   ?q=
+GET /store/search/suggest                   ?q= &limit= -> products, popular searches, brands
+                                              and categories, in that order
+POST /store/search/click                    { queryToken, position, variantId } -> 204. Anonymous,
+                                              and the handle comes from the search response; it is
+                                              what makes click-through measurable
 GET /store/collections/{slug}
 GET /store/listings/{id}/delivery-estimate  ?pincode=
 ```
 
-`GET /store/products` returns `facets` alongside `items`:
+`GET /store/products` returns `facets` alongside `items`. Each group's counts are computed with
+**that group's own filter lifted and every other filter applied** — a shopper who has chosen beige
+still has to be told how many creams there are, within whatever price band they also chose. The one
+exception is `category`, which is a drill-down rather than a multi-select and therefore keeps its
+own filter. The response also carries `query` (the search as it was interpreted, after stop words
+and synonyms), `corrected` (true when the exact search matched nothing and these results came from
+the fuzzy fallback) and `queryToken` (the handle `POST /store/search/click` reports against):
 ```json
-"facets": {
-  "brand":  [{ "value": "Klara", "label": "Klara", "count": 42 }],
-  "price":  [{ "from": 0, "to": 499, "count": 120 }],
-  "attributes": { "color": [{ "value": "beige", "count": 18 }] }
-}
+"facets": [
+  { "key": "brand",      "label": "Brand",     "values": [{ "value": "0192...", "label": "Klara", "count": 42 }] },
+  { "key": "price",      "label": "Price",     "values": [{ "value": "0-499", "label": "0-499", "count": 120, "from": 0, "to": 499 }] },
+  { "key": "rating",     "label": "Customer rating", "values": [{ "value": "4", "label": "4 & up", "count": 61, "from": 4 }] },
+  { "key": "attr.color", "label": "Colour",    "values": [{ "value": "beige", "label": "Beige", "count": 18 }] }
+]
 ```
 
 ### 3.3 Cart & checkout
@@ -241,6 +260,44 @@ what is still owed is derived from the lines rather than written back over the a
 Minting a download link **is** the grant: the URL carries no authorisation of its own beyond its
 expiry, so the ownership check happens before one is signed.
 
+### 3.4a Returns
+```
+GET    /store/sub-orders/{id}/returnable   → what may still be sent back from one seller's part,
+                                             each line with how many units are left and what they
+                                             are worth, plus the reasons this store accepts
+GET    /store/returns/reasons              → the reason codes offered, with whether each needs a
+                                             photograph and whether a courier collects
+GET    /store/returns                      ?status= &cursor= &size= → the caller's own returns
+POST   /store/returns                      { subOrderId, type?, reasonCode, reasonNote?,
+                                             lines[], evidenceFileIds?, refundMode? }
+GET    /store/returns/{id}                 → one return in full, with its lines and its evidence
+POST   /store/returns/{id}/cancel          { reason? } withdraws a return not yet collected
+GET    /store/returns/{id}/credit-note     → the credit note raised against it, when one has been
+```
+
+Every route is scoped to the caller's own returns by the token, never by a parameter, and an id
+belonging to somebody else answers `404` exactly as an invented one does.
+
+`returnable` is the question asked **before** a return exists, which is why it hangs off the
+sub-order rather than off a return. It lists every line including the ones that cannot be sent back,
+each with the reason — a screen that silently omitted them would leave the shopper hunting for an
+item they can see in their order.
+
+`lines` on a request is `[{ orderLineId, quantity }]`. The same line twice is a validation failure
+rather than a sum: a shopper naming it twice means a quantity, and guessing which they meant is
+worse than asking.
+
+**The eligibility window is resolved from three policies in a fixed order** — the product's own
+window frozen on the order line, then the seller's promise, then the store's default
+(`CommerceSettings.ReturnWindowDays`). The first with an opinion wins, deliberately not the
+shortest: the shortest is not what the shopper read. A product sold as non-returnable is the one
+veto in the chain, because that was a mandatory listing disclosure. The refusals are
+`RETURN_WINDOW_CLOSED`, `RETURN_ITEM_NOT_RETURNABLE` and `RETURN_NOT_DELIVERED`, and they are
+distinct because a storefront shows a different screen for each.
+
+A return that the reason code or the store's value threshold auto-approves is approved in the same
+request, so a shopper whose reason the business trusts is answered immediately.
+
 ### 3.5 Payments
 ```
 GET    /store/payments/orders/{orderId}    → where the money for this order stands: status, what
@@ -277,14 +334,58 @@ POST            /store/products/{id}/stock-subscription
 
 ### 3.7 Content
 ```
-GET /store/content/pages/{slug}       → blocks
+GET /store/content/pages/{slug}       → blocks, resolved and windowed to now
 GET /store/content/home
-GET /store/content/menus/{code}
-GET /store/content/banners            ?placement=
+GET /store/content/menus/{code}       → nested, every target resolved into a path
+GET /store/content/banners            ?placement= live now, for this visitor's audience
+GET /store/content/blog               ?tag= &cursor= &size=   behind `content.blog`
+GET /store/content/blog/{slug}
+GET /store/content/redirects/resolve  ?path= -> { statusCode, location } on a 404
+GET /store/content/seo/config         → canonical origin, title template, indexing switch
+GET /store/content/seo/robots         → text/plain, served verbatim at /robots.txt
+GET /store/content/seo/sitemap        → the sitemap index
+GET /store/content/seo/sitemap/{section} ?page=   pages|blog|collections|categories|products
+GET /store/content/seo/structured-data ?path= -> the schema.org @graph for one path
 GET /store/config                     → public store config (branding refs, currency, policies,
                                         feature flags, enabled payment methods)
-GET /store/pincodes/{pincode}         → city/state autofill + serviceability
+GET /store/pincodes/{pincode}         → city/state autofill (platform reference data)
 ```
+
+### 3.8 Delivery
+```
+GET /store/shipping/serviceability/{pincode}
+```
+Anonymous, cached, and read on the PDP and in the cart. It answers **both** questions an address has
+to pass (ADR-018) and says which one failed:
+
+```json
+{
+  "pincode": "500081",
+  "deliverable": true,
+  "covered": true,
+  "isServiceable": true,
+  "prepaidOk": true,
+  "codOk": true,
+  "etaDays": 3,
+  "courier": "Delhivery",
+  "city": "Hyderabad",
+  "state": "Telangana",
+  "reason": null,
+  "message": null,
+  "checkedAt": "2026-09-06T04:10:00Z"
+}
+```
+
+`deliverable` is `covered && isServiceable` and is the only field a storefront needs to decide what
+to show. When it is false, `reason` carries `DELIVERY_AREA_NOT_COVERED` — the store does not sell
+there, with the operator's own `message` beside it — or `PINCODE_NOT_SERVICEABLE`, meaning no courier
+will carry it. The route **never calls a courier**; it reads the serviceability cache and the
+coverage settings (`08-integrations.md` §2.3).
+
+The same two checks are applied at `PUT /store/checkout/{id}/address`, in cart validation, in
+`GET /store/checkout/{id}/shipping-options` (an uncovered destination is offered none) and at
+`place-order`, each refusing with the same codes. `GET /store/config` carries the public coverage
+summary so the storefront can state where the store delivers before anyone types a PIN code.
 
 ---
 
@@ -316,6 +417,17 @@ GET   /admin/shipments/{id}/label | /manifest       → PDF
 POST  /admin/shipments/{id}/schedule-pickup | /cancel
 GET   /admin/ndr                                    → queue
 POST  /admin/ndr/{id}/action                        { action, remark }
+GET   /admin/shipping/serviceability/{pincode}      → the cached answer, its age and its courier
+POST  /admin/shipping/serviceability/{pincode}/refresh
+                                                    asks the courier now and rewrites the cache;
+                                                      the only operator-triggered live call
+GET   /admin/shipping/coverage                      → the delivery-coverage policy as it stands
+GET   /admin/shipping/coverage/test/{pincode}       → would this address be accepted, and if not,
+                                                      which of the two checks refused it
+
+# The delivery area is EDITED through PUT /admin/settings/delivery-coverage, where every other store
+# policy is edited and where the audit trail and the validator already live. A second write path for
+# one settings row would be a second place to get the audit wrong.
 
 # Payments
 GET   /admin/payments                               ?status= &method= &provider= &orderId=
@@ -349,10 +461,21 @@ POST  /admin/cod-collections/remit                  { ids[], reference, amount, 
                                                       courier's remittance, matched in one batch
 
 # Returns
-GET   /admin/returns                                ?status=
-POST  /admin/returns/{id}/approve | /reject | /schedule-pickup
-POST  /admin/returns/{id}/qc                        { result, disposition, notes }
+GET   /admin/returns                                ?status= &vendorId= &orderId= &from= &to=
+GET   /admin/returns/{id}                           → one in full, with what may be done to it next
+GET   /admin/returns/{id}/credit-note               → the credit note raised against it
+POST  /admin/returns/{id}/approve                   { amount?, pickupRequired?, note? }
+POST  /admin/returns/{id}/reject                    { reason }
+POST  /admin/returns/{id}/schedule-pickup           { pickupAt?, manualAwb?, manualCourier? }
+POST  /admin/returns/{id}/receive                   { note? } books the parcel in at the warehouse
+POST  /admin/returns/{id}/qc                        { result, disposition?, notes?, lines[] }
 POST  /admin/returns/{id}/refund                    { mode, amount }
+POST  /admin/returns/{id}/replace                   { replacementOrderId?, note? }
+POST  /admin/returns/{id}/close                     { note? } closes one with nothing owed
+
+GET/POST/PUT /admin/return-reasons[/{id}]           the reason codes and the policy each carries
+GET          /admin/credit-notes                    ?vendorId= &financialYear= &from= &to=
+GET          /admin/credit-notes/{id}               → one, with its tax split
 
 # Pricing & promotions
 GET/POST/PUT /admin/price-lists[/{id}]
@@ -364,16 +487,76 @@ GET/POST/PUT /admin/tax-rates
 GET/POST/PUT /admin/vendors[/{id}]                  (+ /approve, /suspend, /activate)
 GET/POST     /admin/vendors/{id}/kyc-documents      (+ /verify)
 GET/POST/PUT /admin/commission-plans
-GET          /admin/settlements/cycles              ?vendorId= &period=
-POST         /admin/settlements/cycles/{id}/close
-GET          /admin/vendors/{id}/ledger             ?from= &to=
-POST         /admin/payout-batches                  { cycleIds[] }
-POST         /admin/payout-batches/{id}/approve | /process
-GET          /admin/reports/tcs-tds                 ?period=
 
-# Content
-GET/POST/PUT /admin/pages[/{id}]                    (+ /publish, /schedule, /versions, /rollback)
-GET/POST/PUT /admin/banners | /menus | /collections | /redirects
+# Settlements (Step 18). Every route is vendor-scoped by the caller's token, never by an id in the
+# query string: a seller reading their own statement and finance reading everybody's run the same
+# query, and the only difference is whether the caller carries a vendor id. There is no storefront
+# surface at all.
+GET   /admin/settlements/cycles                     ?vendorId= &status= &from= &to= &cursor= &size=
+GET   /admin/settlements/cycles/{id}
+POST  /admin/settlements/cycles/{id}/close          { force? } totals a period and applies TCS/TDS
+POST  /admin/settlements/cycles/close               { vendorId, force? } closes the period now due
+                                                      for one seller, opening the cycle if the
+                                                      scheduler has not
+GET   /admin/settlements/ledger                     ?vendorId= &entryType= &cycleId= &from= &to=
+POST  /admin/settlements/adjustments                { vendorId, direction, amount, reason }
+                                                      an append, never an edit; the reason is
+                                                      required and shows on the seller's statement
+GET   /admin/vendors/{id}/ledger                    ?from= &to= -> opening, movements, closing
+GET   /admin/vendors/{id}/ledger/export             ?from= &to= -> text/csv
+GET   /admin/vendors/{id}/balance                   -> owed now, unsettled, awaiting payout
+
+GET   /admin/payout-batches                         ?status= &from= &to= &cursor= &size=
+GET   /admin/payout-batches/{id}                    -> the run, its transfers, and what may be done
+                                                      to it next, taken off the transition table
+POST  /admin/payout-batches                         { cycleIds[] } builds a draft; sends nothing
+POST  /admin/payout-batches/{id}/approve            never by the person who raised it
+POST  /admin/payout-batches/{id}/process            resumable: call again for a large batch
+POST  /admin/payout-batches/{id}/cancel             { reason } only before anything has been sent
+
+GET   /admin/reports/tcs-tds                        ?from= &to= &vendorId=
+GET   /admin/reports/tcs-tds/export                 -> text/csv, for the GSTR-8 and 26Q/27EQ filings
+GET   /admin/reports/platform-revenue               ?from= &to= -> what the sellers were charged
+
+# Content (Step 20)
+GET/POST/PUT/DELETE /admin/pages[/{id}]             ?search= &type= &status= &cursor= &size=
+GET          /admin/pages/block-types               the block schemas the admin editor draws from
+POST         /admin/pages/{id}/transition           { status, scheduledAt, note } the one workflow
+                                                      door: submit, publish, schedule, unpublish,
+                                                      archive. Needs content.page.publish
+GET          /admin/pages/{id}/versions[/{version}] the history, newest first
+POST         /admin/pages/{id}/versions/{v}/rollback restores content as a NEW version; never
+                                                      changes the status
+GET          /admin/pages/{id}/preview              ?version= renders as the storefront would,
+                                                      whatever the status. The preview is here, on
+                                                      the caller's own token, rather than a
+                                                      guessable token on the store surface
+GET/POST/PUT/DELETE /admin/menus[/{id}]             the whole tree in one call
+GET/POST/PUT/DELETE /admin/banners[/{id}]           (+ /{id}/active to switch one off in seconds)
+GET/POST/PUT/DELETE /admin/collections[/{id}]       (+ /{id}/rule, /{id}/items, /{id}/refresh,
+                                                      /{id}/items for the resolved cards)
+GET/POST/PUT/DELETE /admin/redirects[/{id}]         own permission: a redirect is routing
+GET          /admin/seo/robots | /seo/sitemap       what a crawler is served, before it is
+GET          /admin/seo/structured-data             ?path=
+
+# Search (Step 19)
+GET/POST     /admin/search/synonyms                 ?search= &activeOnly= &cursor= &size=
+PUT/DELETE   /admin/search/synonyms/{id}            single words only; a phrase synonym is refused
+GET/POST     /admin/search/stop-words               the store's own noise words, on top of the
+                                                      english dictionary's
+PUT/DELETE   /admin/search/stop-words/{id}
+GET          /admin/search/queries                  ?from= &to= &source= &size= -> what shoppers
+                                                      searched for, with click-through and average
+                                                      click position
+GET          /admin/search/queries/zero-results     the buying team's list: searched for, not found
+GET          /admin/search/index                    -> counts, staleness, and which engine answers
+POST         /admin/search/index/rebuild            { afterVariantId?, maxVariants?, variantIds? }
+                                                      bounded and resumable; answers with where it
+                                                      reached. Naming variantIds rebuilds only those
+
+# There is deliberately no endpoint that edits an index row. Every column in the projection belongs
+# to another module, so a hand correction would fix a symptom, leave the source wrong, and be
+# overwritten by the next event. The rebuild is the supported repair, and it repairs by re-reading.
 
 # Platform
 GET/PUT      /admin/settings
@@ -398,13 +581,34 @@ POST         /admin/notifications/{id}/retry        re-queues a failed message
 POST         /admin/notifications/test              { eventKey, channel, to, variables } - staff only
 ```
 
+**Returns split across four permissions**, and the split is the split between four jobs that are
+usually four people. `returns.return.read` is support. `returns.return.manage` is the queue —
+approve, refuse, book a collection, close — and a seller holds it for their own goods.
+`returns.qc.manage` is the receiving bay, and it is deliberately **not** a seller's: grading decides
+whether a shopper is refunded and whether a seller is charged, and a seller who could grade their
+own returns would be deciding their own liability. `returns.refund.manage` is finance, and it sits
+on top of the refund approval threshold rather than replacing it. `returns.reason.manage` is
+staff-only, because who pays the freight and what is auto-approved are commercial decisions.
+
+`receive` and `qc` are two calls rather than one on purpose. The parcel arriving and somebody
+opening it are different days and different people, and a platform that collapsed them could not
+answer how much is sitting in the receiving bay uninspected — the number a returns operation is
+actually run on.
+
+`qc` takes `lines` as `[{ returnLineId, quantityAccepted, disposition?, note? }]`, with an empty
+list meaning "all of it, at the store's default disposition". A `disposition` is one of `Restock`,
+`Scrap` or `Quarantine`; quarantine moves no stock at all, because goods that are physically present
+and commercially undecided are neither back on sale nor written off. Where
+`ReturnsSettings.AutoRefundOnQcPass` is on, a pass refunds and raises the credit note in the same
+request.
+
 ---
 
 ## 5. Webhooks (inbound)
 
 ```
 POST /api/v1/webhooks/razorpay        X-Razorpay-Signature   (HMAC-SHA256 over raw body)
-POST /api/v1/webhooks/shipping/{provider}
+POST /api/v1/webhooks/shipping/{provider}   {provider} is the adapter key — `shiprocket` in v1
 POST /api/v1/webhooks/sms/{provider}   delivery receipts
 POST /api/v1/webhooks/email/{provider} bounces/complaints
 ```
@@ -425,6 +629,12 @@ compared in constant time; the subscribed events are `payment.authorized`, `paym
 marked `Ignored` rather than refused — a `400` to a gateway is a retry storm, and an event nobody
 handles today is evidence tomorrow. The endpoint answers `200` for a duplicate, a stale event and an
 unhandled type alike, and `401` only for a signature that does not verify.
+
+**Shiprocket specifically.** There is no HMAC. Shiprocket sends a shared secret in an `x-api-key`
+header, set by the merchant in its dashboard and held here as `Shipping:WebhookSecret`; it is
+compared in constant time and everything else in the contract above is unchanged. A deployment with
+no webhook secret cannot verify origin, so it stores the event, marks it `Ignored` and answers
+`401` — and the 30-minute tracking poll is what keeps parcels moving in the meantime.
 
 ---
 

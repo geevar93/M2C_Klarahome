@@ -23,6 +23,9 @@
     <ProjectReference Include="../../modules/KlaraHome.Modules.Orders/KlaraHome.Modules.Orders.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Payments/KlaraHome.Modules.Payments.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Shipping/KlaraHome.Modules.Shipping.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Settlements/KlaraHome.Modules.Settlements.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Search/KlaraHome.Modules.Search.csproj" />
+    <ProjectReference Include="../../modules/KlaraHome.Modules.Content/KlaraHome.Modules.Content.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -14,6 +14,8 @@ using KlaraHome.Modules.Orders.Infrastructure.Numbering;
 using KlaraHome.Modules.Orders.Infrastructure.Payments;
 using KlaraHome.Modules.Orders.Infrastructure.Persistence;
 using KlaraHome.Modules.Orders.Infrastructure.Placement;
+using KlaraHome.Modules.Orders.Infrastructure.Returns;
+using KlaraHome.Modules.Orders.Infrastructure.Settlements;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -101,6 +103,20 @@ public sealed class OrdersModule : IModule
         // booked from and relays a courier's word back into the state machine. One implementation,
         // registered unconditionally, for the same reason.
         services.AddScoped<IOrderFulfilment, OrderFulfilmentService>();
+
+        // And the same again for the post-delivery leg, added at Step 17: what a line is still worth
+        // and how much of it is left, the three return states the machine has, and a place to record
+        // what actually came back. It is deliberately narrower than the other two — no price may be
+        // changed through it and nothing may be cancelled — because a returns queue is not a place
+        // that should be able to alter a sale.
+        services.AddScoped<IOrderReturns, OrderReturnsService>();
+
+        // Added at Step 18, and the only one of the four that cannot write. Settlements reads what
+        // was sold, what it was worth and what the platform charged for it — the commission frozen on
+        // the line, never a rate resolved today — and does everything else in its own schema. A seam
+        // through which a settlement run could change the sale it is settling is the first thing an
+        // auditor would object to.
+        services.AddScoped<IOrderSettlement, OrderSettlementService>();
 
         // Off in the API and on in the worker, exactly as the catalogue job runner, the notification
         // dispatcher, the reservation sweeper and the abandoned-cart sweeper are configured.

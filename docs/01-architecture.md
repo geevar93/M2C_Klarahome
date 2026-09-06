@@ -83,7 +83,7 @@ graph TB
 
   subgraph Ext["Third parties"]
     RZP["Razorpay"]
-    SHIP["Logistics aggregator"]
+    SHIP["Shiprocket (courier)"]
     SMS["SMS / WhatsApp (DLT)"]
     MAIL["Transactional email"]
   end
@@ -330,6 +330,9 @@ KlaraHome/
 | ADR-015 | PDFsharp + MigraDoc for generated documents, not QuestPDF | Accepted (Step 8) |
 | ADR-016 | Media is its own module, with its own `media` schema | Accepted (Step 8) |
 | ADR-017 | A notification channel with no provider is suppressed, not failed | Accepted (Step 8) |
+| ADR-018 | Shiprocket is the named v1 courier; adapters are keyed by courier and delivery coverage is a policy | Accepted (Step 16 boundary) |
+| ADR-019 | PostgreSQL full text answers queries, behind a seam a dedicated engine can take over | Accepted (Step 19) |
+| ADR-020 | A rule-based collection is materialised into rows; a block type is a declared, validated schema | Accepted (Step 20) |
 
 ADRs are maintained in `docs/adr/` from Step 1 onward; any change to the above requires a new
 ADR and User approval.

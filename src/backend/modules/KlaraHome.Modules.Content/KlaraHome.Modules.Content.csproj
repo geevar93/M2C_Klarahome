@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Content (Step 20): the storefront a merchandiser can change without a deployment.
+
+    A page is an ordered list of typed blocks; a block is a declared type and a `jsonb` document the
+    type's schema decides the shape of. Every publish snapshots the whole page into a version row,
+    which is what makes preview honest and rollback a single write. Menus, banners, curated
+    collections and redirects are the other four things a business wants to change on a Tuesday
+    afternoon, and none of them is a deployment either.
+
+    It owns its pages, menus, banners, collections and redirects outright - unlike Search, which owns
+    nothing. What it does not own is products: a collection holds product ids and a carousel renders
+    them, both resolved through `IProductProjectionSource` so a merchandising card and the page it
+    links to name the same seller at the same price.
+
+    The SEO surface is here rather than in the storefront because the facts are: the canonical host,
+    the robots directives and the organisation's own identity are settings, the URLs a sitemap lists
+    come from these tables and the catalogue, and a 301 is a row a merchandiser adds when they rename
+    a page. The storefront renders what this module computes.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Content</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

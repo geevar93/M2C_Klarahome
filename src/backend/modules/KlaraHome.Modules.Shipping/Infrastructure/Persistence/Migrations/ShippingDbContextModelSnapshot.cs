@@ -366,6 +366,11 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("city");
+
                     b.Property<bool>("CodOk")
                         .HasColumnType("boolean")
                         .HasColumnName("cod_ok");
@@ -409,6 +414,11 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("RefreshedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("refreshed_at");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("state");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

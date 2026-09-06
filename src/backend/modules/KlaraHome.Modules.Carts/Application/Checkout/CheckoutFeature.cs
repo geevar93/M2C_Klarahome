@@ -276,12 +276,14 @@ internal sealed class ReviewCheckoutQueryHandler(
 /// <param name="scope">Who is asking.</param>
 /// <param name="customers">Reads the shopper's own addresses. Never a join across a schema.</param>
 /// <param name="reference">Checks the state is a real one.</param>
+/// <param name="deliveries">Checks the store delivers there, and that a courier will carry it.</param>
 internal sealed class SetCheckoutAddressCommandHandler(
     CheckoutWorkflow workflow,
     CartsDbContext context,
     CartsScope scope,
     ICustomerDirectory customers,
-    IReferenceData reference) : ICommandHandler<SetCheckoutAddressCommand, CheckoutResponse>
+    IReferenceData reference,
+    IShippingOptions deliveries) : ICommandHandler<SetCheckoutAddressCommand, CheckoutResponse>
 {
     public async Task<Result<CheckoutResponse>> HandleAsync(
         SetCheckoutAddressCommand command,
@@ -323,6 +325,20 @@ internal sealed class SetCheckoutAddressCommandHandler(
         if (!await reference.StateExistsAsync(shipping.StateId, cancellationToken).ConfigureAwait(false))
         {
             return CartsErrors.UnknownAddress;
+        }
+
+        // The second of the five gates ADR-018 names. Refusing here rather than only at
+        // place-order is the whole point: a shopper who cannot be delivered to should find out when
+        // they choose the address, not after they have chosen how to pay for it.
+        var destination = await deliveries
+            .CheckDestinationAsync(shipping.Pincode, isCod: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!destination.Deliverable)
+        {
+            return destination.Refusal == DeliveryRefusal.NotCovered
+                ? CartsErrors.NotCovered(destination.Message)
+                : CartsErrors.PincodeNotServiceable;
         }
 
         // The address's own GSTIN wins over the one typed here only if nothing was typed: a shopper

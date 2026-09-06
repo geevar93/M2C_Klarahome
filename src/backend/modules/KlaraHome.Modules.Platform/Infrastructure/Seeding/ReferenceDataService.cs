@@ -34,6 +34,45 @@ internal sealed class ReferenceDataService(PlatformDbContext context, IMemoryCac
         return states.GetValueOrDefault(stateId);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Queried rather than cached wholesale. The states are 36 rows; the PIN codes are roughly
+    /// nineteen thousand, and holding them all in every process to answer one lookup at a time would
+    /// trade a millisecond for tens of megabytes. The unique index on <c>code</c> makes this a point
+    /// read, and the delivery-coverage check that calls it is not on a hot path — the storefront
+    /// answer it feeds is itself cached.
+    /// </remarks>
+    public async ValueTask<PincodeInfo?> PincodeAsync(
+        string pincode,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(pincode))
+        {
+            return null;
+        }
+
+        var code = pincode.Trim();
+
+        var found = await context.Pincodes
+            .AsNoTracking()
+            .Where(entry => entry.Code == code)
+            .Join(
+                context.States.AsNoTracking(),
+                entry => entry.StateId,
+                state => state.Id,
+                (entry, state) => new PincodeInfo(
+                    entry.Code,
+                    entry.City,
+                    entry.District,
+                    state.Id,
+                    state.Name,
+                    state.Code))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return found;
+    }
+
     private async ValueTask<IReadOnlyDictionary<Guid, string>> StatesAsync(CancellationToken cancellationToken)
     {
         if (cache.TryGetValue(CacheKey, out IReadOnlyDictionary<Guid, string>? cached) && cached is not null)

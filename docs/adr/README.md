@@ -18,6 +18,9 @@ onward are written here as full files, at the step that raises them.
 | [015](ADR-015-pdfsharp-migradoc-for-documents.md) | PDFsharp + MigraDoc (MIT) for generated documents, not QuestPDF | ✅ Accepted | Step 8 |
 | [016](ADR-016-media-is-its-own-module.md) | Media is its own module, with its own `media` schema | ✅ Accepted | Step 8 |
 | [017](ADR-017-unprovisioned-channels-are-suppressed.md) | A notification channel with no provider is suppressed, not failed | ✅ Accepted | Step 8 |
+| [018](ADR-018-shiprocket-and-delivery-coverage.md) | Shiprocket is the named v1 courier, adapters are keyed by courier, and delivery coverage is a policy rather than a zone | ✅ Accepted | Step 16 boundary |
+| [019](ADR-019-postgresql-full-text-behind-a-search-engine-seam.md) | PostgreSQL full text answers queries, behind a seam a dedicated engine can take over | ✅ Accepted | Step 19 |
+| [020](ADR-020-materialised-collections-and-declared-block-types.md) | A rule-based collection is materialised, and a block type is a declared schema | ✅ Accepted | Step 20 |
 
 > **Backlog:** ADR-001 – ADR-010 exist only as table rows. Expanding them into individual files
 > is in `../PARKING_LOT.md`; it is documentation debt, not a decision

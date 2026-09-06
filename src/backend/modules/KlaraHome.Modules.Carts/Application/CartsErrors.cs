@@ -63,6 +63,29 @@ internal static class CartsErrors
             "CHECKOUT_NOT_SERVICEABLE",
             "None of the sellers in your basket deliver to that address.");
 
+    /// <summary>
+    /// The store does not deliver to that address (ADR-018).
+    /// </summary>
+    /// <remarks>
+    /// Kept separate from <see cref="NotServiceable"/> on purpose. This is the store's own trading
+    /// decision and carries the operator's own words; that one is a fact about what a courier will
+    /// carry. A shopper reading "no courier goes there" about an address the store simply has not
+    /// opened yet would be told something true and misleading.
+    /// </remarks>
+    /// <param name="message">What the operator wants an out-of-area shopper told.</param>
+    public static Error NotCovered(string? message)
+        => Error.Validation(
+            "DELIVERY_AREA_NOT_COVERED",
+            string.IsNullOrWhiteSpace(message)
+                ? "We do not deliver to that area yet."
+                : message);
+
+    /// <summary>No courier will carry a parcel to that PIN code.</summary>
+    public static Error PincodeNotServiceable { get; } =
+        Error.Validation(
+            "PINCODE_NOT_SERVICEABLE",
+            "No courier currently delivers to that PIN code.");
+
     /// <summary>The delivery choice named is not one that was offered.</summary>
     public static Error UnknownShippingOption { get; } =
         Error.Validation("CHECKOUT_UNKNOWN_SHIPPING_OPTION", "That delivery option is not available.");

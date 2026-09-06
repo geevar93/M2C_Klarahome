@@ -389,10 +389,12 @@ services:
       Payments__EventProcessorEnabled: "false"
       Payments__ReconciliationEnabled: "false"
       Payments__SettlementIngestionEnabled: "false"
-      # Shipping (Step 16). Blank credentials are the shippable state here too: with no aggregator
-      # account the manual adapter books parcels from an air waybill an operator types in, and
-      # everything downstream - the label, the order timeline, the cash reconciliation - is
-      # unchanged. Filling SHIPPING_* into .env is the whole of turning an aggregator on.
+      # Shipping (Step 16; Shiprocket at Step 16A). Blank credentials are the shippable state here
+      # too: with no courier account the manual adapter books parcels from an air waybill an
+      # operator types in, and everything downstream - the label, the order timeline, the cash
+      # reconciliation - is unchanged. Shipping__Provider names the adapter (`shiprocket` in v1,
+      # blank or unknown falls back to `manual`); filling SHIPPING_* into .env is the whole of
+      # turning a courier on. Where the store DELIVERS is a store setting, not a variable.
       Shipping__Provider: ${SHIPPING_PROVIDER:-}
       Shipping__ApiKey: ${SHIPPING_API_KEY:-}
       Shipping__ApiUser: ${SHIPPING_API_USER:-}
@@ -404,6 +406,24 @@ services:
       Shipping__EventProcessorEnabled: "false"
       Shipping__TrackingPollEnabled: "false"
       Shipping__ServiceabilityRefreshEnabled: "false"
+      # Vendor payouts (Step 18). Blank is the shippable state once more: with no rail named, sales
+      # still earn, deductions still come off, periods still close and batches are still built and
+      # approved - only the transfer refuses, with a named 503, and the ledger goes on saying what
+      # every seller is owed. Payouts__Provider names the rail (`route` or `x`); filling PAYOUTS_*
+      # into .env is the whole of turning payouts on.
+      Payouts__Provider: ${PAYOUTS_PROVIDER:-}
+      Payouts__Mode: ${PAYOUTS_MODE:-IMPS}
+      Payouts__Narration: ${PAYOUTS_NARRATION:-Marketplace payout}
+      # The two settlement loops run in the worker and nowhere else, for the same reason every other
+      # loop does. The endpoints are served here - they read, and they build a batch a human signs.
+      Settlements__SchedulerEnabled: "false"
+      Settlements__ReconciliationEnabled: "false"
+      # Search (Step 19). PostgreSQL full text needs nothing configured, so a blank provider is the
+      # working state rather than a degraded one (ADR-019). The staleness sweep runs in the worker.
+      Search__Provider: ${SEARCH_PROVIDER:-}
+      Search__BaseUrl: ${SEARCH_BASE_URL:-}
+      Search__ApiKey: ${SEARCH_API_KEY:-}
+      Search__ReindexEnabled: "false"
       # Notifications (Step 8). The dispatcher runs in the worker and nowhere else; every API
       # replica polling the same queue would multiply the work and contend for the same rows.
       Notifications__DispatcherEnabled: "false"
@@ -576,6 +596,23 @@ services:
       Shipping__EventProcessorEnabled: "true"
       Shipping__TrackingPollEnabled: "true"
       Shipping__ServiceabilityRefreshEnabled: "true"
+      # Vendor payouts (Step 18). The same arrangement: a blank rail sends nothing and refuses
+      # honestly, and the two settlement loops - the scheduler that closes each seller's period once
+      # its return hold expires, and the sweep that re-reads in-flight transfers from the gateway -
+      # run here and nowhere else.
+      Payouts__Provider: ${PAYOUTS_PROVIDER:-}
+      Payouts__Mode: ${PAYOUTS_MODE:-IMPS}
+      Payouts__Narration: ${PAYOUTS_NARRATION:-Marketplace payout}
+      Settlements__SchedulerEnabled: "true"
+      Settlements__ReconciliationEnabled: "true"
+      # Search (Step 19). The staleness sweep is the safety net under the event pipeline, and it runs
+      # here and nowhere else - two processes rebuilding the same rows would corrupt nothing and
+      # double the load on the catalogue for no benefit.
+      Search__Provider: ${SEARCH_PROVIDER:-}
+      Search__BaseUrl: ${SEARCH_BASE_URL:-}
+      Search__ApiKey: ${SEARCH_API_KEY:-}
+      Search__ReindexEnabled: "true"
+      Search__ReindexIntervalMinutes: "15"
       Storage__Endpoint: http://minio:9000
       Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
       Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}

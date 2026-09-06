@@ -38,10 +38,12 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Quoting;
 /// </remarks>
 /// <param name="rates">Chooses the zone and the rule, and prices the parcel.</param>
 /// <param name="serviceability">Answers whether the destination can be served, from the cache.</param>
+/// <param name="coverage">Answers whether this store delivers there at all.</param>
 /// <param name="vendors">Supplies each seller's dispatch SLA.</param>
 internal sealed class RatedShippingOptions(
     RateResolver rates,
     ServiceabilityService serviceability,
+    DeliveryCoverageService coverage,
     IVendorDirectory vendors) : IShippingOptions
 {
     /// <inheritdoc />
@@ -57,6 +59,18 @@ internal sealed class RatedShippingOptions(
         {
             // An empty list means "cannot be served", which the checkout reports against this seller
             // rather than failing the whole basket.
+            return [];
+        }
+
+        // The store's own delivery area, checked before the courier's. One of the five gates
+        // ADR-018 names: an uncovered destination is offered no service at all, so a checkout
+        // cannot advance to a payment method for an order that could never be shipped.
+        var (covered, _, _) = await coverage
+            .EvaluateAsync(request.DestinationPincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!covered)
+        {
             return [];
         }
 
@@ -93,6 +107,40 @@ internal sealed class RatedShippingOptions(
                 PromisedMax(parcel, answer),
                 parcel.Rate.IsCodAllowed && answer.CodOk)),
         ];
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<DeliveryCheck> CheckDestinationAsync(
+        string pincode,
+        bool isCod = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pincode);
+
+        var (covered, place, message) = await coverage
+            .EvaluateAsync(pincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        var answer = await serviceability.ReadAsync(pincode, cancellationToken).ConfigureAwait(false);
+
+        // The courier's own view of where the PIN code is, used only where the platform's reference
+        // data and the settings-side lookup both came up empty.
+        var city = place.City ?? answer.City;
+        var state = place.State ?? answer.State;
+
+        var refusal = DeliveryCoverageService.RefusalFor(covered, answer.IsServiceable, isCod, answer.CodOk);
+
+        return new DeliveryCheck(
+            pincode,
+            covered && answer.IsServiceable,
+            covered,
+            answer.IsServiceable,
+            answer.CodOk,
+            city,
+            state,
+            answer.EtaDays,
+            refusal,
+            refusal == DeliveryRefusal.NotCovered ? message : null);
     }
 
     /// <summary>The stable code a shopper's choice is stored as.</summary>

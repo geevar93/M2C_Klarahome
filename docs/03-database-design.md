@@ -571,7 +571,14 @@ human who is going to act on one line of it.
 **`shipping_rates`** — `zone_id`, `vendor_id` (nullable override), `method`
 (`standard|express`), `min_weight`, `max_weight`, `min_order_value`, `max_order_value`,
 `base_rate`, `per_kg_rate`, `free_above`, `cod_fee`, `eta_min_days`, `eta_max_days`.
-**`serviceability_cache`** — `pincode`, `courier`, `prepaid_ok`, `cod_ok`, `eta_days`, `refreshed_at`.
+**`serviceability_cache`** — `pincode`, `courier`, `prepaid_ok`, `cod_ok`, `pickup_ok`, `eta_days`,
+`max_weight_grams`, `city`, `state`, `refreshed_at`. `city` and `state` are what the courier said
+the PIN code is, nullable, and are a fallback for the delivery-coverage check when `platform.pincodes`
+has no row for it (ADR-018). Unique on `(tenant_id, pincode, courier)`.
+
+> **Delivery coverage is not a table.** Which destinations the store will sell to is
+> `DeliveryCoverageSettings` in `platform.settings` — a policy the operator edits, not cached data
+> (ADR-018). Storing it here would make an unpriced destination and an undecided one look identical.
 **`shipments`** — `sub_order_id`, `courier`, `awb`, `status`, `label_file_id`,
 `manifest_id`, `weight_grams`, `dimensions jsonb`, `pickup_scheduled_at`, `picked_up_at`,
 `delivered_at`, `expected_delivery_at`, `provider_shipment_id`, `cod_amount`.
@@ -582,55 +589,223 @@ human who is going to act on one line of it.
 
 ### 4.11 `returns`
 
-**`returns`** — `return_number`, `sub_order_id`, `customer_id`, `type` (`return|replacement`),
-`status`, `reason_code`, `reason_note`, `evidence_file_ids jsonb`, `requested_at`,
-`approved_at`, `rejected_reason`, `pickup_awb`, `received_at`, `qc_status`, `qc_notes`,
-`qc_by`, `refund_amount`, `refund_mode` (`original|wallet`), `closed_at`.
-**`return_lines`** — `return_id`, `order_line_id`, `quantity`, `unit_refund`, `tax_refund`,
-`restock_decision` (`restock|scrap|quarantine`).
-**`return_reasons`** — configurable reason codes with per-reason policy (who pays return
-shipping, whether evidence is required).
-**`credit_notes`** — `return_id`, `credit_note_number` (gapless per vendor per FY), `issued_at`,
-`taxable_value`, tax split, `total`, `file_id`.
+**`returns`** — `return_number`, `order_id`, `order_number`, `sub_order_id`, `sub_order_number`,
+`vendor_id`, `customer_id`, `type` (`Return|Replacement`), `status`, `reason_code`, `reason_note`,
+`evidence_file_ids jsonb`, `estimated_refund`, `approved_amount`, `refund_amount`,
+`return_shipping_fee`, `shipping_refund_amount`, `refund_mode` (`Original|Wallet`),
+`is_pickup_required`, `pickup_shipment_id`, `pickup_awb`, `pickup_scheduled_for`, `refund_id`,
+`credit_note_id`, `replacement_order_id`, `qc_passed`, `qc_notes`, `qc_by`, `rejected_reason`,
+`requested_at`, `approved_at`, `approved_by`, `picked_at`, `received_at`, `inspected_at`,
+`refunded_at`, `closed_at`.
+
+**Three amounts, not one, and they answer different questions.** `estimated_refund` is what the
+shopper was quoted when they asked; `approved_amount` is what somebody agreed to, which may be less;
+`refund_amount` is what actually went back after quality control and after the collection fee was
+deducted — and only the last is money. Collapsing them would make "why did I get less than the
+screen said" unanswerable, which is the second commonest returns support call there is.
+
+`shipping_refund_amount` is decided once, at approval, from the order's own freight figure, so a
+refund calculated later cannot arrive at a different one. It is zero on every partial return: a
+shopper keeping two of three items has still had the parcel delivered.
+
+`pickup_shipment_id` points at an ordinary `shipping.shipments` row carrying `is_return`. A reverse
+pickup is a parcel like any other — same adapters, same webhook receiver, same tracking — rather
+than a second, thinner idea of a parcel living in this schema.
+
+**`return_lines`** — `return_id`, `order_line_id`, `listing_id`, `sku`, `snapshot jsonb`,
+`quantity`, `quantity_accepted`, `taxable_value`, `cgst`, `sgst`, `igst`, `cess`, `refund_amount`,
+`disposition` (`Pending|Restock|Scrap|Quarantine`), `qc_note`.
+
+The tax is split per line and apportioned from the frozen order line rather than recomputed. A
+refund must credit the tax that was **charged**: a rate that changed between the sale and the return
+would put the credit note out of agreement with the invoice it credits, which is exactly the
+mismatch a GST return finds.
+
+**`return_reasons`** — `code`, `label`, `description`, `is_active`, `sort_order`, and the policy
+each carries: `requires_evidence`, `is_pickup_required`, `requires_qc`, `is_auto_approved`,
+`shipping_payer` (`Platform|Vendor|Customer`), `is_vendor_fault`, `allows_replacement`. Data rather
+than an enum, because "damaged in transit needs a photograph and the store pays the freight" is a
+commercial decision that changes, and a deployment that had to ship code to change one would never
+change it.
+
+**`credit_notes`** — `return_id`, `order_id`, `sub_order_id`, `vendor_id`, `customer_id`,
+`invoice_id`, `invoice_number`, `credit_note_number` (gapless per vendor per FY), `series`,
+`financial_year`, `place_of_supply_state_code`, `is_intra_state`, `taxable_value`, tax split,
+`total`, `file_id`, `issued_at`.
+
+Raised whether or not money moves. Under section 34 of the CGST Act a supplier reduces their
+liability by **issuing a credit note**; a card refund does not do that on its own, and a return
+refunded entirely to store credit still reverses the supply. `invoice_id` is nullable because rule
+53 asks for the original invoice's particulars "where available" — refusing to issue a note because
+a PDF is missing would leave the seller owing tax on goods they no longer have.
+
+**`number_sequences`** — the gapless counters behind `return_number` (scoped to a calendar month)
+and `credit_note_number` (scoped to a seller's financial year). The same table-and-`FOR UPDATE`
+mechanism §4.8 describes, and here for the same reason: `nextval` is not transactional, and a hole
+in a credit-note series is a finding at an audit.
 
 ### 4.12 `settlements`
 
-**`ledger_entries`** — `vendor_id`, `entry_type` (`sale|commission|payment_fee|shipping_fee|
-refund|refund_commission_reversal|tcs|tds|adjustment|payout`), `direction` (`credit|debit`),
-`amount`, `reference_type`, `reference_id`, `sub_order_id`, `order_line_id`, `settlement_cycle_id`,
-`payout_batch_id`, `occurred_at`, `note`. **Append-only.**
-**`settlement_cycles`** — `vendor_id`, `period_start`, `period_end`, `status`, `gross_sales`,
-`total_commission`, `total_fees`, `total_refunds`, `tcs`, `tds`, `net_payable`, `closed_at`.
-**`payout_batches`** — `reference`, `status`, `total_amount`, `vendor_count`, `approved_by`,
-`processed_at`, `provider_batch_id`.
-**`payout_items`** — `payout_batch_id`, `vendor_id`, `settlement_cycle_id`, `amount`, `status`,
-`provider_payout_id`, `utr`, `failure_reason`.
+**`ledger_entries`** — every movement on every seller's account. `vendor_id` (never null),
+`entry_type`, `direction` (`Credit|Debit`), `amount`, `taxable_value`, `currency_code`,
+`reference_type`, `reference_id`, `sub_order_id`, `order_line_id`, `settlement_cycle_id`,
+`payout_batch_id`, `source_key`, `occurred_at`, `note`. **Append-only** (`IAppendOnly`, so no
+concurrency token). Unique `(tenant_id, source_key)`; indexes on `(tenant_id, vendor_id,
+occurred_at)`, a **partial** index on the same columns `where settlement_cycle_id is null`,
+`(tenant_id, settlement_cycle_id)`, `(tenant_id, payout_batch_id)` and `(tenant_id, sub_order_id)`.
+
+A seller's balance is **not a column anywhere**: it is `Σ credits − Σ debits` over these rows. That
+is what stops it drifting from its own history, and it is why a correction is a reversing entry
+rather than an edit.
+
+`entry_type` is one of: `sale`, `commission`, `platform_tax`, `platform_fee`, `payment_fee`,
+`shipping_fee`, `refund`, `refund_commission_reversal`, `tcs`, `tds`, `adjustment`, `payout`. Every
+type is always a credit or always a debit except `adjustment`, which is the one entry a human writes.
+`platform_tax` is the GST on the commission, the marketplace fee and the gateway fee together,
+because the platform raises **one** tax invoice for all three and the seller claims input credit
+against that invoice — a combined charge-plus-tax figure would leave them unable to.
+
+`source_key` is what makes posting idempotent, and it is the reason at-least-once event delivery is
+safe on a table that moves money. It is derived from the fact — `sale:sub-order:<id>`,
+`refund:credit-note:<id>` — never generated, and the unique index turns a redelivered event into a
+collision instead of a second payment.
+
+`taxable_value` sits beside `amount` because **the two statutory deductions read from different
+bases**: TCS under section 52 of the CGST Act is charged on the net value of taxable supplies, and
+TDS under section 194-O of the Income-tax Act on the gross amount including GST. Re-deriving either
+from the other at settlement would need a GST rate that is no longer the one that applied.
+
+**`settlement_cycles`** — one seller's period. `vendor_id`, `period_start`, `period_end`, `status`
+(`Open|Closed|Paid`), `opening_balance`, `gross_sales`, `taxable_sales`, `total_commission`,
+`total_fees`, `total_refunds`, `taxable_refunds`, `total_adjustments`, `total_payouts`, `tcs`, `tds`,
+`net_payable`, `currency_code`, `entry_count`, `closed_at`, `closed_by`, `paid_at`,
+`payout_batch_id`. Unique `(tenant_id, vendor_id, period_start)`; indexes on `(tenant_id, status,
+period_end)` and `(tenant_id, payout_batch_id)`.
+
+The period is **half-open** — start inclusive, end exclusive — which is the only arrangement in
+which consecutive periods neither overlap nor leave a gap; the first is money settled twice and the
+second is money settled never. A cycle draws in every **unassigned** entry that occurred before its
+end, not only those inside it, so an entry posted late — a credit note against a sale from two
+periods ago — belongs to exactly one cycle rather than to a frozen one. `opening_balance` is the
+signed sum over entries that already carry a cycle id, never the previous cycle's `net_payable`,
+which would forget a payout that failed. Closing is the one place in the schema where a computed
+figure becomes a stored one: a statement a seller was sent must still read the same next year.
+
+`net_payable` and `opening_balance` are deliberately allowed to be **negative**. A seller whose
+returns exceeded their sales is genuinely in deficit, and the balance is carried into the next period
+rather than becoming a demand on them.
+
+**`payout_batches`** — a run of payments to sellers. `reference` (gapless per calendar month),
+`status` (`Draft|Approved|Processing|Completed|PartiallyFailed|Failed|Cancelled`), `total_amount`,
+`vendor_count`, `currency_code`, `requested_by`, `requested_at`, `approved_by`, `approved_at`,
+`processed_at`, `completed_at`, `provider`, `provider_batch_id`, `cancelled_reason`. Unique
+`(tenant_id, reference)`; index on `(tenant_id, status, requested_at)`.
+
+A check constraint refuses `approved_by = requested_by`. The rule is enforced three times — in the
+handler, in the aggregate and here — which is more than anything else in this platform gets; it is
+the rule whose failure sends money, so it gets the belt, the braces and the second belt. A batch's
+outcome is **derived** from its items once none of them is still in flight, never set: a batch is
+partially failed because some transfers were refused, which is a fact only the gateway supplies.
+
+**`payout_items`** — one seller's transfer within a run. `payout_batch_id`, `vendor_id`,
+`vendor_code`, `vendor_name`, `settlement_cycle_id`, `amount`, `currency_code`, `status`
+(`Pending|Processing|Completed|Failed|Skipped`), `destination_account_id`, `destination_last4`,
+`provider_payout_id`, `provider_status`, `utr`, `failure_reason`, `sent_at`, `settled_at`. Unique
+`(tenant_id, payout_batch_id, vendor_id)`; indexes on `(tenant_id, settlement_cycle_id)`,
+`(tenant_id, status, sent_at)` and `(tenant_id, vendor_id, created_at)`.
+
+The payee and the destination are **frozen at sending**: a seller who changes bank next month must
+not change what a payout made last month says it paid. `Skipped` is a first-class outcome and not a
+failure — a seller with no verified account still gets a row, with the reason on it, so "why was this
+seller not paid" has an answer in the batch rather than in somebody's memory. A check constraint
+refuses a `Completed` row with no `provider_payout_id`: money that left with nothing to trace it by
+is money a bank reconciliation cannot start from.
+
+Nothing is retried inside a batch. A failed transfer releases its cycle, which becomes payable again
+and goes into a **new** batch once the reason is fixed — two attempts on one row would leave one row
+with two outcomes and no way to say which bank reference belonged to which.
+
+**`number_sequences`** — the gapless counter behind `reference`, scoped to a calendar month. The
+third copy of the mechanism §4.8 describes (Ordering has one for invoices, Returns for credit notes),
+duplicated for the boundary reason every duplicated primitive here is, and a table rather than a
+PostgreSQL sequence because `nextval` is not transactional.
 
 Balance check (asserted in tests and a nightly job):
 `Σ credits − Σ debits = closing balance` per vendor, and `Σ payouts ≤ Σ settled net`.
 
 ### 4.13 `search`
 
-**`product_search_projection`** — one row per (variant, buy-box listing): denormalised name,
-brand, category path, attributes `jsonb`, price, discount %, rating, vendor, availability,
-popularity score, `search_vector tsvector`, `updated_at`. GIN on `search_vector`, GIN on
-attributes `jsonb`, btree on `(tenant_id, category_path, price)`.
-**`search_synonyms`**, **`search_queries`** (query, result count, clicked position, session).
+**`product_search_projection`** — one row per variant, carrying the offer that won its buy box.
+Denormalised: `variant_id` (unique per tenant), `product_id`, `listing_id`, `vendor_id`, `sku`,
+`product_name`, `variant_name`, `product_slug`, brand and category ids with their names and slugs,
+`category_path`, `category_ids uuid[]`, `vendor_name`/`vendor_slug`/`vendor_rating`, `keywords`,
+`attributes jsonb`, `attribute_meta jsonb`, `mrp`, `price`, `discount_percent`, `rating_average`,
+`rating_count`, `is_available`, `quantity_available`, `is_cod_allowed`, `is_returnable`,
+`offer_count`, `units_sold`, `popularity_score`, `primary_image_file_id`, `published_at`,
+`is_active`, `indexed_at`, and `search_vector tsvector` **generated and stored**.
+
+`search_vector` is weighted: **A** the product name, **B** the brand, variant name and SKU, **C**
+the category name, **D** the summary and searchable attribute labels. Generated rather than a
+trigger, so no write path — the bulk rebuild included — can leave it stale.
+
+Indexes: GIN on `search_vector`; GIN on `attributes` (containment, which is how an attribute filter
+is expressed); GIN on `category_ids` (a filter on a parent category is one lookup from the id a
+shopper clicked); GIN trigram on `product_name` (the fuzzy fallback); btree on
+`(tenant_id, category_path, price)`, `(tenant_id, brand_id)`, `(tenant_id, vendor_id)`,
+`(tenant_id, is_active, popularity_score)`, `(tenant_id, listing_id)`; unique
+`(tenant_id, variant_id)`; and a partial `(tenant_id, indexed_at) where is_active` for the
+staleness sweep.
+
+`category_ids` is derived from `category_path` and exists because neither alternative works: a
+prefix match on the path needs the caller to know the ancestors, and a substring match cannot use
+an index.
+
+**`search_synonyms`** — `term` (unique per tenant), `expansions text[]`, `is_bidirectional`,
+`is_active`, `note`. Applied when a **query** is parsed rather than when a document is indexed, so
+a merchandiser's edit takes effect without a reindex.
+**`search_stop_words`** — `word` (unique per tenant), `is_active`. The store's own noise words —
+"buy", "online" — on top of PostgreSQL's `english` dictionary. Dropped from the query and never
+from the document.
+**`search_queries`** — `created_at` (partition key), `id`, `query_text`, `normalised_query`,
+`source` (`search|suggest`), `result_count`, `filters jsonb`, `duration_ms`, `customer_id`,
+`session_id`, `clicked_position`, `clicked_variant_id`, `clicked_at`. Monthly range partitions,
+retained one year (§8). The only original record in this schema; everything else here can be
+rebuilt from the catalogue.
 
 ### 4.14 `content`
 
-**`pages`** — `slug`, `type` (`home|landing|static|legal|blog`), `title`, `status`,
-`published_at`, `scheduled_at`, `seo jsonb`, `version`.
-**`page_versions`** — full `blocks jsonb` snapshot per version, with `created_by` — supports
-preview and rollback.
-**`page_blocks`** — `page_id`, `block_type`, `position`, `config jsonb`, `is_visible`,
-`starts_at`, `ends_at`.
-**`menus`** / **`menu_items`** — hierarchical navigation with link targets.
-**`banners`** — `placement`, `media_file_id` (desktop + mobile variants), `link`, `priority`,
-`starts_at`, `ends_at`, `is_active`.
-**`collections`** — `name`, `slug`, `type` (`manual|rule`), `rules jsonb`, `seo jsonb`.
-**`collection_items`** — `collection_id`, `product_id`, `position`, `is_pinned`.
-**`redirects`** — `from_path`, `to_path`, `status_code`, `hit_count`.
+**`pages`** — `slug`, `type` (`Home|Landing|Static|Legal|Blog`), `title`, `summary`, `status`
+(`Draft|InReview|Scheduled|Published|Unpublished|Archived`), `published_at`, `scheduled_at`,
+`content_changed_at`, `version`, `seo jsonb`, `cover_image_file_id`, `author`, `tags text[]`,
+`deleted_at`. Unique `(tenant_id, slug)` where not deleted, and a **partial unique index on
+`(tenant_id, type)` filtered to `type = 'Home' AND status = 'Published'`** — exactly one published
+home page, enforced by the database rather than by a check-then-write that loses the race. A `CHECK`
+ties `scheduled_at` to the `Scheduled` status in both directions, which is the invariant the
+scheduler's sweep depends on.
+**`page_versions`** — one row per publish: `version` (unique within the page), `title`, `seo jsonb`
+and the full `blocks jsonb` snapshot, with `note`, `restored_from` and `created_by`. Append-only, so
+a rollback writes a *new* version whose content is an old one's rather than deleting anything.
+**`page_blocks`** — `page_id`, `block_type`, `position`, `config jsonb`, `is_visible`, `starts_at`,
+`ends_at`. A row rather than an element of the page's JSON, because a block carries its own window: a
+campaign banner appears and disappears without the page being republished. `config` is validated
+against the block type's schema before it is stored.
+**`menus`** — `code` (unique per tenant; what the storefront asks for), `name`, `placement`,
+`is_active`. The footer builder is a menu.
+**`menu_items`** — `menu_id`, `parent_id`, `label`, `link_type`
+(`None|Page|Category|Collection|Url`), `target_id`, `url`, `position`, `depth`, `is_visible`,
+`opens_in_new_tab`, `icon_file_id`, `badge`. A discriminated target rather than a bare URL, so a menu
+survives a rename; `CHECK`s tie the target to the link type and cap the depth.
+**`banners`** — `placement`, `media_file_id` and `mobile_media_file_id`, `message` (the announcement
+bar, which is a text banner at its own placement), `alt_text`, `link`, `cta_label`, `priority`,
+`starts_at`, `ends_at`, `audience` (a small flags integer: anonymous, signed-in, both), `is_active`.
+A `CHECK` requires a message at the announcement placement and an image everywhere else.
+**`collections`** — `name`, `slug`, `description`, `type` (`Manual|Rule`), `rules jsonb`, `seo jsonb`,
+`hero_image_file_id`, `is_active`, `is_listed`, `item_count`, `refreshed_at`, `deleted_at`.
+**`collection_items`** — `collection_id`, `product_id`, `position`, `is_pinned`, `is_from_rule`,
+`added_at`. Unique `(collection_id, product_id)`. `is_from_rule` is what lets a refresh delete the
+rows a rule wrote and leave the rows a person did.
+**`redirects`** — `from_path` (normalised, unique per tenant), `to_path`, `status_code`
+(`301|302|410`), `hit_count`, `last_hit_at`, `is_active`, `note`.
 
 ### 4.15 `reviews`
 
@@ -688,17 +863,19 @@ Reporting is **read-only** and may query only its own schema.
 |---|---|---|
 | `listings` | `(tenant_id, variant_id, status)` incl. `selling_price` | Buy-box resolution |
 | `products` | GIN `search_vector`; `(tenant_id, category_id, status)` | Search & browse |
-| `product_search_projection` | GIN `search_vector`, GIN `attributes`, `(tenant_id, category_path, price)` | Faceted PLP |
+| `product_search_projection` | GIN `search_vector`, GIN `attributes`, GIN `category_ids`, GIN trgm `product_name`, `(tenant_id, category_path, price)` | Faceted PLP, subtree browse, fuzzy fallback |
 | `stock_items` | unique `(tenant_id, listing_id, warehouse_id)` | Lookup + integrity |
 | `stock_ledger_entries` | `(stock_item_id, occurred_at desc)`; partitioned monthly | Ledger reads stay small |
 | `orders` | `(tenant_id, customer_id, placed_at desc)`; `(tenant_id, status, placed_at desc)`; unique `order_number` | Account + ops lists |
 | `sub_orders` | `(tenant_id, vendor_id, status, created_at desc)` | Vendor dashboard |
 | `order_lines` | `(sub_order_id)`, `(listing_id)` | Detail + product sales |
 | `gateway_events` | unique `(provider, event_id)` | Exactly-once webhooks |
-| `ledger_entries` | `(vendor_id, occurred_at)`, `(settlement_cycle_id)`, `(payout_batch_id)` | Statements |
+| `ledger_entries` | unique `(tenant_id, source_key)`; `(tenant_id, vendor_id, occurred_at)`; partial same `where settlement_cycle_id is null` | Idempotent posting + statements |
+| `payout_items` | `(tenant_id, status, sent_at)`, `(tenant_id, vendor_id, created_at)` | Reconciliation sweep + seller view |
 | `outbox_messages` | partial `(occurred_at) where processed_at is null` | Cheap polling |
 | `tracking_events` | unique `(shipment_id, provider_event_id)` | Idempotent ingestion |
 | `carts` | `(tenant_id, customer_id) where status='active'` | One active cart |
+| `search_queries` | `(tenant_id, source, normalised_query, created_at desc)`; partial `(tenant_id, created_at desc) where result_count = 0` | Merchandising and zero-result reports |
 
 Rule: **no index is added without a query plan justifying it**, and unused indexes are removed
 at Step 29 based on `pg_stat_user_indexes`.

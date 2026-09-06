@@ -6,6 +6,7 @@ using FluentValidation;
 using KlaraHome.Contracts.Inventory;
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Shipping;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Modules.Carts.Domain;
 using KlaraHome.Modules.Carts.Infrastructure;
@@ -78,6 +79,7 @@ internal sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
 /// <param name="events">Announces the conversion.</param>
 /// <param name="options">Supplies the hold window.</param>
 /// <param name="clock">The sanctioned clock.</param>
+/// <param name="deliveries">The last check that the destination can be delivered to.</param>
 internal sealed class PlaceOrderCommandHandler(
     CheckoutWorkflow workflow,
     CartsDbContext context,
@@ -86,7 +88,8 @@ internal sealed class PlaceOrderCommandHandler(
     IOrderPlacement orders,
     CartsEventPublisher events,
     IOptions<CartsOptions> options,
-    IClock clock) : ICommandHandler<PlaceOrderCommand, PlaceOrderResponse>
+    IClock clock,
+    IShippingOptions deliveries) : ICommandHandler<PlaceOrderCommand, PlaceOrderResponse>
 {
     public async Task<Result<PlaceOrderResponse>> HandleAsync(
         PlaceOrderCommand command,
@@ -113,6 +116,24 @@ internal sealed class PlaceOrderCommandHandler(
         if (session.Shipments.Count == 0)
         {
             return CartsErrors.CheckoutIncomplete("a delivery option");
+        }
+
+        // The last of the five gates ADR-018 names, and the only one that costs nothing to keep.
+        // The four before it have already refused this address; this one catches the case that
+        // matters most — a coverage rule tightened, or a courier withdrawn, while a checkout
+        // session was open — before any stock is held or any money is asked for.
+        var destination = await deliveries
+            .CheckDestinationAsync(
+                shipping.Pincode,
+                session.PaymentMethod == CheckoutPaymentMethod.CashOnDelivery,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!destination.Deliverable)
+        {
+            return destination.Refusal == DeliveryRefusal.NotCovered
+                ? CartsErrors.NotCovered(destination.Message)
+                : CartsErrors.PincodeNotServiceable;
         }
 
         var priced = await workflow.RepriceAsync(session, cart, cancellationToken).ConfigureAwait(false);

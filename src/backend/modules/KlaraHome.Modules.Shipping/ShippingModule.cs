@@ -9,7 +9,7 @@ using KlaraHome.Modules.Shipping.Application.Rates;
 using KlaraHome.Modules.Shipping.Endpoints;
 using KlaraHome.Modules.Shipping.Infrastructure;
 using KlaraHome.Modules.Shipping.Infrastructure.Courier;
-using KlaraHome.Modules.Shipping.Infrastructure.Courier.Aggregator;
+using KlaraHome.Modules.Shipping.Infrastructure.Courier.Shiprocket;
 using KlaraHome.Modules.Shipping.Infrastructure.Events;
 using KlaraHome.Modules.Shipping.Infrastructure.Fulfilment;
 using KlaraHome.Modules.Shipping.Infrastructure.Jobs;
@@ -99,9 +99,18 @@ public sealed class ShippingModule : IModule
         services.AddScoped<RateResolver>();
         services.AddScoped<ServiceabilityService>();
 
+        // Where this store is willing to deliver, which is a different question from what a courier
+        // will carry and is answered from a settings row rather than a cache (ADR-018).
+        services.AddScoped<DeliveryCoverageService>();
+
         // The seam Cart declared at Step 13. Registered unconditionally, so it replaces the
         // free-standard-delivery quoter that module registers with TryAdd.
         services.AddScoped<IShippingOptions, RatedShippingOptions>();
+
+        // The seam Returns books a collection through, added at Step 17. A reverse pickup is a
+        // shipment like any other with its two addresses the other way round — booked by the same
+        // adapters, tracked by the same webhook receiver, and visible in the same parcel list.
+        services.AddScoped<IReversePickup, ReversePickupService>();
 
         AddEventHandlers(services);
 
@@ -149,15 +158,19 @@ public sealed class ShippingModule : IModule
     /// </remarks>
     private static void AddProviders(IServiceCollection services)
     {
-        services.AddTransient<AggregatorAllowedHostHandler>();
+        services.AddTransient<ShiprocketAllowedHostHandler>();
 
         services
-            .AddHttpClient(AggregatorHttp.ClientName)
-            .AddHttpMessageHandler<AggregatorAllowedHostHandler>();
+            .AddHttpClient(ShiprocketHttp.ClientName)
+            .AddHttpMessageHandler<ShiprocketAllowedHostHandler>();
 
-        // Singletons, because the aggregator adapter caches a bearer token: one per process rather
-        // than one per request is the difference between a login a week and a login a second.
-        services.AddSingleton<IShippingProvider, AggregatorShippingProvider>();
+        // Every adapter this build has, registered together and told apart by their keys. The
+        // registry picks the one `Shipping:Provider` names and falls through to `manual` when it
+        // names nothing this build knows (ADR-018) - so adding a courier is one line here.
+        //
+        // Singletons, because an adapter caches a bearer token: one per process rather than one per
+        // request is the difference between a login a week and a login a second.
+        services.AddSingleton<IShippingProvider, ShiprocketShippingProvider>();
         services.AddSingleton<IShippingProvider, ManualShippingProvider>();
         services.AddSingleton<ShippingProviderRegistry>();
     }

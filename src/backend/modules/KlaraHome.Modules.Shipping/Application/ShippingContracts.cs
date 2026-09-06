@@ -63,22 +63,57 @@ internal sealed record ShippingRateResponse(
     int EtaMaxDays,
     bool IsActive);
 
-/// <summary>What can be delivered to one PIN code.</summary>
+/// <summary>
+/// What can be delivered to one PIN code (docs/04-api-specification.md §3.8).
+/// </summary>
+/// <remarks>
+/// It answers both halves of the question and says which one failed (ADR-018).
+/// <see cref="Deliverable"/> is <see cref="Covered"/> and <see cref="IsServiceable"/> together, and
+/// is the only field a storefront needs to decide what to show; <see cref="Reason"/> and
+/// <see cref="Message"/> are what it says when the answer is no.
+/// </remarks>
 /// <param name="Pincode">The six-digit destination.</param>
-/// <param name="IsServiceable">Whether anything can be delivered there.</param>
+/// <param name="Deliverable">Whether an order to it may be placed at all.</param>
+/// <param name="Covered">Whether this store's delivery area includes it.</param>
+/// <param name="IsServiceable">Whether any courier will carry a parcel there.</param>
 /// <param name="PrepaidOk">Whether a prepaid parcel can be.</param>
 /// <param name="CodOk">Whether cash can be collected there.</param>
 /// <param name="EtaDays">How long a courier says it takes, when one says.</param>
 /// <param name="Courier">Whose answer this is.</param>
+/// <param name="City">The city, from the platform's reference data or the courier's answer.</param>
+/// <param name="State">The state, likewise.</param>
+/// <param name="Reason">Which check refused it: <c>DELIVERY_AREA_NOT_COVERED</c>, <c>PINCODE_NOT_SERVICEABLE</c>, or null.</param>
+/// <param name="Message">The operator's own words for an out-of-area destination.</param>
 /// <param name="CheckedAt">When the answer was obtained. Null when nobody has ever asked.</param>
 internal sealed record ServiceabilityResponse(
     string Pincode,
+    bool Deliverable,
+    bool Covered,
     bool IsServiceable,
     bool PrepaidOk,
     bool CodOk,
     int? EtaDays,
     string? Courier,
+    string? City,
+    string? State,
+    string? Reason,
+    string? Message,
     DateTimeOffset? CheckedAt);
+
+/// <summary>The delivery area, as an operator edits it (ADR-018).</summary>
+/// <param name="Enabled">Whether deliveries are restricted at all.</param>
+/// <param name="AllowedCities">Cities delivered to.</param>
+/// <param name="AllowedPincodePrefixes">PIN-code prefixes delivered to.</param>
+/// <param name="AllowedPincodes">Individual PIN codes delivered to.</param>
+/// <param name="BlockedPincodes">PIN codes never delivered to, whatever else allows them.</param>
+/// <param name="Message">What an out-of-area shopper is told.</param>
+internal sealed record DeliveryCoverageResponse(
+    bool Enabled,
+    IReadOnlyList<string> AllowedCities,
+    IReadOnlyList<string> AllowedPincodePrefixes,
+    IReadOnlyList<string> AllowedPincodes,
+    IReadOnlyList<string> BlockedPincodes,
+    string Message);
 
 /// <summary>Units of an order line inside a parcel.</summary>
 /// <param name="OrderLineId">The order line.</param>
@@ -516,20 +551,45 @@ internal static class ShippingProjection
             entry.ProcessedAt);
     }
 
-    /// <summary>Projects a cached serviceability answer.</summary>
-    /// <param name="answer">What the cache says.</param>
+    /// <summary>Projects a cached serviceability answer together with the store's delivery area.</summary>
+    /// <param name="answer">What the cache says a courier will do.</param>
+    /// <param name="covered">Whether this store delivers there.</param>
+    /// <param name="city">The city, from reference data where there is any.</param>
+    /// <param name="state">The state, likewise.</param>
+    /// <param name="message">The operator's words for an out-of-area destination.</param>
     public static ServiceabilityResponse ToServiceability(
-        Infrastructure.Serviceability.ServiceabilityAnswer answer)
+        Infrastructure.Serviceability.ServiceabilityAnswer answer,
+        bool covered = true,
+        string? city = null,
+        string? state = null,
+        string? message = null)
     {
         ArgumentNullException.ThrowIfNull(answer);
 
         return new ServiceabilityResponse(
             answer.Pincode,
+            covered && answer.IsServiceable,
+            covered,
             answer.IsServiceable,
             answer.PrepaidOk,
             answer.CodOk,
             answer.EtaDays,
             answer.Courier,
+            city ?? answer.City,
+            state ?? answer.State,
+            Reason(covered, answer.IsServiceable),
+            covered ? null : message,
             answer.CheckedAt);
     }
+
+    /// <summary>Which of the two checks refused a destination, in the code the API publishes.</summary>
+    /// <remarks>
+    /// Coverage first when both fail: it is the one an operator can reverse, and telling a shopper
+    /// no courier goes to an address the store had already decided not to serve would be true and
+    /// misleading.
+    /// </remarks>
+    private static string? Reason(bool covered, bool serviceable)
+        => !covered ? "DELIVERY_AREA_NOT_COVERED"
+            : !serviceable ? "PINCODE_NOT_SERVICEABLE"
+            : null;
 }

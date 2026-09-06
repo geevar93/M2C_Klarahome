@@ -255,6 +255,14 @@
           "KlaraHome.SharedKernel": "[0.1.0, )"
         }
       },
+      "klarahome.modules.content": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
       "klarahome.modules.identity": {
         "type": "Project",
         "dependencies": {
@@ -315,6 +323,30 @@
         }
       },
       "klarahome.modules.pricing": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.returns": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.search": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.settlements": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",

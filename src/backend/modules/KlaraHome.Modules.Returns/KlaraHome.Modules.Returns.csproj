@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Returns (Step 17): the post-delivery lifecycle, which for an Indian marketplace is a first-class
+    flow rather than an exception path.
+
+    The RMA aggregate and its state machine; configurable reason codes carrying their own policy;
+    eligibility resolved from the product, the seller and the store in that order; reverse pickup
+    booked through the seam Shipping owns; quality control and the restock-or-scrap decision; refund
+    orchestration to the original instrument or to store credit, with proportional tax and a
+    considered answer about freight; the credit note that reduces a seller's output tax under section
+    34 of the CGST Act; and the return-to-origin path, where a parcel comes back without anybody
+    having asked.
+
+    It calculates a refund and it never sends one. Money leaves through the Payments module's own
+    maker-checker control, and goods move through the Inventory module's own append-only ledger -
+    this module decides what is owed and what came back, which is a different job from doing either.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Returns</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

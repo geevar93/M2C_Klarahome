@@ -37,6 +37,17 @@ internal static class CartIssueCodes
     /// <summary>The seller does not deliver to the chosen address.</summary>
     public const string NotServiceable = "CART_NOT_SERVICEABLE";
 
+    /// <summary>
+    /// The store does not deliver to that area at all (ADR-018).
+    /// </summary>
+    /// <remarks>
+    /// The store's own trading decision rather than a seller's reach or a courier's, which is why it
+    /// is a basket-level issue and carries the operator's own words. The code is the one the
+    /// checkout and the storefront PIN check also use, so a shopper is told the same thing wherever
+    /// they meet it.
+    /// </remarks>
+    public const string NotCovered = "DELIVERY_AREA_NOT_COVERED";
+
     /// <summary>The coupon the shopper typed did nothing, and why.</summary>
     public const string CouponRejected = "CART_COUPON_REJECTED";
 }

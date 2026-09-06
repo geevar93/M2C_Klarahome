@@ -27,6 +27,9 @@ context_for() {
         Orders) echo "OrdersDbContext" ;;
         Payments) echo "PaymentsDbContext" ;;
         Shipping) echo "ShippingDbContext" ;;
+        Returns) echo "ReturnsDbContext" ;;
+        Settlements) echo "SettlementsDbContext" ;;
+        Search) echo "SearchDbContext" ;;
         *) return 1 ;;
     esac
 }

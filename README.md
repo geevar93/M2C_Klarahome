@@ -449,22 +449,37 @@ aggregator picks. The two figures are deliberately different numbers and both la
 margin on delivery is the difference. Weight is the same story — what the packer weighed and what the
 courier billed for are both kept, because that is what a weight dispute is argued from.
 
-**It ships with no aggregator account, and that is the correct state for a fresh deployment.** With
+**The v1 courier is Shiprocket, and it is named in configuration and nowhere else.** Each adapter
+publishes its own key — `shiprocket`, `manual`, and whatever comes next — and `SHIPPING_PROVIDER`
+picks the one that books new parcels. A parcel records the adapter that booked it, so changing
+courier leaves the ones already in flight tracking, labelling and cancelling through the courier
+that actually holds them. Adding Delhivery later is one class and one key (ADR-018).
+
+**It ships with no courier account, and that is the correct state for a fresh deployment.** With
 `SHIPPING_PROVIDER` blank the manual adapter takes over: an operator books at a courier counter,
 types the air waybill in, and the label prints, the order ships, the timeline fills in and the cash
-reconciles exactly as they would through an API. Turning an aggregator on is four values in `.env`
+reconciles exactly as they would through an API. Turning Shiprocket on is five values in `.env`
 and a restart:
 
 ```bash
-SHIPPING_PROVIDER=aggregator           # anything non-blank selects the aggregator adapter
-SHIPPING_BASE_URL=https://...          # also the outbound allow-list: no other host is reachable
-SHIPPING_API_USER=...                  # exchanged for a token; SHIPPING_API_KEY works for a static one
-SHIPPING_API_SECRET=...
+SHIPPING_PROVIDER=shiprocket           # the adapter key; blank or unknown falls back to `manual`
+SHIPPING_BASE_URL=https://apiv2.shiprocket.in   # also the outbound allow-list: no other host is reachable
+SHIPPING_API_USER=...                  # the API user's email; exchanged for a token that expires in days
+SHIPPING_API_SECRET=...                # that user's password
 SHIPPING_WEBHOOK_SECRET=...            # yours to choose; paste the same value into their dashboard
 ```
 
-Then add the webhook in the aggregator's dashboard, pointing at
-`<public API origin>/api/v1/webhooks/shipping/aggregator`.
+Then add the webhook in Shiprocket's dashboard, pointing at
+`<public API origin>/api/v1/webhooks/shipping/shiprocket`. Shiprocket proves origin with that secret
+in an `x-api-key` header rather than an HMAC, so the value above is the whole of the proof — treat it
+like a password.
+
+**Where the store delivers is not an environment variable.** *Whether* a courier can reach a PIN code
+is Shiprocket's answer, cached; *whether this store will sell there* is a policy an operator edits in
+admin, and the two are refused with different codes because one is reversible in a settings screen
+and the other is not. It ships restricted to **Hyderabad** — cities `Hyderabad` and `Secunderabad`,
+PIN prefix `500` — and opening another city is typing its prefix into a field. Turning the policy off
+restores national trading.
 
 **A confirmed sub-order opens a parcel; a human closes it.** The draft appears on the pick list with
 its lines, its destination and its cash figure already on it, and nothing is asked of a courier until
@@ -498,6 +513,137 @@ POST /api/v1/admin/shipping/cod-remittances         # a courier's cash, matched 
 then through the ordering machine over `IOrderFulfilment`, so a webhook, the polling fallback and an
 operator's click all write the same timeline. A scan the machine has no edge for — a delivery on a
 parcel already returned — is recorded, marked unapplied, and left for a human rather than discarded.
+
+### Sending things back
+
+Returns are a first-class flow rather than an exception path. The module decides *that* goods are
+coming back and *what that is worth*; it never sends money or moves stock itself. Both go through
+the module that owns them — refunds through the Payments maker–checker control, units through the
+Inventory ledger — over four seams this platform owns.
+
+**How long a shopper has is resolved from three policies in a fixed order**: the product's own
+window, frozen onto the order line at placement; then the seller's promise; then the store's
+default. The first with an opinion wins — deliberately not the shortest, because the shortest is not
+what the shopper read. A product sold as non-returnable is the one veto, because that was a
+mandatory listing disclosure.
+
+```bash
+GET  /api/v1/store/sub-orders/{id}/returnable    # what is left, what it is worth, until when
+POST /api/v1/store/returns                       # ask, with a reason and optional photographs
+POST /api/v1/store/returns/{id}/cancel           # withdraw, up to the moment a courier has it
+GET  /api/v1/admin/returns?status=Received       # the queue, and what is uninspected
+POST /api/v1/admin/returns/{id}/approve          # agree, and say whether a courier collects
+POST /api/v1/admin/returns/{id}/schedule-pickup  # a reverse parcel, or a hand-typed waybill
+POST /api/v1/admin/returns/{id}/receive          # booked in. Nobody has opened the box yet
+POST /api/v1/admin/returns/{id}/qc               # graded: restock, scrap or quarantine, per line
+POST /api/v1/admin/returns/{id}/refund           # to the original instrument, or to store credit
+GET  /api/v1/admin/credit-notes?financialYear=2026-27   # what a GST return is prepared from
+```
+
+**A reverse pickup is an ordinary parcel** with its two addresses inverted — booked by the same
+adapters, tracked by the same webhook receiver, visible in the same list. A deployment with no
+logistics account takes a waybill an operator typed in, exactly as a forward dispatch does.
+
+**The credit note is raised whether or not money moves**, and before the money is asked for. Section
+34 of the CGST Act is about the supply, not the card: a refund to store credit still reverses it,
+and a note against a refund that later failed is something an operator can act on — whereas a refund
+paid against a supply nobody reversed leaves the seller owing tax on goods they no longer have. Its
+number is gapless per seller per financial year, from a counter row rather than a sequence.
+
+Who pays the return freight, what is approved without a human, where the money goes by default and
+what becomes of the goods are all edited at `PUT /admin/settings/returns` — no deploy.
+
+### Paying the sellers
+
+A seller's balance is **not a column anywhere.** It is `Σ credits − Σ debits` over an append-only
+ledger, so it cannot drift from its own history, and a correction is a reversing entry rather than
+an edit. Every entry names the document that caused it, and carries a key **derived from that
+document** with a unique index behind it — which is what makes at-least-once event delivery safe on
+a table that moves money: a redelivered "this parcel arrived" collides instead of paying twice.
+
+**Nothing is earned before the money is the platform's.** A prepaid sale earns when the parcel is
+delivered. A cash-on-delivery sale earns when the courier *remits*, which is days later — crediting
+a seller when the cash is in a van would be paying out of pocket. What the platform charged was
+decided when the order was placed and is read off the frozen order line, so a commission plan
+changed this morning does not re-price last month.
+
+**The two statutory deductions are taken on two different numbers**, and using one base for both is
+the single commonest way this arithmetic goes wrong. TCS under section 52 of the CGST Act is
+collected on the *net value of taxable supplies* — the consideration, which excludes the GST inside
+the price. TDS under section 194-O is deducted from the *gross amount of sales*, which includes it.
+Section 206AA's higher rate applies to a seller who has furnished no PAN. Both rates are store
+settings, because a rate changes by a notification in the Gazette and a deployment that needed a
+rebuild to follow one would file a wrong return.
+
+```bash
+GET  /api/v1/admin/vendors/{id}/ledger           # opening balance, movements, closing balance
+GET  /api/v1/admin/vendors/{id}/ledger/export    # the same as a spreadsheet
+POST /api/v1/admin/settlements/cycles/close      # total a period and apply TCS and TDS
+POST /api/v1/admin/settlements/adjustments       # a correction. An append, and it needs a reason
+POST /api/v1/admin/payout-batches                # build a run from closed periods. Sends nothing
+POST /api/v1/admin/payout-batches/{id}/approve   # never by the person who raised it
+POST /api/v1/admin/payout-batches/{id}/process   # hand it to the gateway. Resumable
+GET  /api/v1/admin/reports/tcs-tds/export        # for the GSTR-8 and the 26Q/27EQ filings
+GET  /api/v1/admin/reports/platform-revenue      # exactly what the sellers were charged
+```
+
+**A settlement period is closed on a hold, not on a date.** It is half-open and drawn in India
+Standard Time, so consecutive periods neither overlap nor leave a gap; it becomes closable its hold
+in days after it ends, which gives a shopper the store's whole return window before the seller is
+paid for goods they might send back. A cycle sweeps every entry older than its end, including one
+posted late against a period already frozen, so every entry lands in exactly one cycle.
+
+**Money leaving needs two people.** A payout batch is built by one person and approved by another —
+refused in the handler, again in the aggregate, and a third time by a database `CHECK`, which is
+more places than any other rule in this platform gets. Sending is deliberately not atomic: each
+transfer is written down the moment the gateway answers, so a process that dies halfway leaves four
+hundred payments in a known state rather than an unknown one.
+
+Razorpay Route and RazorpayX sit behind one interface this platform owns, keyed by the rail they
+are. **A deployment with neither configured still works**: periods close, batches are built and
+approved, the ledger says to the paisa what every seller is owed, and only the transfer refuses —
+with a named `503`, not a pretence that money moved.
+
+### Search and browse (Step 19)
+
+The storefront's product listing is served from a **denormalised projection with one row per
+variant**, carrying the offer that won its buy box — not one row per listing, because a marketplace
+shows one offer per sellable thing and a page with four rows for the same cushion is not a search
+result. Which offer won is answered by the Catalog module with the operator's configured rule, so a
+search result and the product page it links to can never name two different sellers.
+
+```bash
+GET  /api/v1/store/products        ?q= &category= &brand= &minPrice= &attr.color=beige &sort=
+GET  /api/v1/store/search/suggest  ?q=          # products, popular searches, brands, categories
+POST /api/v1/store/search/click                 # which result was opened. Anonymous, 204
+GET  /api/v1/admin/search/queries/zero-results  # searched for, not found. The buying team's list
+POST /api/v1/admin/search/synonyms              # "settee" also means "sofa". Takes effect in a minute
+POST /api/v1/admin/search/index/rebuild         # bounded and resumable; says where it reached
+```
+
+The free-text index is a **generated, stored `tsvector`** with four weights — the product name
+outranks the brand, which outranks the category, which outranks an attribute value — so there is no
+write path, the bulk rebuild included, that can leave it stale. A search that matches nothing is
+retried against a **trigram** index, because "cushin" and "cushion" share no stem and eight
+trigrams; the storefront is told it was a correction rather than shown results that look wrong.
+
+**Facet counts are computed with each facet's own filter lifted and every other filter applied.** It
+is the only definition that agrees with what happens when a shopper clicks one: somebody who has
+chosen beige still has to be told how many creams there are, *within* the price band they also
+chose. Two filtered attributes get a branch each, because "how many creams in size M" and "how many
+size Ls in beige" are two different result sets.
+
+The index owns no truth. Every column is a copy of something Catalog, Pricing, Inventory or Vendors
+owns; six integration events keep it current within seconds, and the whole table can be rebuilt from
+the catalogue at any time — so a wrong row is an operational nuisance rather than a loss. The one
+original record is the **query log**, partitioned by month and retained a year: what a shopper typed
+exists nowhere else, and the queries that returned nothing are the most valuable rows in it. It is
+behind a switch, because a search term is personal data under the DPDP Act.
+
+PostgreSQL full text is the engine, behind an interface this platform owns. A dedicated engine —
+Meilisearch, OpenSearch — is a class, a configuration key and a feature flag away (ADR-019), and
+unlike the gateway, the courier and the payout rail there is **no degraded mode here at all**:
+search needs no credentials, so it works in every deployment on the day it is installed.
 
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

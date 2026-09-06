@@ -379,20 +379,24 @@ GET /api/v1/admin/orders/{orderId}                    # timeline, and the sub-or
 GET /api/v1/admin/cod-collections?status=Collected    # the cash the courier is now carrying
 ```
 
-**With an aggregator account.** Set `SHIPPING_PROVIDER`, `SHIPPING_BASE_URL` and either
-`SHIPPING_API_KEY` or the `SHIPPING_API_USER`/`SHIPPING_API_SECRET` pair, then restart. Omit
-`manualAwb` from the booking call above and the parcel goes to the aggregator instead.
+**With a Shiprocket account.** Set `SHIPPING_PROVIDER=shiprocket`, `SHIPPING_BASE_URL` and the
+`SHIPPING_API_USER`/`SHIPPING_API_SECRET` pair (the API user's email and password — a static
+`SHIPPING_API_KEY` also works where a courier issues long-lived tokens), then restart. Omit
+`manualAwb` from the booking call above and the parcel goes to Shiprocket instead. Any other value
+of `SHIPPING_PROVIDER`, including a typo, falls back to the manual adapter rather than failing —
+check `GET /api/v1/admin/shipments/pick-list` still books by hand if you expected an API call.
 
 `SHIPPING_BASE_URL` is **also the outbound allow-list**: the client refuses to talk to any other
 host, so a wrong value fails at the socket rather than at somebody else's server with your token in
 the header.
 
-**Webhooks on a laptop.** An aggregator cannot reach `*.localhost`, so nothing will move a parcel by
+**Webhooks on a laptop.** A courier cannot reach `*.localhost`, so nothing will move a parcel by
 itself. Three options, same as payments:
 
 ```bash
-# 1. A tunnel: point their dashboard webhook at <tunnel>/api/v1/webhooks/shipping/aggregator
-#    with the same secret as SHIPPING_WEBHOOK_SECRET.
+# 1. A tunnel: point their dashboard webhook at <tunnel>/api/v1/webhooks/shipping/shiprocket
+#    with the same secret as SHIPPING_WEBHOOK_SECRET. Shiprocket sends it back in an
+#    x-api-key header, not as an HMAC over the body.
 # 2. Ask the courier directly, which is what the polling fallback does anyway:
 POST /api/v1/admin/shipments/{id}/sync
 # 3. Record the movement by hand, exactly as the manual flow above does.
@@ -403,9 +407,25 @@ processed — replaying it does not re-verify it. `GET /api/v1/admin/courier-eve
 is the queue of what could not be applied.
 
 **Rates and serviceability.** One catch-all zone in three weight bands is seeded, so checkout offers
-a real delivery charge from the first order. `GET /api/v1/store/shipping/serviceability/560001` reads
-a cache and never calls a courier; with no aggregator configured it answers optimistically, because
+a real delivery charge from the first order. `GET /api/v1/store/shipping/serviceability/500081` reads
+a cache and never calls a courier; with no courier configured it answers optimistically, because
 refusing an order for a destination nobody has checked is worse than one apology.
+
+**Delivery coverage (Step 16A).** Separately from what a courier can reach, the store ships
+restricted to **Hyderabad** — so `500081` is deliverable and `560001` answers
+`DELIVERY_AREA_NOT_COVERED` at every gate from the PDP check to `place-order`. It is a store setting,
+not configuration: widen it, or switch it off entirely, without a restart.
+
+```bash
+GET /api/v1/admin/shipping/coverage                   # the policy as it stands
+GET /api/v1/admin/shipping/coverage/test/560001       # which of the two checks refuses it
+
+# Edited where every other store policy is edited, so it is validated and audited once:
+PUT /api/v1/admin/settings/delivery-coverage \
+    -d '{ "enabled": true, "allowedCities": ["Hyderabad", "Secunderabad"],
+          "allowedPincodePrefixes": ["500", "560"], "allowedPincodes": [], "blockedPincodes": [],
+          "message": "We deliver within Hyderabad and Bengaluru." }'
+```
 
 ```bash
 GET  /api/v1/admin/shipping/zones                     # the map, in the precedence order it is applied

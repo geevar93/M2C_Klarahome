@@ -86,4 +86,50 @@ public interface IVendorDirectory
         Guid stateId,
         string pincode,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What a seller promises about goods coming back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added at Step 17. The seller's promise is the middle term of a three-way resolution: the
+    /// product's own window is frozen on the order line and wins, the store's default is the
+    /// backstop, and this sits between them — a seller who says thirty days has said so on every
+    /// product page, and a return refused at seven would be refusing what the shopper was shown.
+    /// </para>
+    /// <para>
+    /// It is a separate call from <see cref="FindAsync"/> rather than a field on
+    /// <see cref="VendorSummary"/>, because the summary is read on the buy-box path for every
+    /// listing on a page and this is read once, when somebody asks to send something back.
+    /// </para>
+    /// </remarks>
+    /// <param name="vendorId">The seller.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    ValueTask<VendorReturnPolicy?> ReturnPolicyAsync(
+        Guid vendorId,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>What a seller promises about goods coming back.</summary>
+/// <remarks>
+/// The seller's half of the return policy, as it is shown on their product pages. It is a promise
+/// rather than a rule the platform enforces alone: what actually happens to a particular return also
+/// depends on the reason code and on the store's own settings, and the strictest of the three is not
+/// always the one that applies.
+/// </remarks>
+/// <param name="VendorId">The seller.</param>
+/// <param name="AcceptsReturns">Whether they take goods back at all.</param>
+/// <param name="WindowDays">How many days after delivery a return may be raised, or zero for none.</param>
+/// <param name="AcceptsExchanges">Whether a replacement is offered as well as a refund.</param>
+/// <param name="CustomerPaysReturnShipping">
+/// Whether the shopper pays the reverse freight when the reason is not a fault. It is what the
+/// seller agreed to; a reason code marked as the seller's fault still overrides it.
+/// </param>
+/// <param name="Notes">The seller's own wording, shown on the product page.</param>
+public sealed record VendorReturnPolicy(
+    Guid VendorId,
+    bool AcceptsReturns,
+    int WindowDays,
+    bool AcceptsExchanges,
+    bool CustomerPaysReturnShipping,
+    string? Notes);

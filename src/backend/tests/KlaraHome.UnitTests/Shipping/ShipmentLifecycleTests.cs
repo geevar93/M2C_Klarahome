@@ -1,5 +1,5 @@
 using KlaraHome.Modules.Shipping.Domain;
-using KlaraHome.Modules.Shipping.Infrastructure.Courier.Aggregator;
+using KlaraHome.Modules.Shipping.Infrastructure.Courier.Shiprocket;
 
 namespace KlaraHome.UnitTests.Shipping;
 
@@ -178,29 +178,29 @@ public sealed class ShipmentLifecycleTests
     [Fact]
     public void A_couriers_own_words_are_translated_and_a_return_beats_a_delivery()
     {
-        Assert.Equal(ShipmentStatus.Delivered, AggregatorStatusMap.ToShipmentStatus("DELIVERED"));
-        Assert.Equal(ShipmentStatus.OutForDelivery, AggregatorStatusMap.ToShipmentStatus("Out For Delivery"));
-        Assert.Equal(ShipmentStatus.Exception, AggregatorStatusMap.ToShipmentStatus("UNDELIVERED"));
+        Assert.Equal(ShipmentStatus.Delivered, ShiprocketStatusMap.ToShipmentStatus("DELIVERED"));
+        Assert.Equal(ShipmentStatus.OutForDelivery, ShiprocketStatusMap.ToShipmentStatus("Out For Delivery"));
+        Assert.Equal(ShipmentStatus.Exception, ShiprocketStatusMap.ToShipmentStatus("UNDELIVERED"));
 
         // "RTO Delivered" contains "delivered", and reading it as a delivery would tell a shopper
         // their parcel arrived when it is back with the seller.
-        Assert.Equal(ShipmentStatus.RtoDelivered, AggregatorStatusMap.ToShipmentStatus("RTO DELIVERED"));
-        Assert.Equal(ShipmentStatus.RtoInitiated, AggregatorStatusMap.ToShipmentStatus("RTO Initiated"));
+        Assert.Equal(ShipmentStatus.RtoDelivered, ShiprocketStatusMap.ToShipmentStatus("RTO DELIVERED"));
+        Assert.Equal(ShipmentStatus.RtoInitiated, ShiprocketStatusMap.ToShipmentStatus("RTO Initiated"));
 
         // Anything unrecognised is still evidence the parcel is moving, and InTransit is the state
         // nothing irreversible hangs off.
-        Assert.Equal(ShipmentStatus.InTransit, AggregatorStatusMap.ToShipmentStatus("Reached Hub XYZ"));
-        Assert.Equal(ShipmentStatus.InTransit, AggregatorStatusMap.ToShipmentStatus(null));
+        Assert.Equal(ShipmentStatus.InTransit, ShiprocketStatusMap.ToShipmentStatus("Reached Hub XYZ"));
+        Assert.Equal(ShipmentStatus.InTransit, ShiprocketStatusMap.ToShipmentStatus(null));
     }
 
     [Fact]
     public void A_failure_reason_is_categorised_so_the_queue_can_be_worked()
     {
-        Assert.Equal(NdrReasonCode.CustomerUnavailable, AggregatorStatusMap.ToNdrReason("Customer not available"));
-        Assert.Equal(NdrReasonCode.AddressIncorrect, AggregatorStatusMap.ToNdrReason("Incomplete address"));
-        Assert.Equal(NdrReasonCode.CodNotReady, AggregatorStatusMap.ToNdrReason("COD not ready"));
-        Assert.Equal(NdrReasonCode.Refused, AggregatorStatusMap.ToNdrReason("Rejected by customer"));
-        Assert.Equal(NdrReasonCode.Other, AggregatorStatusMap.ToNdrReason("Something nobody has seen before"));
+        Assert.Equal(NdrReasonCode.CustomerUnavailable, ShiprocketStatusMap.ToNdrReason("Customer not available"));
+        Assert.Equal(NdrReasonCode.AddressIncorrect, ShiprocketStatusMap.ToNdrReason("Incomplete address"));
+        Assert.Equal(NdrReasonCode.CodNotReady, ShiprocketStatusMap.ToNdrReason("COD not ready"));
+        Assert.Equal(NdrReasonCode.Refused, ShiprocketStatusMap.ToNdrReason("Rejected by customer"));
+        Assert.Equal(NdrReasonCode.Other, ShiprocketStatusMap.ToNdrReason("Something nobody has seen before"));
     }
 
     [Fact]

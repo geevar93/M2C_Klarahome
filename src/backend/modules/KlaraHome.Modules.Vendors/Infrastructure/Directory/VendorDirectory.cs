@@ -141,6 +141,38 @@ internal sealed class VendorDirectory(VendorsDbContext context) : IVendorDirecto
     /// in SQL — the columns nobody asked for, the registered address and the return policy JSON,
     /// are never read off the disk at all.
     /// </summary>
+    /// <summary>
+    /// What the seller promises about goods coming back (Step 17).
+    /// </summary>
+    /// <remarks>
+    /// Read from the seller's own <c>return_policy</c> document rather than from a settings row,
+    /// because it is a commitment they made and one they can be held to. A seller who has none
+    /// answers null and the caller falls back to the store's default — which is different from a
+    /// seller who has one saying zero days, and that difference is why this is nullable rather than
+    /// a defaulted record.
+    /// </remarks>
+    public async ValueTask<VendorReturnPolicy?> ReturnPolicyAsync(
+        Guid vendorId,
+        CancellationToken cancellationToken = default)
+    {
+        var policy = await context.Vendors
+            .AsNoTracking()
+            .Where(vendor => vendor.Id == vendorId)
+            .Select(vendor => vendor.ReturnPolicy)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return policy is null
+            ? null
+            : new VendorReturnPolicy(
+                vendorId,
+                policy.AcceptsReturns,
+                policy.WindowDays,
+                policy.AcceptsExchanges,
+                policy.CustomerPaysReturnShipping,
+                policy.Notes);
+    }
+
     private static System.Linq.Expressions.Expression<Func<Vendor, VendorSummary>> Projection { get; } =
         vendor => new VendorSummary(
             vendor.Id,

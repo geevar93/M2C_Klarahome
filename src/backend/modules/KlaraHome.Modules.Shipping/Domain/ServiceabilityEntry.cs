@@ -65,6 +65,20 @@ internal sealed class ServiceabilityEntry : AggregateRoot<Guid>, ITenantScoped, 
     /// <summary>The heaviest parcel the courier will take here, in grams. Null for no stated limit.</summary>
     public int? MaxWeightGrams { get; private set; }
 
+    /// <summary>
+    /// The city the courier says this PIN code is, where it says.
+    /// </summary>
+    /// <remarks>
+    /// Not the platform's own reference data, and not a substitute for it. `platform.pincodes` is
+    /// seeded and authoritative; this is what the courier answered, kept as the **fallback** the
+    /// delivery-coverage check uses for a PIN code the platform has no row for (ADR-018). Nullable
+    /// because a courier that will not say is an ordinary answer.
+    /// </remarks>
+    public string? City { get; private set; }
+
+    /// <summary>The state the courier says it is in, where it says. Same standing as <see cref="City"/>.</summary>
+    public string? State { get; private set; }
+
     /// <summary>When the answer was last obtained.</summary>
     public DateTimeOffset RefreshedAt { get; private set; }
 
@@ -97,13 +111,17 @@ internal sealed class ServiceabilityEntry : AggregateRoot<Guid>, ITenantScoped, 
     /// <param name="etaDays">How long the courier says it takes.</param>
     /// <param name="maxWeightGrams">The heaviest parcel the courier will take.</param>
     /// <param name="refreshedAt">When the answer was obtained.</param>
+    /// <param name="city">The city the courier says it is, where it says.</param>
+    /// <param name="state">The state the courier says it is in, where it says.</param>
     public void Record(
         bool prepaidOk,
         bool codOk,
         bool pickupOk,
         int? etaDays,
         int? maxWeightGrams,
-        DateTimeOffset refreshedAt)
+        DateTimeOffset refreshedAt,
+        string? city = null,
+        string? state = null)
     {
         PrepaidOk = prepaidOk;
         CodOk = codOk;
@@ -111,6 +129,11 @@ internal sealed class ServiceabilityEntry : AggregateRoot<Guid>, ITenantScoped, 
         EtaDays = etaDays;
         MaxWeightGrams = maxWeightGrams;
         RefreshedAt = refreshedAt;
+
+        // Kept when the courier stops saying. A place name does not change because one answer came
+        // back thin, and forgetting it would take the coverage check's fallback away with it.
+        City = string.IsNullOrWhiteSpace(city) ? City : city.Trim();
+        State = string.IsNullOrWhiteSpace(state) ? State : state.Trim();
     }
 
     /// <summary>Whether the answer is recent enough for the reader's purposes.</summary>

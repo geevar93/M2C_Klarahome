@@ -10,7 +10,25 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Courier;
 /// </remarks>
 internal static class ShippingProviders
 {
-    /// <summary>The logistics aggregator: one integration, many couriers (docs/08-integrations.md §2).</summary>
+    /// <summary>
+    /// Shiprocket: the v1 courier, one integration and many carriers (docs/08-integrations.md §2).
+    /// </summary>
+    /// <remarks>
+    /// The key an adapter publishes and a shipment stores, and the value
+    /// <c>Shipping:Provider</c> takes to select it. It is the only place in this codebase a courier
+    /// is named — a second aggregator is a new adapter and a new constant here, never a change to a
+    /// caller, a domain type or the schema (ADR-018).
+    /// </remarks>
+    public const string Shiprocket = "shiprocket";
+
+    /// <summary>
+    /// What Step 16 called the configured aggregator, before one was chosen.
+    /// </summary>
+    /// <remarks>
+    /// Kept as an <b>alias</b> and not as a selector: configuration or a parcel written before
+    /// ADR-018 says <c>aggregator</c>, means "whichever aggregator this deployment has", and must
+    /// keep resolving. Nothing new is ever stored under it.
+    /// </remarks>
     public const string Aggregator = "aggregator";
 
     /// <summary>
@@ -24,20 +42,24 @@ internal static class ShippingProviders
     public const string Manual = "manual";
 }
 
-/// <summary>What an aggregator says about a destination.</summary>
+/// <summary>What a courier says about a destination.</summary>
 /// <param name="Courier">The courier it would use, or its own name where it does not say.</param>
 /// <param name="PrepaidOk">Whether a prepaid parcel can be delivered.</param>
 /// <param name="CodOk">Whether cash can be collected. Frequently false where prepaid is true.</param>
 /// <param name="PickupOk">Whether a reverse pickup can be collected, for a return.</param>
 /// <param name="EtaDays">How long it says it takes, or null where it does not say.</param>
 /// <param name="MaxWeightGrams">The heaviest parcel it will take, or null for no stated limit.</param>
+/// <param name="City">The city the courier says the PIN code is, where it says.</param>
+/// <param name="State">The state the courier says it is in, where it says.</param>
 internal sealed record CourierServiceability(
     string Courier,
     bool PrepaidOk,
     bool CodOk,
     bool PickupOk,
     int? EtaDays,
-    int? MaxWeightGrams);
+    int? MaxWeightGrams,
+    string? City = null,
+    string? State = null);
 
 /// <summary>An address a parcel leaves from or goes to, in the shape a courier API wants it.</summary>
 /// <param name="Name">Who is asked for at the door.</param>

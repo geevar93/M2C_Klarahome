@@ -16,6 +16,8 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Serviceability;
 /// <param name="EtaDays">How long a courier says it takes, when one says.</param>
 /// <param name="Courier">Whose answer this is.</param>
 /// <param name="CheckedAt">When the answer was obtained. Null when nobody has ever asked.</param>
+/// <param name="City">The city the courier said it is, where one has said. Never authoritative.</param>
+/// <param name="State">The state the courier said it is in, on the same footing.</param>
 internal sealed record ServiceabilityAnswer(
     string Pincode,
     bool IsServiceable,
@@ -23,7 +25,9 @@ internal sealed record ServiceabilityAnswer(
     bool CodOk,
     int? EtaDays,
     string? Courier,
-    DateTimeOffset? CheckedAt);
+    DateTimeOffset? CheckedAt,
+    string? City = null,
+    string? State = null);
 
 /// <summary>
 /// Reads and refreshes the serviceability cache (docs/08-integrations.md §2).
@@ -93,7 +97,9 @@ internal sealed partial class ServiceabilityService(
             rows.Any(entry => entry.CodOk),
             rows.Where(entry => entry.EtaDays is > 0).Select(entry => entry.EtaDays).DefaultIfEmpty(null).Min(),
             freshest.Courier,
-            freshest.RefreshedAt);
+            freshest.RefreshedAt,
+            rows.Select(entry => entry.City).FirstOrDefault(city => !string.IsNullOrWhiteSpace(city)),
+            rows.Select(entry => entry.State).FirstOrDefault(state => !string.IsNullOrWhiteSpace(state)));
     }
 
     /// <summary>
@@ -116,7 +122,7 @@ internal sealed partial class ServiceabilityService(
 
         var provider = providers.Default;
 
-        if (!providers.HasAggregator)
+        if (!providers.HasCourierApi)
         {
             // Nothing to ask. The manual adapter answers yes to everything, and writing that into the
             // cache would turn "we do not know" into "we checked" — which is exactly the confusion a
@@ -150,7 +156,15 @@ internal sealed partial class ServiceabilityService(
             context.Serviceability.Add(row);
         }
 
-        row.Record(answer.PrepaidOk, answer.CodOk, answer.PickupOk, answer.EtaDays, answer.MaxWeightGrams, now);
+        row.Record(
+            answer.PrepaidOk,
+            answer.CodOk,
+            answer.PickupOk,
+            answer.EtaDays,
+            answer.MaxWeightGrams,
+            now,
+            answer.City,
+            answer.State);
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -161,7 +175,9 @@ internal sealed partial class ServiceabilityService(
             answer.CodOk,
             answer.EtaDays,
             answer.Courier,
-            now);
+            now,
+            row.City,
+            row.State);
     }
 
     /// <summary>

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Settlements (Step 18): what a seller is owed, and the money that discharges it.
+
+    The append-only vendor ledger, whose balance is a sum and never a stored number; the earning that
+    arises when a parcel is delivered and the deductions that come off it — commission and the GST on
+    it, the marketplace fee, the gateway's cut, the freight; the reversal a cancellation or a credit
+    note posts against it; the statutory deductions an electronic commerce operator is obliged to
+    make, TCS under section 52 of the CGST Act and TDS under section 194-O of the Income-tax Act; the
+    settlement cycle that draws a line under a period; the payout batch with its maker-checker; the
+    Route and RazorpayX adapters behind one interface we own; and the statements, extracts and
+    revenue reports that make all of it defensible to a seller and to an auditor.
+
+    It decides what is owed and it records what was sent. It never decides what a sale was worth -
+    that was frozen on the order line at placement and this module reads it - and it never touches
+    the sale it is settling: the seam it reaches ordering through is read-only, which is what stops a
+    settlement run from being able to change its own inputs.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Settlements</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

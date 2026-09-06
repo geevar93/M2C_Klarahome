@@ -75,6 +75,17 @@ public sealed class CatalogModule : IModule
         // and Orders can resolve an offer without a query that crosses a schema.
         services.AddScoped<IProductCatalog, ProductCatalogDirectory>();
 
+        // Its wider sibling, added at Step 19. A read-model needs the words a shopper searches by
+        // and the names a facet is labelled with, none of which a cart line has any use for — and
+        // it needs the buy box resolved by the rule this module owns, so that a search result and
+        // the product page it links to can never name two different sellers.
+        services.AddScoped<IProductProjectionSource, ProductProjectionSource>();
+
+        // The narrowest of the three, added at Step 20. The CMS has to list every browsable URL the
+        // store has and to name the ancestors above a category, and neither is answerable from a
+        // projection that holds a leaf's name and a path of ids but none of the names along it.
+        services.AddScoped<ICatalogTaxonomy, CatalogTaxonomyDirectory>();
+
         // Catalog reacts to a seller's life cycle: activation lets their offers go live again, and
         // a suspension takes every one of them out of the storefront.
         services.AddScoped<VendorLifecycleHandlers>();

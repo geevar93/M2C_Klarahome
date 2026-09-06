@@ -206,6 +206,12 @@ internal sealed class ServiceabilityEntryConfiguration : IEntityTypeConfiguratio
         builder.Property(entry => entry.Pincode).HasMaxLength(6).IsRequired();
         builder.Property(entry => entry.Courier).HasMaxLength(64).IsRequired();
 
+        // What the courier said the place is. Nullable and additive (ADR-018): every row written
+        // before Step 16A has neither, and the coverage check reads the platform's own reference
+        // data first anyway.
+        builder.Property(entry => entry.City).HasMaxLength(120);
+        builder.Property(entry => entry.State).HasMaxLength(100);
+
         // One answer per courier per PIN code. This is what makes the refresh an upsert rather than
         // an append, and it is why a nightly job can run twice without doubling the table.
         builder.HasIndex(entry => new { entry.TenantId, entry.Pincode, entry.Courier }).IsUnique();

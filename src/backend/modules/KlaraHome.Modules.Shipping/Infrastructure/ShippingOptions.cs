@@ -31,12 +31,20 @@ internal sealed class ShippingOptions
     public const string SectionName = "Shipping";
 
     /// <summary>
-    /// Which adapter books consignments.
+    /// Which adapter books consignments, by its key.
     /// </summary>
     /// <remarks>
-    /// Named rather than inferred from whichever adapter happens to be configured. Blank means the
-    /// manual adapter, which is what a deployment with no aggregator account should use and is why
-    /// this module can ship before its credentials exist.
+    /// <para>
+    /// <c>shiprocket</c> in v1 (ADR-018), and <b>the only place in this deployment a courier is
+    /// named</b>. The registry resolves this against the adapters DI registered, so switching
+    /// courier is this one value.
+    /// </para>
+    /// <para>
+    /// Blank — or a key this build has no adapter for, including a typo — means the manual adapter.
+    /// That is what a deployment with no courier account should use, it is why this module can ship
+    /// before its credentials exist, and it is deliberately a degradation rather than a failure: a
+    /// misspelt provider leaves parcels bookable by hand instead of taking fulfilment down.
+    /// </para>
     /// </remarks>
     [StringLength(32)]
     public string Provider { get; set; } = string.Empty;
@@ -195,14 +203,14 @@ internal sealed class ShippingOptions
     [Range(1, 200)]
     public int MaxPageSize { get; set; } = 50;
 
-    /// <summary>Whether an aggregator is configured well enough to book a parcel.</summary>
+    /// <summary>Whether a courier's API is configured well enough to book a parcel.</summary>
     /// <remarks>
     /// Either credential form will do: a long-lived token in <see cref="ApiKey"/>, or an API user
     /// the adapter exchanges for one. What is not optional is the base URL — it is both the endpoint
     /// and the outbound allow-list, and an adapter with credentials and nowhere to send them is not
     /// configured, it is dangerous.
     /// </remarks>
-    public bool HasAggregator
+    public bool HasCourierApi
         => !string.IsNullOrWhiteSpace(Provider)
            && !string.IsNullOrWhiteSpace(BaseUrl)
            && (!string.IsNullOrWhiteSpace(ApiKey)

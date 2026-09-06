@@ -177,6 +177,230 @@ internal sealed class CommerceSettingsValidator : AbstractValidator<CommerceSett
     }
 }
 
+/// <summary>
+/// Rules for the delivery area (ADR-018).
+/// </summary>
+/// <remarks>
+/// The rule worth having is the last one: an enabled policy with no allow rule of any kind matches
+/// nothing, which would stop the store selling to anybody — silently, and looking exactly like a
+/// courier outage. It is refused here with a message that says what would happen, because the screen
+/// this is edited in is the only place anybody would find out.
+/// </remarks>
+internal sealed class DeliveryCoverageSettingsValidator : AbstractValidator<DeliveryCoverageSettings>
+{
+    public DeliveryCoverageSettingsValidator()
+    {
+        RuleFor(coverage => coverage.Message).MaximumLength(300);
+
+        RuleForEach(coverage => coverage.AllowedCities)
+            .NotEmpty()
+            .MaximumLength(120)
+            .WithMessage("A city name must not be blank.");
+
+        RuleForEach(coverage => coverage.AllowedPincodePrefixes)
+            .Matches("^[1-9][0-9]{0,5}$")
+            .WithMessage("A PIN-code prefix is one to six digits and must not start with zero — for example 500.");
+
+        RuleForEach(coverage => coverage.AllowedPincodes)
+            .Matches("^[1-9][0-9]{5}$")
+            .WithMessage("A PIN code must be six digits and must not start with zero.");
+
+        RuleForEach(coverage => coverage.BlockedPincodes)
+            .Matches("^[1-9][0-9]{5}$")
+            .WithMessage("A PIN code must be six digits and must not start with zero.");
+
+        RuleFor(coverage => coverage)
+            .Must(coverage => coverage.AllowedCities.Count > 0
+                              || coverage.AllowedPincodePrefixes.Count > 0
+                              || coverage.AllowedPincodes.Count > 0)
+            .When(coverage => coverage.Enabled)
+            .WithName(nameof(DeliveryCoverageSettings.AllowedPincodePrefixes))
+            .WithMessage(
+                "Delivery coverage is on with no city, prefix or PIN code allowed, which would refuse "
+                + "every order. Add an area, or turn coverage off to deliver nationally.");
+    }
+}
+
+/// <summary>
+/// Rules for the returns policy (Step 17).
+/// </summary>
+/// <remarks>
+/// Four of these fields are words from a closed list, and a typo in any of them would be discovered
+/// only when a return reached the step that reads it — a QC disposition that matches nothing would
+/// leave goods in a state the inventory seam refuses. They are checked here, at the one screen where
+/// somebody can still fix them.
+/// </remarks>
+internal sealed class ReturnsSettingsValidator : AbstractValidator<ReturnsSettings>
+{
+    public ReturnsSettingsValidator()
+    {
+        RuleFor(returns => returns.AutoApproveBelow).InclusiveBetween(0m, 1_000_000m);
+        RuleFor(returns => returns.ReturnShippingFee).InclusiveBetween(0m, 100_000m);
+        RuleFor(returns => returns.MaxEvidenceFiles).InclusiveBetween(0, 20);
+        RuleFor(returns => returns.PickupSlaDays).InclusiveBetween(1, 90);
+
+        RuleFor(returns => returns.DefaultShippingPayer)
+            .Must(payer => ReturnShippingPayers.All.Contains(payer, StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"Who pays for a return must be one of: {string.Join(", ", ReturnShippingPayers.All)}.");
+
+        RuleFor(returns => returns.DefaultRefundMode)
+            .Must(mode => RefundModes.All.Contains(mode, StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"A refund mode must be one of: {string.Join(", ", RefundModes.All)}.");
+
+        RuleFor(returns => returns.DefaultPassedDisposition)
+            .Must(disposition => ReturnDispositions.All.Contains(disposition, StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"A disposition must be one of: {string.Join(", ", ReturnDispositions.All)}.");
+
+        RuleFor(returns => returns.DefaultFailedDisposition)
+            .Must(disposition => ReturnDispositions.All.Contains(disposition, StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"A disposition must be one of: {string.Join(", ", ReturnDispositions.All)}.");
+
+        // Store credit is the only refund a cash-on-delivery order can have without a bank transfer,
+        // so defaulting to a wallet that is switched off would leave those returns with nowhere for
+        // the money to go.
+        RuleFor(returns => returns.AllowWalletRefunds)
+            .Equal(true)
+            .When(returns => string.Equals(returns.DefaultRefundMode, RefundModes.Wallet, StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Store credit is the default refund mode, so it cannot also be turned off.");
+
+        // A fee nobody is charged is a fee that will surprise somebody later.
+        RuleFor(returns => returns.ReturnShippingFee)
+            .Equal(0m)
+            .When(returns => !string.Equals(
+                returns.DefaultShippingPayer,
+                ReturnShippingPayers.Customer,
+                StringComparison.OrdinalIgnoreCase))
+            .WithMessage(
+                "A return shipping fee is only charged when the customer pays. Set the payer to "
+                + "'customer', or leave the fee at zero.");
+    }
+}
+
+/// <summary>
+/// Rules for the <c>settlements</c> section (Step 18).
+/// </summary>
+/// <remarks>
+/// The rates are bounded rather than fixed. A statutory rate is what a notification says it is, and
+/// a validator that hard-coded half a per cent would refuse the day the Gazette changed it — so the
+/// bounds are wide enough for any plausible rate and narrow enough to catch the operator who typed
+/// a percentage where a fraction belonged.
+/// </remarks>
+internal sealed class SettlementSettingsValidator : AbstractValidator<SettlementSettings>
+{
+    public SettlementSettingsValidator()
+    {
+        RuleFor(settlement => settlement.Frequency)
+            .Must(frequency => SettlementFrequencies.All.Contains(frequency, StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"A settlement frequency must be one of: {string.Join(", ", SettlementFrequencies.All)}.");
+
+        RuleFor(settlement => settlement.WeekStartDay).InclusiveBetween(1, 7);
+        RuleFor(settlement => settlement.HoldDays).InclusiveBetween(0, 90);
+
+        RuleFor(settlement => settlement.MinimumPayoutAmount).InclusiveBetween(0m, 1_000_000m);
+        RuleFor(settlement => settlement.PayoutApprovalThreshold).InclusiveBetween(0m, 100_000_000m);
+
+        RuleFor(settlement => settlement.PlatformFeePercent).InclusiveBetween(0m, 100m);
+        RuleFor(settlement => settlement.PlatformFeeFixed).InclusiveBetween(0m, 100_000m);
+        RuleFor(settlement => settlement.PlatformServiceGstRate).InclusiveBetween(0m, 50m);
+        RuleFor(settlement => settlement.PaymentGatewayFeePercent).InclusiveBetween(0m, 25m);
+
+        RuleFor(settlement => settlement.TcsRatePercent).InclusiveBetween(0m, 10m);
+        RuleFor(settlement => settlement.TdsRatePercent).InclusiveBetween(0m, 30m);
+        RuleFor(settlement => settlement.TdsRateWithoutPanPercent).InclusiveBetween(0m, 30m);
+        RuleFor(settlement => settlement.TdsAnnualThreshold).InclusiveBetween(0m, 100_000_000m);
+
+        // A rate of zero with the deduction switched on is a return that will be filed as nil, and
+        // it is far likelier to be a half-finished edit than a deliberate choice. Turning the
+        // deduction off is how a deployment says it is not collecting.
+        RuleFor(settlement => settlement.TcsRatePercent)
+            .GreaterThan(0m)
+            .When(settlement => settlement.TcsEnabled)
+            .WithMessage("Tax collected at source is switched on, so its rate cannot be zero.");
+
+        RuleFor(settlement => settlement.TdsRatePercent)
+            .GreaterThan(0m)
+            .When(settlement => settlement.TdsEnabled)
+            .WithMessage("Tax deducted at source is switched on, so its rate cannot be zero.");
+
+        // Charging a fee that is set to nothing is a fee that will surprise a seller the day
+        // somebody fills the number in, and leaving a number in while the switch is off is a rate
+        // that looks live on the settings screen and is not.
+        RuleFor(settlement => settlement.PaymentGatewayFeePercent)
+            .GreaterThan(0m)
+            .When(settlement => settlement.ChargeGatewayFeeToVendor)
+            .WithMessage("The gateway fee is charged to sellers, so its rate cannot be zero.");
+
+        RuleFor(settlement => settlement.PaymentGatewayFeePercent)
+            .Equal(0m)
+            .When(settlement => !settlement.ChargeGatewayFeeToVendor)
+            .WithMessage(
+                "The gateway fee is absorbed by the platform. Switch the charge on, or leave the "
+                + "rate at zero.");
+    }
+}
+
+/// <summary>
+/// Rules for the <c>search</c> section (Step 19).
+/// </summary>
+/// <remarks>
+/// The four weights are bounded but not constrained against each other. The score is a weighted sum,
+/// so only their ratios matter and there is no combination of non-negative numbers that is wrong —
+/// a store that wants results ordered purely by sales sets every other weight to zero, and that is a
+/// merchandising choice rather than a mistake.
+/// </remarks>
+internal sealed class SearchSettingsValidator : AbstractValidator<SearchSettings>
+{
+    public SearchSettingsValidator()
+    {
+        RuleFor(search => search.MinimumQueryLength).InclusiveBetween(1, 10);
+        RuleFor(search => search.MaxQueryLength).InclusiveBetween(20, 500);
+        RuleFor(search => search.MaxFacetValues).InclusiveBetween(1, 200);
+        RuleFor(search => search.SuggestionLimit).InclusiveBetween(1, 50);
+
+        RuleFor(search => search.DefaultSort)
+            .Must(SearchSorts.Contains)
+            .WithMessage($"A sort must be one of: {string.Join(", ", SearchSorts.All)}.");
+
+        // Below about 0.2 a search for one product returns the catalogue, and above about 0.5 the
+        // fuzzy pass stops correcting the typos it exists for. The bounds are wider than that on
+        // purpose — a store with very short product names genuinely needs a higher threshold.
+        RuleFor(search => search.FuzzyThreshold).InclusiveBetween(0.05m, 0.95m);
+
+        RuleFor(search => search.RelevanceWeight).InclusiveBetween(0m, 100m);
+        RuleFor(search => search.PopularityWeight).InclusiveBetween(0m, 100m);
+        RuleFor(search => search.RatingWeight).InclusiveBetween(0m, 100m);
+        RuleFor(search => search.AvailabilityBoost).InclusiveBetween(0m, 100m);
+
+        // Every weight at zero is not a preference, it is a scoring function that returns the same
+        // number for every row — and the results would then come back in whatever order the database
+        // found them, which looks exactly like a broken index.
+        RuleFor(search => search)
+            .Must(search => search.RelevanceWeight
+                            + search.PopularityWeight
+                            + search.RatingWeight
+                            + search.AvailabilityBoost > 0m)
+            .WithName("weights")
+            .WithMessage("At least one ranking weight must be greater than zero.");
+
+        RuleFor(search => search.PriceBands)
+            .NotNull()
+            .Must(bands => bands.Count <= 20)
+            .WithMessage("A price filter may have at most twenty bands.");
+
+        RuleFor(search => search.PriceBands)
+            .Must(bands => bands.All(bound => bound > 0m))
+            .When(search => search.PriceBands is not null)
+            .WithMessage("Every price band bound must be greater than zero.");
+
+        // Ascending, because the bands are read as ranges between consecutive bounds and an
+        // out-of-order list would produce a band that cannot contain anything.
+        RuleFor(search => search.PriceBands)
+            .Must(bands => bands.Zip(bands.Skip(1)).All(pair => pair.Second > pair.First))
+            .When(search => search.PriceBands is not null)
+            .WithMessage("Price band bounds must be listed in ascending order, each above the last.");
+    }
+}
+
 /// <summary>Rules shared by every address a settings section carries.</summary>
 internal sealed class PostalAddressValidator : AbstractValidator<PostalAddress>
 {
@@ -200,5 +424,68 @@ internal sealed class PostalAddressValidator : AbstractValidator<PostalAddress>
         RuleFor(address => address.CountryCode)
             .Matches("^[A-Z]{2}$")
             .WithMessage("Country must be an ISO 3166-1 alpha-2 code, for example IN.");
+    }
+}
+
+/// <summary>
+/// Rules for the <c>seo</c> section (Step 20).
+/// </summary>
+/// <remarks>
+/// The base URL is the only field with real teeth, and it earns them: every absolute URL this
+/// platform emits — the sitemap's <c>loc</c>, the canonical tag, the JSON-LD identifiers — is built
+/// from it, so a value with a trailing slash or a missing scheme produces thousands of malformed
+/// URLs rather than one. It is still allowed to be blank, because a deployment nobody has pointed at
+/// a domain yet has to be able to save the rest of the section.
+/// </remarks>
+internal sealed class SeoSettingsValidator : AbstractValidator<SeoSettings>
+{
+    public SeoSettingsValidator()
+    {
+        RuleFor(seo => seo.CanonicalBaseUrl)
+            .Matches(@"^https?://[^/\s]+$")
+            .When(seo => !string.IsNullOrWhiteSpace(seo.CanonicalBaseUrl))
+            .WithMessage("The canonical base URL must be a scheme and host with no trailing slash, "
+                         + "for example https://www.example.in.");
+
+        RuleFor(seo => seo.TitleTemplate)
+            .NotEmpty()
+            .MaximumLength(200)
+            .Must(template => template.Contains("{title}", StringComparison.Ordinal))
+            .WithMessage("The title template must contain {title}.");
+
+        RuleFor(seo => seo.DefaultMetaDescription).MaximumLength(400);
+        RuleFor(seo => seo.OrganizationName).MaximumLength(200);
+        RuleFor(seo => seo.RobotsExtra).MaximumLength(4_000);
+
+        RuleFor(seo => seo.TwitterCardType)
+            .Must(card => card is "summary" or "summary_large_image")
+            .WithMessage("The card type must be summary or summary_large_image.");
+
+        // Well inside the sitemap protocol's fifty thousand, and low enough that one page can still
+        // be generated inside a single request.
+        RuleFor(seo => seo.SitemapPageSize).InclusiveBetween(100, 50_000);
+
+        RuleFor(seo => seo.DisallowedPaths)
+            .NotNull()
+            .Must(paths => paths.Count <= 100)
+            .WithMessage("At most one hundred disallowed paths.");
+
+        // A robots directive without a leading slash matches nothing, silently. It is the single
+        // most common way a robots.txt ends up not doing what its author believed.
+        RuleFor(seo => seo.DisallowedPaths)
+            .Must(paths => paths.All(path => path.StartsWith('/')))
+            .When(seo => seo.DisallowedPaths is not null)
+            .WithMessage("Every disallowed path must begin with a slash.");
+
+        RuleFor(seo => seo.SocialProfileUrls)
+            .NotNull()
+            .Must(urls => urls.Count <= 20)
+            .WithMessage("At most twenty social profiles.");
+
+        RuleFor(seo => seo.SocialProfileUrls)
+            .Must(urls => urls.All(url => Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+                                          && parsed.Scheme is "http" or "https"))
+            .When(seo => seo.SocialProfileUrls is not null)
+            .WithMessage("Every social profile must be an absolute http or https URL.");
     }
 }

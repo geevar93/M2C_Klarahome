@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentValidation;
 using KlaraHome.Contracts.Media;
 using KlaraHome.Contracts.Payments;
+using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Vendors;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
@@ -25,6 +26,13 @@ internal sealed record GetServiceabilityQuery(string Pincode) : IQuery<Serviceab
 /// <summary>Asks a courier about a PIN code and records what they say.</summary>
 /// <param name="Pincode">The six-digit destination.</param>
 internal sealed record RefreshServiceabilityCommand(string Pincode) : ICommand<ServiceabilityResponse>;
+
+/// <summary>Reads the delivery area an operator has set (ADR-018).</summary>
+internal sealed record GetDeliveryCoverageQuery : IQuery<DeliveryCoverageResponse>;
+
+/// <summary>Asks whether one address would be accepted, and which check refuses it.</summary>
+/// <param name="Pincode">The six-digit destination to try.</param>
+internal sealed record TestDeliveryCoverageQuery(string Pincode) : IQuery<ServiceabilityResponse>;
 
 /// <summary>Produces the handover sheet for a batch of parcels.</summary>
 /// <param name="ShipmentIds">The parcels going out, or empty for everything ready at this address.</param>
@@ -90,9 +98,19 @@ internal sealed class CreateManifestValidator : AbstractValidator<CreateManifest
         => RuleFor(command => command.ShipmentIds.Count).LessThanOrEqualTo(500);
 }
 
-/// <summary>Reads the serviceability cache.</summary>
+/// <summary>
+/// Reads the serviceability cache and the store's delivery area together.
+/// </summary>
+/// <remarks>
+/// The storefront's PIN-code check, and the first of the five gates ADR-018 names. It calls no
+/// courier: the courier's half comes from a table a nightly job fills, and the store's half from a
+/// settings row. Both have to say yes.
+/// </remarks>
 /// <param name="serviceability">Answers from the cache, never from a courier.</param>
-internal sealed class GetServiceabilityQueryHandler(ServiceabilityService serviceability)
+/// <param name="coverage">Answers whether this store delivers there.</param>
+internal sealed class GetServiceabilityQueryHandler(
+    ServiceabilityService serviceability,
+    DeliveryCoverageService coverage)
     : IQueryHandler<GetServiceabilityQuery, ServiceabilityResponse>
 {
     public async Task<Result<ServiceabilityResponse>> HandleAsync(
@@ -105,13 +123,21 @@ internal sealed class GetServiceabilityQueryHandler(ServiceabilityService servic
             .ReadAsync(query.Pincode, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(ShippingProjection.ToServiceability(answer));
+        var (covered, place, message) = await coverage
+            .EvaluateAsync(query.Pincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(
+            ShippingProjection.ToServiceability(answer, covered, place.City, place.State, message));
     }
 }
 
 /// <summary>Asks a courier about a PIN code.</summary>
 /// <param name="serviceability">Asks and records.</param>
-internal sealed class RefreshServiceabilityCommandHandler(ServiceabilityService serviceability)
+/// <param name="coverage">Answers whether this store delivers there.</param>
+internal sealed class RefreshServiceabilityCommandHandler(
+    ServiceabilityService serviceability,
+    DeliveryCoverageService coverage)
     : ICommandHandler<RefreshServiceabilityCommand, ServiceabilityResponse>
 {
     public async Task<Result<ServiceabilityResponse>> HandleAsync(
@@ -124,7 +150,69 @@ internal sealed class RefreshServiceabilityCommandHandler(ServiceabilityService 
             .RefreshAsync(command.Pincode, pickupPincode: null, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(ShippingProjection.ToServiceability(answer));
+        var (covered, place, message) = await coverage
+            .EvaluateAsync(command.Pincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(
+            ShippingProjection.ToServiceability(answer, covered, place.City, place.State, message));
+    }
+}
+
+/// <summary>Reads the delivery area as it stands.</summary>
+/// <param name="settings">Reads the operator's policy.</param>
+internal sealed class GetDeliveryCoverageQueryHandler(IStoreSettings settings)
+    : IQueryHandler<GetDeliveryCoverageQuery, DeliveryCoverageResponse>
+{
+    public async Task<Result<DeliveryCoverageResponse>> HandleAsync(
+        GetDeliveryCoverageQuery query,
+        CancellationToken cancellationToken)
+    {
+        var policy = await settings
+            .GetAsync<DeliveryCoverageSettings>(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(new DeliveryCoverageResponse(
+            policy.Enabled,
+            policy.AllowedCities,
+            policy.AllowedPincodePrefixes,
+            policy.AllowedPincodes,
+            policy.BlockedPincodes,
+            policy.Message));
+    }
+}
+
+/// <summary>
+/// Says whether one address would be accepted, and which check refuses it.
+/// </summary>
+/// <remarks>
+/// The operator's own answer to "why did we lose that order". It exists because the two refusals
+/// look identical from outside — no delivery option, no order — and telling them apart is the
+/// difference between editing a settings row and accepting a fact about a PIN code.
+/// </remarks>
+/// <param name="serviceability">The courier's half.</param>
+/// <param name="coverage">The store's half.</param>
+internal sealed class TestDeliveryCoverageQueryHandler(
+    ServiceabilityService serviceability,
+    DeliveryCoverageService coverage)
+    : IQueryHandler<TestDeliveryCoverageQuery, ServiceabilityResponse>
+{
+    public async Task<Result<ServiceabilityResponse>> HandleAsync(
+        TestDeliveryCoverageQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var answer = await serviceability
+            .ReadAsync(query.Pincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        var (covered, place, message) = await coverage
+            .EvaluateAsync(query.Pincode, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(
+            ShippingProjection.ToServiceability(answer, covered, place.City, place.State, message));
     }
 }
 

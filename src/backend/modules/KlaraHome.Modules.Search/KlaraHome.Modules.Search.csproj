@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Search (Step 19): how a shopper finds a thing they cannot name.
+
+    A denormalised projection of the catalogue, one row per variant carrying the offer that won its
+    buy box; a weighted `tsvector` over the name, the brand, the category and the searchable
+    attributes; a trigram index that catches the typo the exact index does not; the operator's own
+    synonyms and stop words applied when a query is parsed; faceted counts computed with each
+    facet's own filter lifted, which is the only way they add up; keyset pagination over a score;
+    and the query log that tells a buying team what shoppers asked for and did not find.
+
+    It owns no truth at all. Every fact in the projection belongs to Catalog, Inventory, Pricing,
+    Vendors or Orders, arrives here as an integration event, and can be rebuilt from those modules
+    at any time - which is why a wrong row here is an operational nuisance rather than a data loss.
+    The one thing it does own is the query log, because nobody else knows what was asked.
+
+    PostgreSQL full text is the engine, behind an interface we own (ADR-007, ADR-019). A dedicated
+    engine is a configuration value and a feature flag away, and nothing outside this module would
+    know it had happened.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Search</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

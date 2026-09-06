@@ -106,7 +106,8 @@ ConnectionStrings__Redis
 Storage__Endpoint / AccessKey / SecretKey / Bucket / PublicBaseUrl
 Jwt__Issuer / Audience / SigningKey / AccessTokenMinutes / RefreshTokenDays
 Razorpay__KeyId / KeySecret / WebhookSecret / RouteEnabled
-Shipping__Provider / ApiKey / WebhookSecret
+Shipping__Provider / BaseUrl / ApiKey / ApiUser / ApiSecret / WebhookSecret
+  (Provider names the adapter: `shiprocket` in v1, blank or unknown falls back to `manual`)
 Sms__Provider / ApiKey / SenderId / DltEntityId
 Email__Provider / ApiKey / FromAddress
 Tenant__Code / DefaultLocale / DefaultTimeZone

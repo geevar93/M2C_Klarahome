@@ -84,6 +84,12 @@ public sealed class VendorsModule : IModule
         // module that talks to couriers can learn.
         services.AddScoped<IVendorPickupPoints, VendorPickupPoints>();
 
+        // Added at Step 18. Where a seller's money goes, and whether it can go anywhere at all. A
+        // second, narrower seam beside the directory rather than four more fields on VendorSummary:
+        // the summary is read for every listing on a storefront page, and a seller's PAN has no
+        // business being on the record a shopper's page loads.
+        services.AddScoped<IVendorPayouts, VendorPayoutDirectory>();
+
         // The Razorpay Route seam, with the implementation that is honest about creating nothing.
         // Step 18 replaces this registration and nothing else.
         services.AddScoped<IVendorPayoutAccounts, UnprovisionedPayoutAccounts>();

@@ -70,4 +70,81 @@ public interface IShippingOptions
     ValueTask<IReadOnlyList<ShippingOption>> QuoteAsync(
         ShipmentQuoteRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether an address can be delivered to at all, before any parcel is priced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added at Step 16A (ADR-018). It answers the two questions an address has to pass — will this
+    /// store sell there, and can a courier reach it — and says which one refused, because they are
+    /// different facts with different remedies.
+    /// </para>
+    /// <para>
+    /// On this seam rather than on a new contract, because Cart and Orders already hold it and the
+    /// question belongs to whoever owns delivery. It reads a cached table and a settings row; it
+    /// never calls a courier.
+    /// </para>
+    /// </remarks>
+    /// <param name="pincode">The six-digit destination.</param>
+    /// <param name="isCod">Whether cash would be collected at the door.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    ValueTask<DeliveryCheck> CheckDestinationAsync(
+        string pincode,
+        bool isCod = false,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>Why a destination cannot be delivered to.</summary>
+public enum DeliveryRefusal
+{
+    /// <summary>It can. Nothing refused it.</summary>
+    None = 0,
+
+    /// <summary>
+    /// The store has decided not to sell there.
+    /// </summary>
+    /// <remarks>
+    /// Reversible in a settings screen, and therefore worth telling a shopper about in the
+    /// operator's own words. Reported as <c>DELIVERY_AREA_NOT_COVERED</c>.
+    /// </remarks>
+    NotCovered = 1,
+
+    /// <summary>
+    /// No courier will carry a parcel there.
+    /// </summary>
+    /// <remarks>
+    /// A fact about India's logistics rather than a decision, and nothing an operator can change.
+    /// Reported as <c>PINCODE_NOT_SERVICEABLE</c>.
+    /// </remarks>
+    NotServiceable = 2,
+
+    /// <summary>A courier will go there but will not collect cash. Prepaid is still offered.</summary>
+    CodUnavailable = 3,
+}
+
+/// <summary>What this platform can promise about one address.</summary>
+/// <param name="Pincode">The six-digit destination.</param>
+/// <param name="Deliverable">Whether an order to it may be created at all.</param>
+/// <param name="Covered">Whether the store's own delivery area includes it.</param>
+/// <param name="Serviceable">Whether a courier will carry a parcel there.</param>
+/// <param name="CodAvailable">Whether cash can be collected there.</param>
+/// <param name="City">The city, from reference data where there is any.</param>
+/// <param name="State">The state, likewise.</param>
+/// <param name="EtaDays">How long a courier says it takes, when one says.</param>
+/// <param name="Refusal">Which check refused it, or <see cref="DeliveryRefusal.None"/>.</param>
+/// <param name="Message">
+/// What to tell the shopper. The operator's own words for a coverage refusal, so that a store which
+/// delivers to one city can say so in a sentence it chose.
+/// </param>
+public sealed record DeliveryCheck(
+    string Pincode,
+    bool Deliverable,
+    bool Covered,
+    bool Serviceable,
+    bool CodAvailable,
+    string? City,
+    string? State,
+    int? EtaDays,
+    DeliveryRefusal Refusal,
+    string? Message);

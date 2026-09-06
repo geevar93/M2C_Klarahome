@@ -60,11 +60,11 @@ graph LR
 | **Cart** | Cart, cart lines, checkout session | Order |
 | **Orders** | Order, sub-order, order lines, order timeline, invoices | Payment status truth (Payments owns it), shipment (Shipping owns it) |
 | **Payments** | Payment intents, transactions, refunds, gateway webhooks, COD collection records | Order state transitions (it requests them) |
-| **Shipping** | Shipping zones/rates, serviceability, shipments, packages, tracking events, NDR | Stock |
+| **Shipping** | Shipping zones/rates, serviceability, delivery coverage, shipments, packages, tracking events, NDR | Stock. Delivery coverage is *owned* here and *stored* as a platform setting (ADR-018) |
 | **Returns** | RMA, pickup, QC disposition, credit notes | Refund execution (delegates to Payments) |
 | **Settlements** | Commission, fees, TCS/TDS, vendor ledger, payout batches | Payment capture |
-| **Search** | Search projection, facets, synonyms, query log | Source-of-truth catalog data |
-| **Content** | Pages, blocks, banners, menus, collections, redirects, SEO metadata | Products |
+| **Search** | Search projection, facets, synonyms, stop words, query log | Source-of-truth catalog data. The buy box is resolved by Catalog and read over `IProductProjectionSource` (Step 19), so a result and the page it links to cannot name two sellers |
+| **Content** | Pages, blocks, banners, menus, collections, redirects, SEO metadata, the sitemap and the `schema.org` graph | Products. A collection holds product ids and resolves them through `IProductProjectionSource` with the buy box Catalog picked (Step 20); the category tree comes over `ICatalogTaxonomy` |
 | **Reviews** | Reviews, ratings, Q&A, wishlist, back-in-stock subscriptions | Orders |
 | **Notifications** | Templates, channels, delivery log, preferences, the DLT template registry | Business events; the *decision* to notify (a module publishes a fact, this one renders it) |
 | **Reporting** | Read models, aggregates, exports | Writes to any other context |
@@ -185,14 +185,23 @@ Invariants:
 ```
 VendorLedger (root, per vendor)
  └─ LedgerEntry[]        (append-only, double-entry style)
+SettlementCycle (root, per vendor per period)
 PayoutBatch (root)
  └─ PayoutItem[]
 ```
 
 Invariants:
 - Ledger is append-only; corrections are reversing entries, never edits.
-- A ledger entry always references its source document (order line, refund, adjustment).
-- A payout can only include settled, unpaid entries; an entry can appear in exactly one payout.
+- A ledger entry always references its source document (order line, credit note, adjustment).
+- A balance is a sum over entries and never a stored column, so it cannot drift from its history.
+- Every entry carries a source key derived from the fact that caused it, unique per tenant. That is
+  what makes at-least-once event delivery safe on a table that moves money.
+- An entry is drawn into exactly one settlement cycle. A cycle sweeps every unassigned entry older
+  than its end, so an entry posted late belongs to the next cycle rather than to none.
+- A cycle's totals are frozen when it closes; a later correction is a new entry in a later period.
+- A payout can only include closed, unpaid cycles; a cycle can appear in one *successful* payout.
+  A failed transfer releases its cycle rather than being retried in place.
+- A payout batch is approved by somebody other than the person who raised it.
 
 ---
 
@@ -255,7 +264,7 @@ The parent Order status is computed, not set:
 | Payment | Created → Attempted → Authorized → Captured → PartiallyRefunded → Refunded / Failed / Expired |
 | Shipment | Created → LabelGenerated → PickupScheduled → PickedUp → InTransit → OutForDelivery → Delivered / Exception / RTO |
 | CMS Page | Draft → InReview → Scheduled → Published → Unpublished → Archived |
-| PayoutBatch | Draft → Approved → Processing → Completed / PartiallyFailed / Failed |
+| PayoutBatch | Draft → Approved → Processing → Completed / PartiallyFailed / Failed; Draft or Approved → Cancelled |
 
 ---
 
@@ -272,12 +281,13 @@ Naming: `<Context>.<Aggregate><PastTenseVerb>` · versioned payloads · always c
 | `Pricing.PriceChanged` | Pricing | Search, Reviews (price-drop alerts) |
 | `Carts.CartAbandoned` | Cart | Notifications, Reporting |
 | `Orders.OrderPlaced` | Orders | Payments, Inventory, Notifications, Reporting |
-| `Orders.SubOrderConfirmed` | Orders | Inventory (commit), Shipping (create shipment), Notifications, Settlements |
+| `Orders.SubOrderConfirmed` | Orders | Inventory (commit), Shipping (create shipment), Search (popularity), Notifications |
+| `Orders.SubOrderStatusChanged` | Orders | Settlements (earns a prepaid sale on `Delivered`), Notifications, Reporting |
 | `Orders.SubOrderCancelled` | Orders | Inventory (release), Payments (refund), Settlements (reverse), Notifications |
-| `Payments.PaymentCaptured` / `PaymentFailed` / `RefundCompleted` | Payments | Orders, Settlements, Notifications |
+| `Payments.PaymentCaptured` / `PaymentFailed` / `RefundProcessed` / `CodCashRecorded` | Payments | Orders, Settlements (cash remittance only), Notifications |
 | `Shipping.ShipmentDispatched` / `TrackingUpdated` / `ShipmentDelivered` / `NdrRaised` | Shipping | Orders, Notifications, Reporting |
-| `Returns.ReturnApproved` / `ReturnReceived` / `ReturnQcCompleted` | Returns | Inventory, Payments, Settlements |
-| `Settlements.PayoutCompleted` | Settlements | Notifications, Reporting |
+| `Returns.ReturnRequested` / `ReturnApproved` / `ReturnRejected` / `ReturnReceived` / `ReturnQcCompleted` / `ReturnClosed` / `CreditNoteIssued` | Returns | Inventory (QC dispositions), Payments, Settlements (credit notes), Notifications, Reporting |
+| `Settlements.SettlementCycleClosed` / `PayoutCompleted` / `PayoutFailed` | Settlements | Notifications, Reporting |
 | `Reviews.ReviewPublished` | Reviews | Catalog (rating projection), Search |
 
 Delivery semantics: **at-least-once**. Every handler must be idempotent, keyed on
@@ -292,8 +302,12 @@ Delivery semantics: **at-least-once**. Every handler must be idempotent, keyed o
    **inclusive of GST**; the breakdown is back-calculated and shown on the invoice.
 2. **Invoice per vendor**: each sub-order produces the vendor's own tax invoice with the
    vendor's GSTIN, a gapless per-vendor series per financial year (Apr–Mar).
-3. **Marketplace deductions**: TCS under GST §52 and TDS under §194-O are computed on the
-   vendor's supply value at settlement; both rates are configuration.
+3. **Marketplace deductions**: TCS under GST §52 and TDS under §194-O are computed at settlement,
+   **on two different bases**. TCS is collected on the *net value of taxable supplies* — the
+   consideration, which excludes the GST inside the price, reduced by supplies returned. TDS is
+   deducted from the *gross amount of sales*, which the CBDT's circular says includes GST. Both
+   rates are store settings rather than configuration, because a rate changes by a notification in
+   the Gazette; §206AA's higher rate applies where the seller has furnished no PAN.
 4. **Mandatory listing disclosures** (Legal Metrology + Consumer Protection (E-Commerce) Rules
    2020): MRP, net quantity, country of origin, manufacturer/packer/importer name and address,
    consumer-care contact, seller's legal name and address, return/refund policy, grievance

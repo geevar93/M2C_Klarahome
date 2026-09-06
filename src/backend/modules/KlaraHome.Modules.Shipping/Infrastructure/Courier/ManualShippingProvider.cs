@@ -177,31 +177,35 @@ internal sealed class ManualShippingProvider : IShippingProvider
 /// <remarks>
 /// <para>
 /// A shipment records the provider that booked it, and every later call about it goes back to that
-/// adapter. That is what keeps a deployment that switches aggregator from losing its parcels: the
-/// ones already in flight keep talking to the aggregator that has them, and only new bookings go to
-/// the new one.
+/// adapter. That is what keeps a deployment that switches courier from losing its parcels: the ones
+/// already in flight keep talking to the courier that has them, and only new bookings go to the
+/// new one.
 /// </para>
 /// <para>
-/// <see cref="Default"/> is the configured aggregator when it is usable and the manual adapter when
-/// it is not. There is deliberately no third possibility: this module always has somewhere to book.
+/// <b>The adapter is chosen by key, and the key is configuration</b> (ADR-018).
+/// <c>Shipping:Provider</c> names it — <c>shiprocket</c> in v1 — and this class resolves that name
+/// against the adapters DI registered. A blank, unknown or unusable key falls through to
+/// <see cref="Manual"/>. There is deliberately no third possibility: this module always has
+/// somewhere to book, and a typo in configuration degrades to hand-booking rather than to an
+/// outage.
 /// </para>
 /// </remarks>
 /// <param name="providers">Every registered adapter.</param>
-/// <param name="options">Names the configured aggregator.</param>
+/// <param name="options">Names the configured courier.</param>
 internal sealed class ShippingProviderRegistry(
     IEnumerable<IShippingProvider> providers,
     IOptionsMonitor<ShippingOptions> options)
 {
     private readonly IReadOnlyList<IShippingProvider> _providers = [.. providers];
 
-    /// <summary>The adapter new bookings go to: the aggregator where it works, the manual one where it does not.</summary>
+    /// <summary>The adapter new bookings go to: the configured courier where it works, the manual one where it does not.</summary>
     public IShippingProvider Default
     {
         get
         {
-            var configured = Find(ShippingProviders.Aggregator);
+            var configured = Find(options.CurrentValue.Provider);
 
-            return configured is { IsConfigured: true } && options.CurrentValue.HasAggregator
+            return configured is { IsConfigured: true } and not ManualShippingProvider
                 ? configured
                 : Manual;
         }
@@ -210,16 +214,38 @@ internal sealed class ShippingProviderRegistry(
     /// <summary>Hand-booking, which is always available.</summary>
     public IShippingProvider Manual => Find(ShippingProviders.Manual)!;
 
-    /// <summary>Whether new bookings will actually reach an aggregator.</summary>
-    public bool HasAggregator => Default.Name == ShippingProviders.Aggregator;
+    /// <summary>Whether new bookings will actually reach a courier's API.</summary>
+    public bool HasCourierApi => Default.Name != ShippingProviders.Manual;
 
-    /// <summary>The adapter for a stored provider name, or null when this build has none.</summary>
-    /// <param name="name">The provider name as it is stored on a shipment.</param>
+    /// <summary>
+    /// The adapter for a provider name, or null when this build has none.
+    /// </summary>
+    /// <remarks>
+    /// <c>aggregator</c> is accepted as an alias for whichever courier is configured. It is what
+    /// Step 16 stored and configured before one was chosen, and a parcel booked under that name is
+    /// still a parcel somebody has to be able to track (ADR-018).
+    /// </remarks>
+    /// <param name="name">The provider name as it is configured, or as it is stored on a shipment.</param>
     public IShippingProvider? Find(string? name)
-        => string.IsNullOrWhiteSpace(name)
-            ? null
-            : _providers.FirstOrDefault(provider =>
-                string.Equals(provider.Name, name, StringComparison.OrdinalIgnoreCase));
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var exact = _providers.FirstOrDefault(provider =>
+            string.Equals(provider.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        return string.Equals(name, ShippingProviders.Aggregator, StringComparison.OrdinalIgnoreCase)
+            ? _providers.FirstOrDefault(provider =>
+                provider.Name != ShippingProviders.Manual && provider.IsConfigured)
+            : null;
+    }
 
     /// <summary>The adapter for a consignment, falling back to the manual one rather than failing.</summary>
     /// <remarks>
