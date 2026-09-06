@@ -1,0 +1,111 @@
+// =================================================================================================
+// Placeholder design tokens — Steps 1 to 29.
+//
+// Transcribed from docs/10-design-system-placeholder.md §2 and deliberately plain. Colour,
+// typography, imagery and motion are OUT OF SCOPE until Step 30; this file exists so that layout,
+// behaviour and accessibility can be built and tested without anyone making a brand decision.
+//
+// TWO RULES, and they are what make Step 30 a token swap rather than a rewrite:
+//
+//   1. Never hard-code a colour, font, radius or spacing value in a component. Every value a
+//      component uses comes from a custom property declared here.
+//   2. These are CSS custom properties, not SCSS variables, because they have to be overridable
+//      **at runtime** — white-labelling means a tenant's theme is a payload the app applies to
+//      `:root`, not a rebuild.
+//
+// Do not add to this file before Step 30, and do not "improve" what is in it. If something looks
+// unfinished, that is the intent.
+// =================================================================================================
+
+:root {
+  // ---- Colour: neutral greys and one functional blue. Deliberately unbranded ----
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f8;
+  --color-surface-raised: #ffffff;
+  --color-border: #d9d9de;
+  --color-border-strong: #b0b0b8;
+
+  --color-text: #1a1a1e;
+  --color-text-muted: #5c5c66;
+  --color-text-inverse: #ffffff;
+
+  --color-primary: #2f5bd7; // placeholder only
+  --color-primary-hover: #2447ab;
+  --color-primary-subtle: #eaf0ff;
+  --color-on-primary: #ffffff;
+
+  --color-success: #1f7a44;
+  --color-warning: #9a6400;
+  --color-danger: #b3261e;
+  --color-info: #17607d;
+  --color-focus-ring: #2f5bd7;
+
+  // ---- Typography: system stack, zero webfont cost, decided at Step 30 ----
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+
+  // ---- Spacing: 4px base ----
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  // ---- Radius / elevation: minimal on purpose ----
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+
+  // ---- Layout ----
+  --container-max: 1280px;
+  --header-height: 56px; // mobile
+  --bottom-bar-height: 60px;
+  --z-header: 100;
+  --z-drawer: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+
+  // ---- Motion: minimal, and always respects prefers-reduced-motion ----
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  // ---- Touch: the floor, not a suggestion (10-design-system-placeholder.md §4) ----
+  --touch-target-min: 44px;
+}
+
+// Honoured here so that a component which animates via a token needs no media query of its own.
+// Anything animated from TypeScript makes the same check with `prefersReducedMotion()`.
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}

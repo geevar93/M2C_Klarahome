@@ -1,16 +1,17 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (next: Step 22)
-> **Last updated:** 2026-09-06 (Step 20 closed — a page is an ordered list of typed blocks whose
-> schemas are data the admin editor reads back, one transition table with a version snapshot on every
-> publish, rule-based collections materialised into rows and swept, and the SEO surface — robots, a
-> paginated sitemap and the schema.org graph — computed here because the facts are. ADR-020; one new
-> shared seam and two new methods on another. **Step 21 closed, and Phase E with it** — a review is
-> a unique index on a delivered order line, a rating is recomputed and published rather than
-> adjusted, and Reporting keeps its own facts because a materialised view over another schema is a
-> cross-schema read with a different word in front of it. ADR-021; two new shared seams and three
-> new events. **The backend is complete; Step 22 begins the frontend**)
+> **Status:** APPROVED — in execution (next: Step 23)
+> **Last updated:** 2026-09-06 (**Step 21 closed, and Phase E with it** — a review is a unique index
+> on a delivered order line, a rating is recomputed and published rather than adjusted, and Reporting
+> keeps its own facts because a materialised view over another schema is a cross-schema read with a
+> different word in front of it. ADR-021; two new shared seams and three new events. **Step 22
+> closed: the frontend foundation stands.** The OpenAPI document is now a build artefact and a
+> generator we own turns it into 21 typed clients over 489 operations, with a CI gate that fails on
+> drift — so no hand-written DTO exists and a breaking API change cannot merge unnoticed. Around it
+> the five interceptors in the one order that works, a single-flight refresh, an access token held
+> in memory only, and configuration read before the injector exists so one image serves every
+> environment. **Both apps build; Steps 23–25 build the storefront on top**)
 > **Applies to:** Klara Home multi-vendor e-commerce platform (India)
 
 ---
@@ -152,7 +153,7 @@ Open the **Detail** file for the step you are working on. Do not open the others
 | 19 | Search & Browse module | E | ✅ DONE | 2026-09-06 | [card](steps/step-19-search-and-browse-module.md) | One row per variant carrying the offer that won its buy box — resolved by Catalog over the new `IProductProjectionSource`, so a result and the page it links to cannot name two sellers; a weighted generated `tsvector` with a trigram fallback for the typo it cannot see; facet counts computed with each facet's own filter lifted, which is the only definition a shopper's clicking agrees with; keyset paging over a computed score; the query log, partitioned and the only original record in the schema; and PostgreSQL behind `ISearchEngine` with a configuration key and a flag (ADR-019). 11 endpoints, three permissions, four flags, six event subscriptions — and the first use of `platform.inbox_messages`. 808 unit tests (52 new); build clean at 0 warnings. **Nothing proved against a database: 26 `TEST_DEBT.md` rows, including both headline criteria. Ratings are null until Step 21, and the index is empty until it is rebuilt** |
 | 20 | CMS & Merchandising module | E | ✅ DONE | 2026-09-06 | [card](steps/step-20-cms-and-merchandising-module.md) | A page is an ordered list of typed blocks whose schemas are **data the admin editor reads back over the API**, so the block form and the validator that judges it cannot drift; one transition table in which an editor reaches review and no further and only the clock publishes a scheduled page; a version snapshot on every publish, which is what makes preview honest and rollback a single write; menus whose items point at a *thing* rather than a URL and therefore survive a rename; banners on their own timetable, the announcement bar being one of them; rule-based collections **materialised into rows** — because every condition is about a schema this module may not query — kept current by three catalogue events and a sweep, with `is_from_rule` so a refresh never overturns a merchandiser's pin; and the SEO surface computed here because the facts are, down to an `Offer` carrying the same buy-box price the product page shows. 51 endpoints, five permissions, five flags, three subscriptions, two workers (ADR-020). **Two methods added to `IProductProjectionSource`, one new seam `ICatalogTaxonomy`, one new `seo` settings section.** 910 unit tests (102 new); the module compiles at 0 warnings. **Nothing proved against a database or a browser: 33 `TEST_DEBT.md` rows, including both headline criteria. Ratings are null until Step 21, and no storefront renders any of it until Step 23**
 | 21 | Reviews, Q&A, Wishlist & Reporting read-models | E | ✅ DONE | 2026-09-06 | [card](steps/step-21-reviews-qanda-wishlist-and-reporting-read-models.md) | Two modules, and the last two schemas. **Reviews**: a review exists if and only if the customer received the line — a unique index on `order_line_id` rather than a check, because two submissions racing is the ordinary case on a slow connection, and every identifier on the row comes off what `IOrderPurchases` returned rather than off the request; a vote is a row keyed on the voter, so helpfulness cannot be pressed; the product and vendor aggregates are recomputed in full on every change and published carrying the aggregate rather than a delta, which makes applying them idempotent for free; a complaint is a row that hides nothing, and upholding it is what refuses the content. **Reporting**: seven fact tables written by fourteen event subscriptions, one row per transactional row denormalised at write time, so a report is a filtered aggregation over one table with no join anywhere — no materialised views and no rollups, because a view over another module's schema is a cross-schema read the architecture tests cannot see (ADR-021); thirteen declared reports served as data the admin app reads back; scheduled CSV exports in the private bucket, emailed as a short-lived signed link. 35 endpoints, five permissions, eight flags, three workers. **Two new shared seams — `IOrderPurchases` and `IInventoryAgeing` — and three new events, which finally fill the `RatingAverage` that has been null since Step 19.** 941 unit tests (31 new); build clean at 0 warnings. **Nothing proved against a database: 37 `TEST_DEBT.md` rows, including both headline criteria** |
-| 22 | Angular workspace, shared libs & API client generation | F | ⬜ NOT STARTED | | [card](steps/step-22-angular-workspace-shared-libs-and-api-client-generation.md) | Build sprint |
+| 22 | Angular workspace, shared libs & API client generation | F | ✅ DONE | 2026-09-06 | [card](steps/step-22-angular-workspace-shared-libs-and-api-client-generation.md) | The contract became a build artefact: `dotnet build` now exports `openapi.json`, a dependency-free generator we own turns it into 21 injectable clients over 489 operations and 494 models, and `ci.ps1 -Stage codegen` fails the build if the committed client has drifted — so a breaking API change cannot merge unnoticed. Around it, the five interceptors in the one order that works (loading outermost so the bar spans the retries; the correlation id below retry so every attempt shares an id; auth innermost because it alone replays a request), retry decided by the HTTP method and by an `Idempotency-Key` rather than by the URL, and a **single-flight** refresh — without which a rotating refresh token makes five concurrent 401s look like a stolen token. The access token lives in memory only. Configuration is read before the injector exists, so `API_BASE_URL` is a real token and one image serves every environment. Placeholder tokens, `en-IN` pipes, the a11y scaffolding, and an MSW harness whose own test proves a generated call through the whole chain. **One backend fix that could not wait: `SearchOptions.BaseUrl` had `[Url]`, which rejects the blank default every deployment ships, so the host failed options validation on start-up.** Both apps build (81.6 / 71.0 kB gzipped); 17 lint, 15 test projects green; 941 backend tests. **Budgets not yet enforced (the doc states gzipped, Angular measures raw) and nothing proved against a live API: 18 `TEST_DEBT.md` rows** |
 | 23 | Storefront shell, SSR, routing & mobile-first layout | F | ⬜ NOT STARTED | | [card](steps/step-23-storefront-shell-ssr-routing-and-mobile-first-layout.md) | Build sprint |
 | 24 | Storefront — browse, search, PDP | F | ⬜ NOT STARTED | | [card](steps/step-24-storefront-browse-search-pdp.md) | Build sprint |
 | 25 | Storefront — cart, checkout, payment, account & orders | F | ⬜ NOT STARTED | | [card](steps/step-25-storefront-cart-checkout-payment-account-and-orders.md) | Build sprint |
@@ -232,9 +233,9 @@ ones. **This is a deliberate speed-for-rework trade** taken to reach a demo soon
 
 | Ledger | File | Rows today |
 |---|---|---|
-| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 322 |
-| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 41 |
-| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | 319 open |
+| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 332 |
+| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 43 |
+| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | 337 open |
 
 ---
 

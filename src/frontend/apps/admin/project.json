@@ -21,7 +21,11 @@
             "input": "apps/admin/public"
           }
         ],
-        "styles": ["apps/admin/src/styles.scss"]
+        "styles": ["apps/admin/src/styles.scss"],
+        "stylePreprocessorOptions": {
+          "includePaths": ["libs"]
+        },
+        "polyfills": ["@angular/localize/init"]
       },
       "configurations": {
         "production": {

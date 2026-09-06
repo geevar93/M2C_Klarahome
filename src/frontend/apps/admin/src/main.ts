@@ -1,5 +1,10 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { App } from './app/app';
+import { loadRuntimeConfig } from '@klarahome/util';
 
-bootstrapApplication(App, appConfig).catch((err) => console.error(err));
+import { App } from './app/app';
+import { appConfig } from './app/app.config';
+
+/** Boot. See `apps/storefront/src/main.ts` — the reasoning is the same. */
+loadRuntimeConfig()
+  .then((config) => bootstrapApplication(App, appConfig(config)))
+  .catch((error) => console.error(error));

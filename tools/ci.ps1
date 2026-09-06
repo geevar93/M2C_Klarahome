@@ -17,8 +17,9 @@
       test       the three backend suites, with coverage, and the frontend unit tests
       lint       eslint across every Nx project
       audit      npm audit, and dotnet list package --vulnerable
-      package    docker build of the api and migrator images, then a Trivy scan
+      codegen    re-export the OpenAPI document; fail if the committed API client has drifted
       frontend   the storefront and admin production builds
+      package    docker build of the api and migrator images, then a Trivy scan
 
     Backend tests are run BY EXECUTING THE TEST EXECUTABLES DIRECTLY, not through `dotnet test`.
     That is deliberate and documented in docs/dev-setup.md section 7: the Microsoft.Testing.Platform
@@ -49,7 +50,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'restore', 'build', 'format', 'test', 'lint', 'audit', 'frontend', 'package')]
+    [ValidateSet('all', 'restore', 'build', 'format', 'test', 'lint', 'audit', 'codegen', 'frontend', 'package')]
     [string[]] $Stage = @('all'),
 
     [ValidateRange(0, 100)]
@@ -525,6 +526,33 @@ function Invoke-AuditStage {
     Write-StageEnd
 }
 
+function Invoke-CodegenStage {
+    Write-Stage 'codegen' 'the committed API client still matches the OpenAPI document'
+
+    # The gate described in docs/04-api-specification.md section 7. It runs after 'build', because
+    # exporting the document needs the API assembly, and before 'frontend', because a drifted
+    # client is a compile error there and a much clearer message here.
+    #
+    # A failure means somebody changed an endpoint and did not regenerate the client. That is the
+    # point: it makes a breaking API change impossible to merge unnoticed.
+    try {
+        $null = Invoke-Step -Label 'openapi codegen' -Command 'pwsh' -WorkingDirectory $RepoRoot `
+            -Arguments @(
+            '-NoProfile',
+            '-File', (Join-Path $PSScriptRoot 'generate-api-client.ps1'),
+            '-Check',
+            '-Configuration', 'Release'
+        )
+        Write-Ok 'the generated API client matches the current contract'
+        $script:StageResults['API client'] = 'in sync with the OpenAPI document'
+    }
+    catch {
+        Write-Fail 'the committed API client has drifted. Run: pwsh tools/generate-api-client.ps1'
+    }
+
+    Write-StageEnd
+}
+
 function Invoke-FrontendStage {
     Write-Stage 'frontend' 'production builds of storefront and admin'
 
@@ -599,7 +627,7 @@ function Invoke-PackageStage {
 
 # 'package' is out of 'all' on purpose: two container image builds are minutes of work that a
 # developer checking a code change does not want, and CI runs it as its own job regardless.
-$AllStages = @('restore', 'build', 'format', 'test', 'lint', 'audit', 'frontend')
+$AllStages = @('restore', 'build', 'format', 'test', 'lint', 'audit', 'codegen', 'frontend')
 
 $requested = if ($Stage -contains 'all') { $AllStages } else {
     # Keep the canonical order however the flags were passed - later stages assume earlier ones.
@@ -622,6 +650,7 @@ foreach ($name in $requested) {
             'test' { Invoke-TestStage }
             'lint' { Invoke-LintStage }
             'audit' { Invoke-AuditStage }
+            'codegen' { Invoke-CodegenStage }
             'frontend' { Invoke-FrontendStage }
             'package' { Invoke-PackageStage }
         }

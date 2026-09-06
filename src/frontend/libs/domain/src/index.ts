@@ -1,1 +1,2 @@
-export * from './lib/domain';
+export * from './lib/india';
+export * from './lib/money';

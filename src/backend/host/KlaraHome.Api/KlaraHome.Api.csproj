@@ -10,8 +10,15 @@
     <RootNamespace>KlaraHome.Api</RootNamespace>
     <AssemblyName>KlaraHome.Api</AssemblyName>
     <UserSecretsId>klarahome-api</UserSecretsId>
-    <!-- The generated OpenAPI document is written here by the CI codegen step (Step 5). -->
-    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)</OpenApiDocumentsDirectory>
+    <!--
+      The generated OpenAPI document. Exporting it starts the host in-process to read its route
+      table, so it is OFF for an ordinary build and ON only for the codegen step, which supplies
+      the configuration a host needs: `tools/generate-api-client.ps1` passes
+      -p:OpenApiGenerateDocuments=true (docs/04-api-specification.md section 7).
+    -->
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../../../../artifacts/openapi</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocuments Condition="'$(OpenApiGenerateDocuments)' == ''">false</OpenApiGenerateDocuments>
+    <OpenApiGenerateDocumentsOnBuild>$(OpenApiGenerateDocuments)</OpenApiGenerateDocumentsOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -45,6 +52,14 @@
 
   <ItemGroup>
     <PackageReference Include="Scalar.AspNetCore" />
+    <!--
+      Writes openapi.json into OpenApiDocumentsDirectory on every build. PrivateAssets="all"
+      because it is a build-time generator: nothing it brings should reach the runtime image.
+    -->
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

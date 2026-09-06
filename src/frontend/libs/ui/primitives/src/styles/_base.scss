@@ -1,0 +1,169 @@
+// Global base styles.
+//
+// A reset, the accessibility floor, and nothing else. Everything visual is a token, so this file
+// changes at Step 30 only if the design needs different *structure* — which is the test for
+// whether Step 30 has stayed a token swap.
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  // Never a fixed pixel size: the user's browser font-size setting is a stated preference, and
+  // overriding it is the single most common accessibility failure in a commerce front end.
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  // Kept off: a font smoothing override makes text thinner than the OS intends, which costs
+  // contrast on exactly the low-end Android screens this storefront is built for.
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 var(--space-3);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-bold);
+}
+
+p {
+  margin: 0 0 var(--space-4);
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--color-primary);
+  text-underline-offset: 2px;
+}
+
+// ---- Focus -------------------------------------------------------------------------------------
+// `:focus-visible` rather than `:focus`, so a mouse user does not get a ring on every click while
+// a keyboard user still gets one on everything. The ring is never removed without a replacement.
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+// ---- Touch targets -----------------------------------------------------------------------------
+// 44 × 44 is the floor from docs/10-design-system-placeholder.md §4, applied to the controls that
+// most often fall below it. A component that needs a visually smaller control pads it out rather
+// than shrinking the hit area.
+@media (pointer: coarse) {
+  :where(button, [role='button'], a.kh-action, input[type='checkbox'], input[type='radio']) {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+}
+
+// ---- Screen-reader helpers ---------------------------------------------------------------------
+// Visible to assistive technology, invisible on screen. Used by the live regions in `LiveAnnouncer`
+// and by every icon-only control's label.
+.kh-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// The skip link — the first thing in the tab order, hidden until it is focused.
+.kh-skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--z-modal);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0 0 var(--radius-md) 0;
+  transform: translateY(-100%);
+
+  &:focus-visible {
+    transform: translateY(0);
+  }
+}
+
+// Focus landing on `<main>` after a route change must not draw a ring around the whole page.
+main:focus {
+  outline: none;
+}
+
+// ---- Placeholder media -------------------------------------------------------------------------
+// A grey box at the right aspect ratio, so layout and CLS behave exactly as they will with real
+// images (docs/10-design-system-placeholder.md §1.3). No illustrations before Step 30.
+.kh-placeholder-media {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+// ---- Skeletons ---------------------------------------------------------------------------------
+// Skeletons, not spinners, for content with a known shape (docs/05-frontend-architecture.md §3.6).
+.kh-skeleton {
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  animation: kh-skeleton-pulse 1.4s var(--ease-standard) infinite;
+}
+
+@keyframes kh-skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kh-skeleton {
+    animation: none;
+  }
+}
+
+// ---- Layout helpers ----------------------------------------------------------------------------
+.kh-container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}

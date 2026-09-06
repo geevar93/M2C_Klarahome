@@ -1,0 +1,27 @@
+// Breakpoints — mobile-first, `min-width` only.
+//
+// SCSS variables rather than custom properties, because a media query cannot read a custom
+// property. That is the one exception to the rule in `_tokens.scss`, and it is why breakpoints
+// live in their own file: nothing in here is themeable, so nothing in here is a token.
+//
+// The build order is 360 × 640 first; every larger screen is a progressive enhancement
+// (docs/05-frontend-architecture.md §3.3). There is no `max-width` mixin on purpose — writing one
+// invites desktop-first rules, and two directions of media query for the same component is how a
+// layout ends up with a range nobody styled.
+
+$breakpoints: (
+  'sm': 480px,
+  'md': 768px,
+  'lg': 1024px,
+  'xl': 1280px,
+  '2xl': 1536px,
+);
+
+@mixin from($name) {
+  @if not map-has-key($breakpoints, $name) {
+    @error 'Unknown breakpoint `#{$name}`. Known: #{map-keys($breakpoints)}.';
+  }
+  @media (min-width: map-get($breakpoints, $name)) {
+    @content;
+  }
+}

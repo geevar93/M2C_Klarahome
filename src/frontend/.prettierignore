@@ -5,3 +5,7 @@
 /.nx/workspace-data
 .nx/self-healing
 .angular
+
+# Generated from the API's OpenAPI document by tools/generate-api-client.mjs. Its formatting is the
+# generator's output, so that `--check` compares the client to the contract and not to a style rule.
+/libs/data-access/api/src/generated

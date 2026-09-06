@@ -30,7 +30,14 @@ internal sealed class SearchOptions
     public string Provider { get; set; } = string.Empty;
 
     /// <summary>The dedicated engine's base URL, when one is configured.</summary>
-    [Url]
+    /// <remarks>
+    /// Blank is the normal case — no dedicated engine — so the rule has to admit it. <c>[Url]</c>
+    /// does not: it rejects the empty string, which would fail options validation on startup for
+    /// every deployment that runs on PostgreSQL's own full text, which is all of them today.
+    /// </remarks>
+    [RegularExpression(
+        @"^$|^https?://\S+$",
+        ErrorMessage = "Search:BaseUrl must be blank, or an absolute http/https URL.")]
     public string BaseUrl { get; set; } = string.Empty;
 
     /// <summary>Its API key.</summary>

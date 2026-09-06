@@ -83,6 +83,18 @@ jobs:
       - name: Format and code style
         run: pwsh ./tools/ci.ps1 -Stage format
 
+      # The contract gate. It lives in the backend job because exporting the OpenAPI document needs
+      # the API assembly this job has just built; the generator itself has no dependencies, so Node
+      # is set up but nothing is installed. A failure here means an endpoint changed and the
+      # committed Angular client did not — see docs/04-api-specification.md section 7.
+      - name: Set up Node for the client generator
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.20.0'
+
+      - name: API client is in sync with the contract
+        run: pwsh ./tools/ci.ps1 -Stage codegen
+
       # Unit + architecture + integration, each run as its own executable rather than through
       # `dotnet test`, with a minimum test count asserted per suite. See tools/ci.ps1 and
       # docs/dev-setup.md section 7 for why the orchestrator is not trusted to report a count.

@@ -1,0 +1,7 @@
+// The entry point both apps import from their global stylesheet.
+//
+// Order matters: tokens declare the custom properties that `_base.scss` then uses, and a base
+// rule that referenced a token before it was declared would silently resolve to nothing.
+@forward 'breakpoints';
+@use 'tokens';
+@use 'base';

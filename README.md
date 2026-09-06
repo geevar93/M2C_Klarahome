@@ -141,6 +141,7 @@ Every gate CI enforces is one script, so a failure can be reproduced in seconds 
 ./tools/ci.sh format test         # just the two a code change usually trips
 ./tools/ci.sh package             # container images + Trivy scan
 ./tools/ci.ps1 -Stage format,test # Windows
+./tools/ci.ps1 -Stage codegen     # the API client still matches the contract
 ```
 
 Backend suites are run as executables rather than through `dotnet test`, and each asserts a
@@ -723,5 +724,67 @@ short-lived link rather than an attachment.
 There is **no back-fill**. Reporting begins the day it is deployed with `reporting.fact-ingest` on,
 which makes that the one feature flag in the platform that is not safe to leave off.
 
-The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
-containers arrive in Phase F/G.
+---
+
+### The frontend foundation (Step 22)
+
+Two Angular 22 apps in one Nx workspace: **storefront** (SSR, mobile-first) and **admin** (SPA,
+serving platform staff and vendors from one build). Neither has any screens yet — Steps 23 to 28
+build those. What exists is everything they will both stand on.
+
+**There are no hand-written frontend DTOs, and there cannot be.** The API's OpenAPI document is
+the contract, and a generator turns it into the client:
+
+```bash
+pwsh tools/generate-api-client.ps1           # rebuild the document, regenerate the client
+pwsh tools/generate-api-client.ps1 -Check    # what CI runs; fails if the client has drifted
+```
+
+That is `dotnet build` → `artifacts/openapi/KlaraHome.Api.json` → 21 injectable clients over
+**489 operations and 494 models** in `libs/data-access/api/src/generated/`. Every file says
+`DO NOT EDIT` and names the command that rebuilds it. Change an endpoint without regenerating and
+CI stops the merge — which is the whole point of the gate.
+
+Every request goes through five interceptors, in one order that is decided once and stated once:
+
+```
+loading → retry → error normalisation → correlation id → auth → the network
+```
+
+Loading is outermost so the progress bar spans a retry instead of blinking off between attempts.
+Retry sits above error normalisation, so a call that failed once and then succeeded never shows the
+user a toast for the attempt they never saw. The correlation id is set *below* retry, so all three
+attempts of one logical request share an id and join up in the server's log. Auth is innermost,
+because it is the only one that replays a request itself.
+
+**Retry is decided by the HTTP method, and by `Idempotency-Key`.** A GET may be repeated because
+the server promises it changes nothing. A POST may be repeated too — but only when it carries an
+idempotency key, which is the server's promise that the same key twice is the same order once.
+That is what stops a dropped connection during checkout costing a customer a second order.
+
+**The access token is held in memory and nowhere else.** What survives a reload is the HttpOnly
+refresh cookie the page cannot read, so a new tab proves itself by calling `/auth/refresh`. That
+refresh is **single-flight**: five requests finding an expired token at once produce one refresh,
+not five. Five racing rotations would invalidate four of themselves, and the server would
+correctly read the reuse as a stolen token and revoke the whole family.
+
+**One image runs everywhere.** There is no `environment.prod.ts`. The browser reads `/config.json`
+before the app bootstraps; the SSR process reads the same values from `KH_*` environment variables
+(documented in `.env.example`). Because that happens before the injector exists, the API base URL
+is a real DI token rather than a mutable global every caller has to remember to read late.
+
+Visual design is still deliberately absent. `libs/ui/primitives/src/styles/` carries the neutral
+placeholder tokens from `docs/10-design-system-placeholder.md` as CSS custom properties, plus the
+accessibility baseline — focus rings, 44 px touch targets, the skip link, screen-reader helpers —
+which is **not** styling and is in scope from day one. Step 30 is a token swap.
+
+Tests run against MSW rather than a stubbed service, so a component test exercises the real
+interceptor chain and stops at the network boundary:
+
+```bash
+cd src/frontend
+npx nx run-many -t test --all      # unit + component
+npx nx e2e storefront-e2e          # Playwright; mobile viewport is the default project
+```
+
+The storefront and admin **containers** arrive at Step 32.

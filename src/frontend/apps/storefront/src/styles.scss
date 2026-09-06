@@ -1,1 +1,6 @@
-/* You can add global styles to this file, and also import other style files */
+// Global styles.
+//
+// The placeholder tokens and the accessibility baseline, and nothing else. Every value a
+// component uses is a custom property declared there, which is what makes Step 30 a token swap
+// rather than a rewrite (docs/10-design-system-placeholder.md §1).
+@use 'ui/primitives/src/styles';

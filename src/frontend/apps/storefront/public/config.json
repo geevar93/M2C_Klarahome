@@ -1,0 +1,10 @@
+{
+  "apiBaseUrl": "https://api.klarahome.localhost",
+  "tenantCode": "klarahome",
+  "locale": "en-IN",
+  "timeZone": "Asia/Kolkata",
+  "environment": "local",
+  "features": {},
+  "analytics": { "provider": "" },
+  "imageBaseUrl": ""
+}

@@ -60,6 +60,7 @@ dev setup and preinstalled on every GitHub-hosted runner.
 | `test` | the three backend suites with coverage, then the frontend unit tests | a test fails, a suite reports too few tests, or coverage is below the minimum |
 | `lint` | `nx run-many --target=lint --all` | an ESLint error, including a module-boundary violation |
 | `audit` | `npm audit --audit-level=high`, `dotnet list package --vulnerable` | a **high or critical** advisory |
+| `codegen` | re-exports the API's OpenAPI document and compares the client it would generate against the one committed in `libs/data-access/api/src/generated`. Writes nothing | the committed client differs from what the current contract produces |
 | `frontend` | production builds of `storefront` and `admin` | a build error or a budget overrun |
 | `package` | `docker build` of the api and migrator images, then Trivy | a build failure, or a fixable high/critical CVE in an image |
 
@@ -151,7 +152,7 @@ FluentValidation alone contributes 8,757 branches, none of them ours.
 
 | Job | Runner | Contains |
 |---|---|---|
-| **Backend** | ubuntu-latest | restore, build, format, all three suites with coverage; uploads TRX + cobertura; posts a coverage table to the run summary |
+| **Backend** | ubuntu-latest | restore, build, format, **the API-client codegen gate**, all three suites with coverage; uploads TRX + cobertura; posts a coverage table to the run summary |
 | **Frontend** | ubuntu-latest | `npm ci`, prettier, ESLint, unit tests, both production builds |
 | **Security** | ubuntu-latest | npm + NuGet advisories, and a **gitleaks scan of full history** |
 | **Container images** | ubuntu-latest | builds the api and migrator images, Trivy scan → SARIF to the Security tab, then fails on high/critical |
@@ -216,6 +217,7 @@ enough) and confirm the merge button is disabled.
 | `dotnet format found unformatted C#` | formatting, or an `.editorconfig` style rule | `cd src/backend && dotnet format` |
 | Hundreds of `ENDOFLINE` errors, only on Windows | Stale CRLF in the working tree. `.gitattributes` normalises `*.cs` to LF in the repository, but a file written with CRLF and then committed keeps CRLF on disk — the commit is clean, the file is not | `git ls-files -z '*.cs' \| xargs -0 rm -f && git checkout -- '*.cs'` |
 | `prettier found unformatted files` | generated or hand-edited frontend files | `cd src/frontend && npx prettier --write .` |
+| `the committed API client has drifted` | somebody changed an endpoint, a DTO or a validation attribute and did not regenerate the client. This is the gate doing its job — the client is generated, never edited | `pwsh tools/generate-api-client.ps1`, then commit the regenerated files. Review that diff: it is the record of what the API change did to every consumer |
 | A suite `reported only N tests, below the floor` | either the suite genuinely shrank, or it did not run | Check the count. If a step legitimately removed tests, lower the floor **in the same PR, with the reason in the message** |
 | `No Docker daemon` in the test stage | Docker Desktop is not running | Start it, or `--skip-integration` and accept that coverage is not judged |
 | `Line coverage X% is below the agreed minimum` | new code without tests | Add the tests. The threshold is a specification commitment, not a preference |

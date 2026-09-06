@@ -81,6 +81,9 @@ Defined once on `:root`, overridable per tenant at runtime.
   --bottom-bar-height: 60px;
   --z-header: 100; --z-drawer: 200; --z-modal: 300; --z-toast: 400;
 
+  /* ---- Touch: the floor from section 4, as a value a component can read ---- */
+  --touch-target-min: 44px;
+
   /* ---- Motion: minimal, and always respects prefers-reduced-motion ---- */
   --duration-fast: 120ms; --duration-base: 200ms;
   --ease-standard: cubic-bezier(.2,0,0,1);

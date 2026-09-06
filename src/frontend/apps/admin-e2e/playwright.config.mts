@@ -37,6 +37,13 @@ export default defineConfig({
     cwd: workspaceRoot,
   },
   projects: [
+    // Mobile first, and first in this list on purpose: it is the default project, so a bare
+    // `nx e2e` runs the viewport most customers actually use (docs/05-frontend-architecture.md
+    // section 7). Desktop is the progressive enhancement, and is checked second.
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
