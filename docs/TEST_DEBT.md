@@ -319,6 +319,43 @@ Outcome / Notes, and this row links to it.
 | 20 | `GET /store/content/*` is served from the output cache for identical requests, and the banner read does not leak one visitor's audience to another | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
 | 20 | The preview is refused to a caller without `content.content.manage`, and there is no anonymous route by which an unpublished page can be read | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
 | 20 | Lighthouse SEO ≥ 100 on the home page, a CMS page and a collection page, once Step 23 renders them | a11y/seo | Lighthouse CI, after Step 23 | 🟡 | ⬜ OPEN |
+| 21 | **A review can only be posted against a delivered purchase** — the headline full acceptance criterion. Refused for a line that does not exist, one belonging to another customer, one that was cancelled, one still in transit, and one delivered outside the review window; accepted for a delivered one, exactly once | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | **Reports reconcile against transactional data for a seeded dataset** — the second headline criterion. Seed orders, payments, returns and a settlement cycle, run all thirteen reports, and assert every figure against the same sums computed from `orders`, `payments`, `returns` and `settlements` directly | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | The unique index on `(tenant_id, order_line_id)` refuses a second review under **concurrent** submission, not only a sequential one — the race the index exists for | integration | `IntegrationTests`, two parallel writers | 🔴 | ⬜ OPEN |
+| 21 | An approved review moves the product's average and its histogram; refusing it afterwards moves both back; a reviewer editing their score moves them again — and each publishes exactly one `ProductRatingChanged` | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | `ProductRatingChanged` reaches **Catalog** and **Search**, and `VendorRatingChanged` reaches **Vendors** — so `ProductProjection.RatingAverage`, the product page and the search index all show the same number | integration | `IntegrationTests`, through the outbox | 🔴 | ⬜ OPEN |
+| 21 | Redelivering `ProductRatingChanged` and `VendorRatingChanged` changes nothing — the idempotency the events' carrying an aggregate rather than a delta is supposed to give for free | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | A second helpfulness vote from the same customer **changes** their vote rather than adding one, and withdrawing it puts both counts back | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A shopper cannot vote on their own review, and the refusal is `REVIEW_CANNOT_VOTE_OWN` | integration | `IntegrationTests` | 🟢 | ⬜ OPEN |
+| 21 | Editing an approved review returns it to `Pending` and removes it from the average — the rule that stops moderation being walked around by getting acceptable text approved and then rewriting it | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A seller may reply to a review of **their own** sale and is refused one of another seller's; platform staff may reply to any | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A seller listing the moderation queue sees only their own sales, whatever `vendorId` they put in the query string | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A seller cannot moderate anything — the permission split that stops a seller curating their own rating | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | `AutoApproveReviews` on publishes immediately and off holds in the queue; the same for questions, answers and a seller's own answers | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | An answer's `author_type` comes from the caller's claims: a customer cannot write an answer labelled as the seller's, and the `ck_answers_vendor` constraint holds for a row written any other way | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | Upholding an abuse report refuses the content and moves the rating; dismissing one leaves the content alone — and neither hides anything before a moderator decides | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | The filtered unique index refuses a second **open** report from the same signed-in reporter against the same thing, and permits one after the first is resolved | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | The anonymous report endpoint's rate limiter actually holds under a scripted flood — the control standing in for the uniqueness rule an anonymous reporter cannot have | security | `IntegrationTests` or a load harness | 🔴 | ⬜ OPEN |
+| 21 | A customer has exactly one default wishlist even when two tabs save at the same moment — the filtered unique index, under concurrency | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | A wishlist card is priced from **today's** buy box, and an item whose offers have all been withdrawn renders as not purchasable rather than disappearing | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | Turning sharing off revokes the previously issued link, and turning it on again mints a different one | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A shared wishlist reveals no share token and no notes to the holder of the link | security | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | `StockLevelChanged` crossing from unavailable to available fires the waiting alerts once and closes them; a movement that does not cross the boundary fires nothing | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | Redelivering `StockLevelChanged` or `PriceChanged` sends **no second message** — the inbox guard, which unlike a projection cannot be made right afterwards | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A price-drop alert fires only for the subscriptions the new price actually satisfies, and a recipient who has opted out of Marketing gets a suppressed row | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | The expiry sweep closes due subscriptions and leaves the rest, and an expired row can no longer be used to send anything | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | Every fact handler is idempotent under redelivery: a redelivered `SubOrderConfirmed` writes no second line, a redelivered `PaymentCaptured` does not double a day's takings, and a redelivered `SubOrderCancelled` does not subtract twice | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A sale is recorded on **confirmation** and not on placement — so a placed order that is never paid for appears in the funnel and in no revenue figure | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | The category and brand frozen on a fact row do **not** change when a merchandiser later moves the product, so last March's report still says what it said | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | A seller running a report sees only their own figures whatever `vendorId` they pass, and a report declared not vendor-scoped is refused to them with `REPORT_NOT_VENDOR_SCOPED` | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | The commission apportioned across a cycle's lines sums to the cycle's own `TotalCommission`, and the settlement summary's cycle-level figures are exact | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | The nightly inventory snapshot writes one row per stock line per day, and re-running it on the same day replaces rather than doubles | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | A due schedule produces exactly one run, the period it covers is the whole of the previous day/week/month, and `next_run_at` always moves strictly forward — including for a run that failed | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A produced export is stored in the **private** bucket and is not reachable without a signed link, and the link stops working when it expires | security | `IntegrationTests` | 🔴 | ⬜ OPEN |
+| 21 | A scheduled report's message reaches its recipients through Notifications, and a schedule with no recipients still produces and files the report | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | A report at the row ceiling reports `truncated`, and a period longer than `MaxPeriodDays` is refused rather than silently clamped | integration | `IntegrationTests` | 🟢 | ⬜ OPEN |
+| 21 | Every declared report runs against an empty schema without failing — the state of a store on its first day | integration | `IntegrationTests` | 🟡 | ⬜ OPEN |
+| 21 | Both migrations apply to an empty database, re-run clean, and every `CHECK` refuses the row it names | integration | `IntegrationTests` | 🔴 | ⬜ OPEN |
 
 ---
 

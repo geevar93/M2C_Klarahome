@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reviews (Step 21): what other people thought, what people are still asking, and what somebody
+    wants but has not bought yet.
+
+    Four surfaces that look unrelated and are not. Every one of them is a shopper telling the store
+    something about a product it could not have worked out on its own - a rating, a question, an
+    intention to buy, a price they would buy at - and all four are anchored to the catalogue without
+    being able to read it.
+
+    The rule that shapes the whole module is that a review requires a delivered purchase. Not an
+    order, not a payment: delivery, resolved through `IOrderPurchases` by the module that owns the
+    state machine deciding what delivered means. That single constraint is what makes the star rating
+    on a product page evidence rather than decoration, and it is why the unique index on
+    `order_line_id` matters more than any check in a handler.
+
+    It owns its reviews, questions, wishlists and subscriptions outright. What it does not own is the
+    aggregate: the average that appears beside a product in search results and on the product page is
+    computed here and *published*, because Catalog holds the column a projection reads and Vendors
+    holds the seller's. Two events carry it, and applying either is idempotent - a consumer stores
+    two numbers it was handed rather than adding a delta it might apply twice.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Reviews</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

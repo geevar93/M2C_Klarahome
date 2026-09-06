@@ -5,6 +5,7 @@ using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Inventory.Endpoints;
 using KlaraHome.Modules.Inventory.Infrastructure;
+using KlaraHome.Modules.Inventory.Infrastructure.Ageing;
 using KlaraHome.Modules.Inventory.Infrastructure.Events;
 using KlaraHome.Modules.Inventory.Infrastructure.Persistence;
 using KlaraHome.Modules.Inventory.Infrastructure.Stock;
@@ -73,6 +74,12 @@ public sealed class InventoryModule : IModule
         // out is what a sale does and already has its own path, and a returns queue must not be able
         // to reach it.
         services.AddScoped<IStockRestock, StockRestockService>();
+
+        // A read-only seam over the ledger, added at Step 21. Reporting needs to know how long the
+        // stock currently on a shelf has been there, and that is the one inventory fact no
+        // integration event carries: StockLevelChanged says what the balance is, never when the units
+        // making it up arrived.
+        services.AddScoped<IInventoryAgeing, InventoryAgeingService>();
 
         // Inventory reacts to an offer's life cycle: a listing that goes live gets a stock row, and
         // one whose SKU changes gets its label refreshed.

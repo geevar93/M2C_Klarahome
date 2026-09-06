@@ -65,9 +65,9 @@ graph LR
 | **Settlements** | Commission, fees, TCS/TDS, vendor ledger, payout batches | Payment capture |
 | **Search** | Search projection, facets, synonyms, stop words, query log | Source-of-truth catalog data. The buy box is resolved by Catalog and read over `IProductProjectionSource` (Step 19), so a result and the page it links to cannot name two sellers |
 | **Content** | Pages, blocks, banners, menus, collections, redirects, SEO metadata, the sitemap and the `schema.org` graph | Products. A collection holds product ids and resolves them through `IProductProjectionSource` with the buy box Catalog picked (Step 20); the category tree comes over `ICatalogTaxonomy` |
-| **Reviews** | Reviews, ratings, Q&A, wishlist, back-in-stock subscriptions | Orders |
+| **Reviews** | Reviews, ratings, Q&A, wishlist, back-in-stock and price-drop subscriptions | Orders. Whether a purchase was *delivered* is answered by `IOrderPurchases` (Step 21), so there is one definition of the rule and it lives with the state machine that decides it |
 | **Notifications** | Templates, channels, delivery log, preferences, the DLT template registry | Business events; the *decision* to notify (a module publishes a fact, this one renders it) |
-| **Reporting** | Read models, aggregates, exports | Writes to any other context |
+| **Reporting** | Its own fact tables, the declared report catalogue, exports and their schedules | Writes to any other context, and any business rule at all. It holds **copies**: one fact row per transactional row, written by an event handler and denormalised at write time, because no module may read another's tables (ADR-021) |
 
 ---
 
@@ -279,16 +279,26 @@ Naming: `<Context>.<Aggregate><PastTenseVerb>` · versioned payloads · always c
 | `Catalog.ListingPublished` / `ListingUpdated` / `ListingDeactivated` | Catalog | Search, Inventory, Content |
 | `Inventory.StockLevelChanged` | Inventory | Search (availability facet), Reviews (back-in-stock), Notifications |
 | `Pricing.PriceChanged` | Pricing | Search, Reviews (price-drop alerts) |
-| `Carts.CartAbandoned` | Cart | Notifications, Reporting |
+| `Carts.CartAbandoned` / `CartConverted` | Cart | Notifications, Reporting (the funnel's two basket outcomes) |
 | `Orders.OrderPlaced` | Orders | Payments, Inventory, Notifications, Reporting |
-| `Orders.SubOrderConfirmed` | Orders | Inventory (commit), Shipping (create shipment), Search (popularity), Notifications |
+| `Orders.OrderCompleted` | Orders | Reporting |
+| `Orders.SubOrderConfirmed` | Orders | Inventory (commit), Shipping (create shipment), Search (popularity), Reporting (**where a sale is recorded**), Notifications |
 | `Orders.SubOrderStatusChanged` | Orders | Settlements (earns a prepaid sale on `Delivered`), Notifications, Reporting |
 | `Orders.SubOrderCancelled` | Orders | Inventory (release), Payments (refund), Settlements (reverse), Notifications |
 | `Payments.PaymentCaptured` / `PaymentFailed` / `RefundProcessed` / `CodCashRecorded` | Payments | Orders, Settlements (cash remittance only), Notifications |
 | `Shipping.ShipmentDispatched` / `TrackingUpdated` / `ShipmentDelivered` / `NdrRaised` | Shipping | Orders, Notifications, Reporting |
 | `Returns.ReturnRequested` / `ReturnApproved` / `ReturnRejected` / `ReturnReceived` / `ReturnQcCompleted` / `ReturnClosed` / `CreditNoteIssued` | Returns | Inventory (QC dispositions), Payments, Settlements (credit notes), Notifications, Reporting |
 | `Settlements.SettlementCycleClosed` / `PayoutCompleted` / `PayoutFailed` | Settlements | Notifications, Reporting |
-| `Reviews.ReviewPublished` | Reviews | Catalog (rating projection), Search |
+| `Reviews.ReviewPublished` | Reviews | Notifications (a seller has been reviewed) |
+| `Reviews.ProductRatingChanged` | Reviews | Catalog (rating projection), Search (index row) |
+| `Reviews.VendorRatingChanged` | Reviews | Vendors (the seller's own score, which the buy box may rank on) |
+
+> **Why a rating is two events and not one.** A review being *published* and a product's average
+> *moving* are different facts with different causes: the average also moves when an approved review
+> is refused, when a reviewer edits their score, and when an upheld complaint takes one down. A
+> consumer subscribed to the publication would show a stale average for the other three. Both rating
+> events carry the **recomputed aggregate** rather than a delta, so applying either is idempotent by
+> construction and neither consumer needs an inbox row.
 
 Delivery semantics: **at-least-once**. Every handler must be idempotent, keyed on
 `(eventId, handlerName)` in a processed-messages table.

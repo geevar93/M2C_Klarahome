@@ -645,5 +645,83 @@ Meilisearch, OpenSearch — is a class, a configuration key and a feature flag a
 unlike the gateway, the courier and the payout rail there is **no degraded mode here at all**:
 search needs no credentials, so it works in every deployment on the day it is installed.
 
+### Reviews, Q&A and saved intent (Step 21)
+
+**A review exists if and only if the customer received the thing.** Not ordered it and not paid for
+it — received it, resolved through `IOrderPurchases` by the module that owns the state machine
+deciding what *delivered* means. Every identifier on the review comes off what that contract
+returned rather than off the request, so a caller cannot write a five-star review of anything by
+quoting one line they genuinely bought. One review per order line is a **unique index**, not a check
+in a handler: two submissions racing each other is the ordinary case on a slow connection.
+
+```bash
+GET  /api/v1/store/products/{id}/reviews             ?rating= &withImages= &sort=helpful
+GET  /api/v1/store/products/{id}/rating              # the average and the 1..5 histogram
+GET  /api/v1/store/products/{id}/reviews/eligibility # which purchases may still be reviewed
+POST /api/v1/store/products/{id}/reviews             { orderLineId, rating, title, body, images[] }
+POST /api/v1/store/reviews/{id}/helpful              { isHelpful }   # a row per voter, not a counter
+POST /api/v1/store/wishlist/items                    { variantId }
+POST /api/v1/store/stock-subscriptions               { variantId, kind, targetPrice? }
+GET  /api/v1/admin/reviews                           ?status=Pending  # oldest first; the queue
+POST /api/v1/admin/reviews/{id}/moderate             { approve, note }
+```
+
+**Moderation is on by default and it is a configuration value rather than a store setting.**
+Publishing user content unreviewed puts an intermediary in a different position under the IT Rules,
+which is not a switch a merchandiser should be able to flip from an admin screen on a Friday
+afternoon. A seller may reply to a review of their own sale and can never remove one — a seller who
+could refuse reviews of their own goods would be curating their own rating.
+
+A **rating is recomputed in full** on every change and published as an event carrying the aggregate
+rather than a delta, so a rejection, an edit, an upheld complaint and a redelivered message all
+produce the same correct number in Catalog, Vendors and the search index. That is what finally fills
+the `RatingAverage` that has been null since Step 19.
+
+A wishlist **stores no price**: a saved item is priced from today's buy box at read time, because a
+list quoting last month's figure makes the "add to basket" button a surprise. A back-in-stock alert
+fires **once** and is Marketing rather than transactional — nobody ordered anything, and treating
+interest in one product as consent to be messaged is what a preference centre exists to prevent.
+
+### The numbers the business runs on (Step 21)
+
+Reporting owns no business rule and may change nothing. It also may not read another module's
+tables, so it **keeps its own facts**: seven tables written by fourteen integration-event
+subscriptions, one row per transactional row, denormalised at the moment the event lands with the
+category, the seller and the payment method already on it. A report is then a filtered aggregation
+over a single table with **no join anywhere in the module** — which is also why the numbers
+reconcile, because every fact row corresponds to something that really happened.
+
+```bash
+GET /api/v1/admin/reports                       # the declared catalogue: columns and groupings
+GET /api/v1/admin/reports/sales-by-day          ?from= &to=
+GET /api/v1/admin/reports/gmv-vs-net-revenue    ?from= &to=      # GMV, net, commission, take rate
+GET /api/v1/admin/reports/stock-ageing          ?groupBy=bucket  # 0-29, 30-59, 60-89, 90-179, 180+
+GET /api/v1/admin/reports/cod-vs-prepaid        ?from= &to=      # by value, not by count
+GET /api/v1/admin/reports/sales-by-day          ?format=csv      # produces a run; returns the run
+GET /api/v1/admin/report-runs/{id}/download     # a signed link, fifteen minutes
+POST /api/v1/admin/report-schedules             { reportKey, frequency, hourUtc, recipients[] }
+```
+
+There are **no materialised views and no rollups** (ADR-021). `03-database-design.md` §4.18 asked
+for seven `mv_*` views, and a materialised view named `reporting.mv_daily_sales` has to select from
+`orders`, `payments` and `catalog` — a cross-schema read with a different word in front of it, and
+one the architecture tests cannot see because it is declared in DDL. Thirteen reports, served as
+data the admin app reads back, so the report picker, the column headings and the CSV all come off
+one declaration.
+
+The one number no event carries is **how long the stock on a shelf has been there** — a stock level
+says what the balance *is*, never when the units making it up arrived. That is a nightly snapshot
+through `IInventoryAgeing`, a read-only seam over Inventory's ledger, and it is a series rather than
+a state on purpose: "is that getting better or worse" is the question a buying team actually asks.
+
+A scheduled export is CSV with a **byte-order mark** and its formula characters defused — a cell
+beginning `=` is executed by a spreadsheet when the file is opened, and the values include product
+names a seller supplied. It goes into the private bucket rather than the media library, which
+identifies what it accepts by sniffing magic numbers that CSV does not have, and it is emailed as a
+short-lived link rather than an attachment.
+
+There is **no back-fill**. Reporting begins the day it is deployed with `reporting.fact-ingest` on,
+which makes that the one feature flag in the platform that is not safe to leave off.
+
 The Angular workspace is in place (`src/frontend`, see its README). The storefront and admin
 containers arrive in Phase F/G.

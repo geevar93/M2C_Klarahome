@@ -15,6 +15,7 @@ using KlaraHome.Modules.Orders.Infrastructure.Payments;
 using KlaraHome.Modules.Orders.Infrastructure.Persistence;
 using KlaraHome.Modules.Orders.Infrastructure.Placement;
 using KlaraHome.Modules.Orders.Infrastructure.Returns;
+using KlaraHome.Modules.Orders.Infrastructure.Reviews;
 using KlaraHome.Modules.Orders.Infrastructure.Settlements;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -117,6 +118,12 @@ public sealed class OrdersModule : IModule
         // through which a settlement run could change the sale it is settling is the first thing an
         // auditor would object to.
         services.AddScoped<IOrderSettlement, OrderSettlementService>();
+
+        // Added at Step 21, and narrower still: it answers whether a given person received a given
+        // line, and nothing else. It exists because "a review can only be posted against a delivered
+        // purchase" has to be decided by the module that owns the state machine deciding what
+        // delivered means, rather than by a second opinion in the module that stores the stars.
+        services.AddScoped<IOrderPurchases, OrderPurchasesService>();
 
         // Off in the API and on in the worker, exactly as the catalogue job runner, the notification
         // dispatcher, the reservation sweeper and the abandoned-cart sweeper are configured.

@@ -30,6 +30,9 @@ context_for() {
         Returns) echo "ReturnsDbContext" ;;
         Settlements) echo "SettlementsDbContext" ;;
         Search) echo "SearchDbContext" ;;
+        Content) echo "ContentDbContext" ;;
+        Reviews) echo "ReviewsDbContext" ;;
+        Reporting) echo "ReportingDbContext" ;;
         *) return 1 ;;
     esac
 }

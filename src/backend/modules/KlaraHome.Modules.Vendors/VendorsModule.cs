@@ -94,6 +94,16 @@ public sealed class VendorsModule : IModule
         // Step 18 replaces this registration and nothing else.
         services.AddScoped<IVendorPayoutAccounts, UnprovisionedPayoutAccounts>();
 
+        // A seller's rating, added at Step 21. It is the average over reviews of their own sales
+        // rather than over the products they list, computed by Reviews and stored here — and it is a
+        // criterion the buy-box rule may rank on, so a seller who ships well can win an offer they
+        // would lose on price alone.
+        services.AddScoped<Infrastructure.Events.VendorRatingHandlers>();
+        services.AddScoped<
+            KlaraHome.Infrastructure.Persistence.Outbox.IIntegrationEventHandler<
+                Contracts.Reviews.VendorRatingChanged>>(
+            provider => provider.GetRequiredService<Infrastructure.Events.VendorRatingHandlers>());
+
         services.AddDataSeeder<CommissionPlanSeeder>();
     }
 

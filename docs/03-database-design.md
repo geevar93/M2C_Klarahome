@@ -809,11 +809,64 @@ rows a rule wrote and leave the rows a person did.
 
 ### 4.15 `reviews`
 
-**`reviews`** — `product_id`, `variant_id`, `customer_id`, `order_line_id` (proves purchase),
-`rating`, `title`, `body`, `media jsonb`, `status` (`pending|approved|rejected`),
-`moderated_by`, `vendor_reply`, `helpful_count`, unique `(order_line_id)`.
-**`questions`** / **`answers`**, **`wishlists`** / **`wishlist_items`**,
-**`stock_subscriptions`** (back-in-stock, price-drop).
+**`reviews`** — `product_id`, `variant_id`, `vendor_id`, `customer_id`, `order_line_id`,
+`rating` (`CHECK 1..5`), `title`, `body`, `author_name`, `images jsonb`, `status`
+(`Pending|Approved|Rejected`), `moderated_by`, `moderated_at`, `moderation_note`, `published_at`,
+`vendor_reply`, `vendor_replied_at`, `vendor_replied_by`, `helpful_count`, `not_helpful_count`,
+`report_count`, `is_verified_purchase`.
+Unique `(tenant_id, order_line_id)` — **this index is the acceptance criterion**. A review exists
+if and only if the customer received the line, resolved through `IOrderPurchases` before the row is
+written, and the same line can produce exactly one. It is an index rather than a handler check
+because two submissions racing each other is the ordinary case on a slow connection.
+
+> `vendor_id` is on the review because a marketplace review is of a **sale**, not only of a thing:
+> the same product from two sellers can arrive well packed or badly. It is frozen from the order
+> line, never re-resolved — which seller wins the buy box today has nothing to do with who this
+> shopper bought from.
+
+**`review_votes`** — `review_id`, `customer_id`, `is_helpful`. Unique `(review_id, customer_id)`.
+A row per voter rather than a counter, which is the whole anti-stuffing mechanism: a second click
+changes the row it finds and cannot add a second. The counts on `reviews` are recomputed from these.
+
+**`product_ratings`** — `product_id`, `average numeric(2,1)`, `count`, `one_star`…`five_star`,
+`recomputed_at`. Unique `(tenant_id, product_id)`. Stored rather than aggregated on read: a product
+page needs an average and a histogram on every render and the reviews behind it grow without bound.
+`CHECK` pairs the average with the count (`average IS NULL AND count = 0`, or both present) and
+asserts the histogram sums to the count.
+**`vendor_ratings`** — the same over one seller's sales. Both are recomputed in full on every change
+rather than adjusted, so a rejection, an edit and a redelivery all produce the same correct answer.
+
+**`questions`** — `product_id`, `customer_id`, `author_name`, `body`, `status`, `moderated_by`,
+`published_at`, `answer_count`, `report_count`. No purchase is required: the point of a question is
+that somebody has *not* bought the thing yet.
+**`answers`** — `question_id`, `user_id`, `vendor_id`, `author_type` (`Customer|Vendor|Store`),
+`author_name`, `body`, `status`, `report_count`. `CHECK` that a `Vendor` answer names a vendor and
+no other kind does — "answered by the seller" is the most trusted line on a product page.
+
+**`abuse_reports`** — `target_type` (`Review|Question|Answer`), `target_id`, `reason`
+(`Spam|Offensive|Irrelevant|Misleading|PersonalData|Illegal|Other`), `note`, `reporter_id`
+(nullable — a shopper who is not signed in may still report), `status`
+(`Open|Upheld|Dismissed`), `resolved_by`, `resolved_at`, `resolution`. Unique
+`(tenant_id, target_type, target_id, reporter_id)` filtered on `status = 'Open' AND reporter_id IS
+NOT NULL`. A report does **not** hide anything: upholding it is what refuses the content, which is
+what stops a competitor removing a five-star review by reporting it. `Illegal` is its own reason
+because acting on unlawful content runs to a statutory timeline (`07-security-compliance.md` §5).
+
+**`wishlists`** — `customer_id`, `name`, `is_default`, `share_token`, `item_count`. Unique
+`(tenant_id, customer_id)` filtered on `is_default`, so a customer has exactly one default list.
+Unique on `share_token` where it is not null; the token is 32 random bytes rather than the list's
+id, so possessing a wishlist id grants nothing and revoking a share is one column being nulled.
+**`wishlist_items`** — `wishlist_id`, `variant_id`, `product_id`, `note`, `priority`. Unique
+`(wishlist_id, variant_id)`. **Stores no price**: a saved item is priced from the buy box at read
+time, because a wishlist is a live shopping surface rather than a snapshot.
+
+**`stock_subscriptions`** — `kind` (`BackInStock|PriceDrop`), `variant_id`, `product_id`,
+`listing_id`, `customer_id`, `email`, `status` (`Active|Notified|Cancelled|Expired`),
+`target_price`, `price_at_subscription`, `notified_at`, `notified_price`, `expires_at`.
+`CHECK` that there is somewhere to send the alert (`customer_id IS NOT NULL OR email IS NOT NULL`)
+and that only a price-drop row names a price. `Notified` is terminal: an alert fires once.
+Partial index on `(tenant_id, variant_id, kind) WHERE status = 'Active'`, which is what makes the
+back-in-stock handler on the platform's highest-volume event an index seek.
 
 ### 4.16 `notifications`
 
@@ -850,10 +903,77 @@ Unique `(tenant_id, visibility, storage_key)`; index `(tenant_id, created_at des
 
 ### 4.18 `reporting`
 
-Materialised views refreshed on schedule, plus rollup tables for anything needing history:
-`mv_daily_sales`, `mv_vendor_performance`, `mv_category_sales`, `mv_inventory_ageing`,
-`mv_return_analysis`, `mv_conversion_funnel`, `mv_settlement_summary`.
-Reporting is **read-only** and may query only its own schema.
+Reporting is **read-only about the business** and queries only its own schema. It holds **fact
+tables written by integration-event handlers** — one row per transactional row, denormalised at
+write time — and **no materialised views and no rollups** (ADR-021).
+
+> **Why not materialised views.** §4.18 originally named seven `mv_*` views. A materialised view
+> named `reporting.mv_daily_sales` that computes anything useful has to select from `orders`,
+> `payments` and `catalog`, which §1 and `01-architecture.md` §2.1 forbid outright — and because it
+> is declared in DDL rather than in C#, the architecture tests would not catch it. Rule 5 of §2.1
+> already says what to do instead: project. ADR-021 carries the reasoning and the rejected
+> alternatives.
+
+**`fact_orders`** — one row per order. `order_id` (unique per tenant), `order_number`,
+`customer_id`, `payment_method`, `is_cod`, `grand_total`, `amount_payable`, `currency_code`,
+`vendor_count`, `status`, `placed_at`, `placed_on date`, `completed_at`. The only fact table that is
+not append-only, because an order is a thing with a life and every outcome measure needs to follow
+it.
+
+**`fact_order_lines`** — one row per confirmed order line, and the workhorse: sales by day, by
+category and by seller, the top and slow SKUs and GMV are all aggregations over it. Carries
+`order_line_id` (unique per tenant), `order_id`, `sub_order_id`, `vendor_id`, `customer_id`,
+`listing_id`, `variant_id`, `product_id`, **`category_id`, `category_name`, `brand_id`,
+`brand_name`, `sku`, `product_name`** — all frozen from the catalogue when the sale is recorded —
+plus `quantity`, `line_total`, `payment_method`, `is_cod`, `cancelled_quantity`/`_amount`,
+`returned_quantity`/`_amount`, `commission_amount`, `confirmed_at`, `confirmed_on date`,
+`delivered_at`.
+
+> Recorded on **confirmation**, not placement: a placed order that is never paid for is not a sale,
+> and counting it would overstate every revenue figure by the abandonment rate. Cancellations and
+> returns are **subtracted** rather than deleting the row, because "what fraction of what we sold
+> comes back" is a number a fashion business is run on.
+
+**`fact_payments`** — one row per movement of money. `source_event_id` (unique — the idempotency
+key), `kind` (`Captured|Refunded|CodCollected|Failed`), `order_id`, `payment_id`, `method`,
+`amount` (always positive; the kind carries the direction), `occurred_on date`. Append-only.
+
+**`fact_return_lines`** — `return_line_id` (unique), `return_id`, `order_line_id`, `order_id`,
+`sub_order_id`, `vendor_id`, `variant_id`, `product_id`, `category_id`, `category_name`, `sku`,
+`reason_code`, `quantity`, `amount`, `status`, `disposition`, `requested_on date`, `closed_at`.
+The reason is on the row because a return rate driven by `SizeIssue` is a sizing chart to fix and
+the same rate driven by `DamagedInTransit` is a packing problem.
+
+**`fact_settlements`** — `period_id` (unique), `vendor_id`, `period_start`/`_end`, `closed_on date`,
+`gross_sales`, `commission`, `fees`, `tcs`, `tds`, `refunds`, `net_payable`, `order_count`. Every
+deduction is its own column, because a seller checks this against their own books.
+
+**`fact_funnel_events`** — `source_event_id` + `step` (unique together, so one event can legitimately
+be two steps), `step` (`CartAbandoned|CartConverted|OrderPlaced|OrderPaid|OrderConfirmed`),
+`cart_id`, `order_id`, `customer_id`, `value`, `item_count`, `occurred_on date`. The funnel starts
+at the basket: "viewed a product" needs a client-side analytics pipeline this system does not have.
+
+**`fact_inventory_ageing`** — the only fact not written by an event, and the module's only scheduled
+write. `snapshot_on date`, `listing_id`, `warehouse_id`, `warehouse_name`, `vendor_id`, `sku`,
+`quantity_on_hand`, `quantity_reserved`, `last_inbound_at`, `last_outbound_at`, `age_days`,
+`age_bucket`. Unique `(tenant_id, snapshot_on, listing_id, warehouse_id)`. Ageing is not observable
+from messages — `StockLevelChanged` says what the balance *is* — so it is snapshotted daily through
+`IInventoryAgeing`, a read-only seam Inventory implements over its own ledger.
+
+**`report_schedules`** — `report_key`, `name`, `frequency` (`Daily|Weekly|Monthly`), `hour_utc`,
+`day_of_week`, `day_of_month`, `recipients text[]`, `format`, `is_active`, `last_run_at`,
+`next_run_at`. `next_run_at` is stored rather than computed so the worker's sweep is an index seek
+on a filtered index that is almost always empty. A monthly schedule on the 31st is **clamped** to the
+length of the month rather than skipping February.
+**`report_runs`** — `schedule_id` (null for an export somebody asked for by hand), `report_key`,
+`period_start`/`_end`, `status` (`Running|Completed|Failed`), `format`, `row_count`, `storage_key`,
+`byte_size`, `error`, `requested_by`, `started_at`, `completed_at`.
+
+> `storage_key` is an object key in the **private bucket** under `reporting/exports/`, not a
+> `media.files` id. The media library identifies uploads by sniffing their magic number and CSV has
+> none; teaching it to accept a format it cannot recognise would weaken the control that stops the
+> store serving executable content from its own domain. A report is served by a signed URL minted
+> per request instead (ADR-021).
 
 ---
 

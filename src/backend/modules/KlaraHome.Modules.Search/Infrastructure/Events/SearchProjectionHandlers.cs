@@ -2,6 +2,7 @@ using KlaraHome.Contracts.Catalog;
 using KlaraHome.Contracts.Inventory;
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Reviews;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Search.Domain;
 using KlaraHome.Modules.Search.Infrastructure.Persistence;
@@ -13,18 +14,18 @@ using Microsoft.Extensions.Logging;
 namespace KlaraHome.Modules.Search.Infrastructure.Events;
 
 /// <summary>
-/// Keeps the index in step with the six facts that can change what a shopper should see
+/// Keeps the index in step with the seven facts that can change what a shopper should see
 /// (docs/02-domain-model.md §6).
 /// </summary>
 /// <remarks>
 /// <para>
 /// This is what makes the projection a projection rather than a stale copy. An offer going live, its
-/// terms changing, its withdrawal, its price moving, its stock moving and its being bought are
-/// between them everything that alters a search result, and each of them arrives here within seconds
-/// of happening.
+/// terms changing, its withdrawal, its price moving, its stock moving, its being bought and — since
+/// Step 21 — its being reviewed are between them everything that alters a search result, and each of
+/// them arrives here within seconds of happening.
 /// </para>
 /// <para>
-/// Three of the six take the expensive path and re-resolve the variant from the catalogue, because
+/// Four of the seven take the expensive path and re-resolve the variant from the catalogue, because
 /// they can change <em>which offer wins the buy box</em> — a price is one of the criteria the rule
 /// ranks on, and a withdrawal removes a candidate. Stock deliberately does not: the buy-box rule
 /// treats availability as unknown rather than as a criterion, so a stock movement changes one row's
@@ -32,8 +33,8 @@ namespace KlaraHome.Modules.Search.Infrastructure.Events;
 /// event in the platform costing one <c>UPDATE</c> and costing a five-table read.
 /// </para>
 /// <para>
-/// Delivery is at-least-once, so every method here is idempotent. Five of them are naturally so —
-/// rebuilding a row from its sources twice produces the same row. The sixth is not: units sold is a
+/// Delivery is at-least-once, so every method here is idempotent. Six of them are naturally so —
+/// rebuilding a row from its sources twice produces the same row. The seventh is not: units sold is a
 /// counter, and adding to it twice would permanently overstate how popular a product is. That one
 /// writes an inbox row in the same transaction, which is what the inbox table exists for
 /// (docs/03-database-design.md §4.1).
@@ -55,7 +56,8 @@ internal sealed partial class SearchProjectionHandlers(
         IIntegrationEventHandler<ListingDeactivated>,
         IIntegrationEventHandler<PriceChanged>,
         IIntegrationEventHandler<StockLevelChanged>,
-        IIntegrationEventHandler<SubOrderConfirmed>
+        IIntegrationEventHandler<SubOrderConfirmed>,
+        IIntegrationEventHandler<ProductRatingChanged>
 {
     /// <summary>
     /// The name this handler records itself under in the inbox.
@@ -226,6 +228,43 @@ internal sealed partial class SearchProjectionHandlers(
         });
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Added at Step 21, and the seventh fact. A rating is a column in the index and a criterion the
+    /// storefront sorts on, so an average that moved and an index that did not would put a
+    /// four-and-a-half-star product below a three-star one for as long as it took somebody to notice.
+    /// </para>
+    /// <para>
+    /// The event names a product and the index is keyed on the variant, so the catalogue translates —
+    /// the same asymmetry the price handler deals with, in the other direction. Every variant of the
+    /// product is refreshed, because a rating is a fact about the product and every one of its
+    /// variants renders it.
+    /// </para>
+    /// <para>
+    /// Idempotent without an inbox row, like five of the other six: the event carries the recomputed
+    /// aggregate rather than a delta, and rebuilding a row from its sources twice produces the same
+    /// row.
+    /// </para>
+    /// </remarks>
+    public async Task HandleAsync(ProductRatingChanged integrationEvent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(integrationEvent);
+
+        var projections = await catalogue
+            .FindByProductsAsync([integrationEvent.ProductId], cancellationToken)
+            .ConfigureAwait(false);
+
+        var variantIds = projections.Select(projection => projection.VariantId).Distinct().ToArray();
+
+        if (variantIds.Length == 0)
+        {
+            return;
+        }
+
+        await writer.RefreshVariantsAsync(variantIds, cancellationToken).ConfigureAwait(false);
     }
 
     [LoggerMessage(

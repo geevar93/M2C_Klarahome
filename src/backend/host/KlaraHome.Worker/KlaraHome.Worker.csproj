@@ -19,6 +19,8 @@
     <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
     <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
     <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\modules\KlaraHome.Modules.Reviews\KlaraHome.Modules.Reviews.csproj" />
+    <ProjectReference Include="..\..\modules\KlaraHome.Modules.Reporting\KlaraHome.Modules.Reporting.csproj" />
   </ItemGroup>
 
   <ItemGroup Label="Modules">

@@ -388,6 +388,52 @@ internal static class PermissionCatalog
     /// </remarks>
     public const string ContentSeoRead = "content.seo.read";
 
+    /// <summary>
+    /// Read reviews, questions, answers and abuse reports, whatever their state.
+    /// </summary>
+    /// <remarks>
+    /// Support's permission, and it deliberately includes what is pending and what was refused:
+    /// "where has my review gone" is not answerable from the storefront's view of the world.
+    /// </remarks>
+    public const string ReviewRead = "reviews.review.read";
+
+    /// <summary>
+    /// Approve, refuse and reinstate reviews, questions and answers, and resolve abuse reports.
+    /// </summary>
+    /// <remarks>
+    /// The only permission in this module that can remove something a shopper wrote, and deliberately
+    /// not a seller's — a seller who could refuse reviews of their own goods would be curating their
+    /// own rating.
+    /// </remarks>
+    public const string ReviewModerate = "reviews.review.moderate";
+
+    /// <summary>
+    /// Write a public reply to a review of one's own sale.
+    /// </summary>
+    /// <remarks>
+    /// Separate from moderating on purpose: a seller may answer a one-star review of their own sale,
+    /// and must never be able to make it disappear.
+    /// </remarks>
+    public const string ReviewReply = "reviews.review.reply";
+
+    /// <summary>
+    /// Run a report and download an export.
+    /// </summary>
+    /// <remarks>
+    /// Held by the platform's managers and by sellers. Which figures the holder sees is decided by
+    /// whether their token carries a vendor id, not by a second permission.
+    /// </remarks>
+    public const string ReportRead = "reporting.report.read";
+
+    /// <summary>
+    /// Create, edit and delete scheduled report exports.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not a seller's. A schedule sends commercial data to a list of addresses on a
+    /// timetable, and who is on that list is a decision for whoever runs the platform.
+    /// </remarks>
+    public const string ReportScheduleManage = "reporting.schedule.manage";
+
     /// <summary>Every declared permission, in the order the admin UI lists them.</summary>
     public static readonly IReadOnlyList<PermissionDescriptor> All =
     [
@@ -462,6 +508,11 @@ internal static class PermissionCatalog
         new(ContentCustomHtmlWrite, "Content", "Write custom HTML blocks."),
         new(ContentRedirectManage, "Content", "Edit the redirect manager."),
         new(ContentSeoRead, "Content", "Read the sitemap, the robots document and a page's structured data."),
+        new(ReviewRead, "Reviews", "Read reviews, questions and complaints, pending and refused included."),
+        new(ReviewModerate, "Reviews", "Approve, refuse and reinstate reviews, questions and answers."),
+        new(ReviewReply, "Reviews", "Write a public reply to a review of your own sale."),
+        new(ReportRead, "Reporting", "Run reports and download exports."),
+        new(ReportScheduleManage, "Reporting", "Keep the scheduled report exports and who they go to."),
     ];
 
     /// <summary>Whether a code is one this platform declares.</summary>

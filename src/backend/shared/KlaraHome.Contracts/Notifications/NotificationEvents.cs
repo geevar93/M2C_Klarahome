@@ -41,6 +41,27 @@ public static class NotificationEvents
     /// <summary>A test message, sent from the admin surface to prove a channel works end to end.</summary>
     public const string ChannelTest = "platform.channel.test";
 
+    /// <summary>Something a shopper asked to be told about is on sale again (Step 21).</summary>
+    /// <remarks>
+    /// Marketing rather than transactional, and that is not a technicality. Nobody placed an order;
+    /// somebody expressed interest, and a store that treated interest as consent to be messaged would
+    /// be doing exactly what the preference centre exists to prevent.
+    /// </remarks>
+    public const string BackInStock = "reviews.back-in-stock";
+
+    /// <summary>Something a shopper asked to be told about has come down in price (Step 21).</summary>
+    public const string PriceDrop = "reviews.price-drop";
+
+    /// <summary>Somebody answered a shopper's question about a product (Step 21).</summary>
+    /// <remarks>
+    /// Transactional, unlike the other two here: the recipient asked a direct question and is being
+    /// given the answer, which is a reply rather than a campaign.
+    /// </remarks>
+    public const string QuestionAnswered = "reviews.question.answered";
+
+    /// <summary>A scheduled report has been produced and is ready to download (Step 21).</summary>
+    public const string ReportReady = "reporting.export.ready";
+
     /// <summary>Every declared event key.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -52,6 +73,10 @@ public static class NotificationEvents
         TemporaryPasswordIssued,
         AccountCreated,
         ChannelTest,
+        BackInStock,
+        PriceDrop,
+        QuestionAnswered,
+        ReportReady,
     ];
 
     /// <summary>Whether a key is one this platform declares.</summary>

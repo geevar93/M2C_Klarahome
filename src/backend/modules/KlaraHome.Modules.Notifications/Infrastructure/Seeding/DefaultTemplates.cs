@@ -139,5 +139,48 @@ internal static class DefaultTemplates
             string.Empty,
             "This is a test message from {{storeName}}, sent at {{sentAt}}.",
             NotificationCategory.Security),
+
+        // Step 21. The two stock alerts are Marketing and not transactional, which is the whole
+        // reason the distinction exists on a template: nobody ordered anything, somebody asked to be
+        // told, and asking to be told about one product is not consent to be sent campaigns. A
+        // recipient who has opted out of Marketing gets a suppressed row rather than a message.
+        new(
+            NotificationEvents.BackInStock,
+            NotificationChannel.Email,
+            "{{productName}} is back in stock",
+            "<p>Hello {{name}},</p>"
+            + "<p><strong>{{productName}}</strong> is available again at {{storeName}}, at "
+            + "{{price}}.</p>"
+            + "<p>Stock is limited and we cannot hold it for you.</p>",
+            NotificationCategory.Marketing,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.PriceDrop,
+            NotificationChannel.Email,
+            "{{productName}} has come down in price",
+            "<p>Hello {{name}},</p>"
+            + "<p><strong>{{productName}}</strong> is now {{price}}, down from {{previousPrice}}.</p>",
+            NotificationCategory.Marketing,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.QuestionAnswered,
+            NotificationChannel.Email,
+            "Your question about {{productName}} has been answered",
+            "<p>Hello {{name}},</p>"
+            + "<p>You asked: {{question}}</p>"
+            + "<p>{{answeredBy}} replied: {{answer}}</p>",
+            NotificationCategory.Orders),
+
+        new(
+            NotificationEvents.ReportReady,
+            NotificationChannel.Email,
+            "{{reportName}} for {{periodLabel}}",
+            "<p>The scheduled report <strong>{{reportName}}</strong> for {{periodLabel}} has been "
+            + "produced.</p>"
+            + "<p>It covers {{rowCount}} row(s) and can be downloaded from the admin console for "
+            + "{{expiryHours}} hour(s): {{downloadUrl}}</p>",
+            NotificationCategory.Vendor),
     ];
 }

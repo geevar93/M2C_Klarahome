@@ -323,14 +323,57 @@ An order moves to `Confirmed` on the webhook plus an API re-fetch, and on nothin
 `PAYMENT_ALREADY_CAPTURED` for an order that is in fact paid. A cash-on-delivery order has nothing
 to retry and answers `PAYMENT_NOT_PAYABLE`.
 
-### 3.6 Engagement
+### 3.6 Engagement (Step 21)
 ```
-GET/POST/DELETE /store/wishlist[/items/{listingId}]
-POST            /store/products/{id}/reviews         { rating, title, body, media[] }
-POST            /store/reviews/{id}/helpful
-POST            /store/products/{id}/questions
-POST            /store/products/{id}/stock-subscription
+# Reviews. Reading is anonymous and cacheable; writing needs an account and a delivered purchase.
+GET          /store/products/{productId}/reviews     ?rating= &withImages= &sort= &cursor= &size=
+GET          /store/products/{productId}/rating      -> average + the 1..5 histogram
+GET          /store/products/{productId}/reviews/eligibility
+POST         /store/products/{productId}/reviews     { orderLineId, rating, title, body, images[] }
+PUT          /store/reviews/{id}                     rewrites; returns to moderation
+POST/DELETE  /store/reviews/{id}/helpful             { isHelpful }
+GET          /store/me/reviews                       ?cursor= &size=   pending + refused included
+
+# Product Q&A, behind reviews.questions (ships OFF).
+GET          /store/products/{productId}/questions   ?unanswered= &cursor= &size=
+POST         /store/products/{productId}/questions   { body }
+POST         /store/questions/{id}/answers           { body }
+
+# Wishlist.
+GET          /store/wishlist                         ?listId=   cards priced from today's buy box
+GET          /store/wishlist/lists
+POST         /store/wishlist/items                   { variantId, wishlistId?, note?, priority }
+DELETE       /store/wishlist/items/{variantId}       ?listId=
+POST/PUT/DELETE /store/wishlist/lists[/{id}]         { name }
+POST         /store/wishlist/lists/{id}/share        { share }  mints a token; off revokes it
+GET          /store/wishlist/shared/{token}          anonymous; no notes and no token in the reply
+
+# Stock alerts, behind reviews.stock-alerts (ships OFF).
+POST         /store/stock-subscriptions              { variantId, kind, targetPrice?, email? }
+GET          /store/stock-subscriptions              ?activeOnly=
+DELETE       /store/stock-subscriptions/{id}
+
+# Reporting abuse. Anonymous, and deliberately behind no feature flag at all.
+POST         /store/content-reports                  { target, targetId, reason, note? }
 ```
+
+**`POST /store/products/{productId}/reviews` takes an `orderLineId` and the product in the route is
+not used.** The product a review is filed against comes from the purchase the caller quotes, resolved
+through `IOrderPurchases` — which is the only version of it a caller cannot choose. A caller who
+could name their own product would be able to write a five-star review of anything by quoting one
+line they genuinely bought. The four ways to fail the rule — no such line, somebody else's line, a
+cancelled line, a line still in transit — all answer `REVIEW_PURCHASE_REQUIRED`, because telling them
+apart would confirm which order line ids are real.
+
+**Two endpoints are anonymous *writes*, and both are rate limited harder than anything else here.**
+Subscribing to a stock alert, because somebody who has not signed up yet is exactly the person a
+back-in-stock alert is for; and reporting content, because a store that made itself hard to tell
+about unlawful content would be a worse store. Neither publishes anything: a report goes into a
+queue a moderator works, and a subscription sends one message to an address the caller supplied.
+
+**There is no way to read an unmoderated review, question or answer from this surface, and no query
+parameter that changes that.** An author reading their own pending review does it through
+`/store/me/reviews` with their own token.
 
 ### 3.7 Content
 ```
@@ -563,7 +606,31 @@ GET/PUT      /admin/settings
 GET/PUT      /admin/feature-flags
 GET/POST/PUT /admin/users | /roles
 GET          /admin/audit-logs                      ?entityType= &entityId= &actorId=
-GET          /admin/reports/{reportKey}             ?from= &to= &groupBy= &format=json|csv
+# Reviews & Q&A (Step 21). Reading includes what is pending and what was refused, because "where
+# has my review gone" is not answerable from the storefront's view of the world. Moderating is the
+# only permission that can take something down and is deliberately NOT a seller's; replying is a
+# seller's and cannot remove anything. The list endpoints serve a seller and a moderator through the
+# same route, confined by whether the caller's token carries a vendor id.
+GET          /admin/reviews                          ?status= &productId= &vendorId= &rating= &reported=
+GET          /admin/reviews/{id}
+POST         /admin/reviews/{id}/moderate            { approve, note }   note required to refuse
+POST         /admin/reviews/{id}/reply               { reply }           own sale only
+GET          /admin/questions                        ?status= &productId= &unanswered=
+POST         /admin/questions/{id}/moderate          { approve, note }
+POST         /admin/questions/{id}/answers           { body }
+POST         /admin/questions/{id}/answers/{answerId}/moderate  { approve }
+GET          /admin/content-reports                  ?status= &reason=   unlawful first, then oldest
+POST         /admin/content-reports/{id}/resolve     { uphold, resolution }  upholding takes it down
+
+# Reporting (Step 21). No storefront surface, and there never will be: every number here is
+# commercial. Every route is vendor-scoped by the caller's TOKEN, never by an id in the query
+# string; a report the catalogue declares as not vendor-scoped is refused to a seller outright.
+GET          /admin/reports                          the declared catalogue: columns and groupings
+GET          /admin/reports/{reportKey}              ?from= &to= &groupBy= &vendorId= &format=json|csv
+GET          /admin/report-runs                      ?reportKey= &status= &cursor= &size=
+GET          /admin/report-runs/{id}/download        -> { url, expiresAt, fileName }  short-lived
+GET/POST     /admin/report-schedules
+PUT/DELETE   /admin/report-schedules/{id}
 
 # Media
 GET          /admin/media                           ?visibility= &contentType= &cursor= &size=
@@ -580,6 +647,13 @@ GET          /admin/notifications/{id}
 POST         /admin/notifications/{id}/retry        re-queues a failed message
 POST         /admin/notifications/test              { eventKey, channel, to, variables } - staff only
 ```
+
+**`format=csv` does not stream a file.** It produces a run through the same code the scheduler uses,
+stores it, and answers with the run — which the caller then downloads through
+`/admin/report-runs/{id}/download`. The indirection is deliberate: a report somebody clicked for and
+one that arrives by email every Monday are then the same artefact, produced once and recorded in one
+log. The download link is minted per request and lives fifteen minutes by default, because a report
+is a private document and a durable link is one somebody pastes into a chat thread.
 
 **Returns split across four permissions**, and the split is the split between four jobs that are
 usually four people. `returns.return.read` is support. `returns.return.manage` is the queue —

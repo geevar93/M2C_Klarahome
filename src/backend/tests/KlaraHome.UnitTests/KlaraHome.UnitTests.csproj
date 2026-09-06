@@ -26,6 +26,8 @@
     <ProjectReference Include="../../modules/KlaraHome.Modules.Settlements/KlaraHome.Modules.Settlements.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Search/KlaraHome.Modules.Search.csproj" />
     <ProjectReference Include="../../modules/KlaraHome.Modules.Content/KlaraHome.Modules.Content.csproj" />
+    <ProjectReference Include="..\..\modules\KlaraHome.Modules.Reviews\KlaraHome.Modules.Reviews.csproj" />
+    <ProjectReference Include="..\..\modules\KlaraHome.Modules.Reporting\KlaraHome.Modules.Reporting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

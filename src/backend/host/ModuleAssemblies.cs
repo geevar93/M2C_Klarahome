@@ -40,5 +40,7 @@ internal static class ModuleAssemblies
         typeof(Modules.Settlements.SettlementsModule).Assembly,
         typeof(Modules.Search.SearchModule).Assembly,
         typeof(Modules.Content.ContentModule).Assembly,
+        typeof(Modules.Reviews.ReviewsModule).Assembly,
+        typeof(Modules.Reporting.ReportingModule).Assembly,
     ];
 }

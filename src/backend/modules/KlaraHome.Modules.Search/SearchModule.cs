@@ -3,6 +3,7 @@ using KlaraHome.Contracts.Inventory;
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Reviews;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
@@ -171,6 +172,12 @@ public sealed class SearchModule : IModule
             provider => provider.GetRequiredService<SearchProjectionHandlers>());
 
         services.AddScoped<IIntegrationEventHandler<SubOrderConfirmed>>(
+            provider => provider.GetRequiredService<SearchProjectionHandlers>());
+
+        // The seventh, added at Step 21. A rating is a column in the index and something the
+        // storefront sorts on, so an average that moved without the index moving with it would rank
+        // products by what shoppers used to think.
+        services.AddScoped<IIntegrationEventHandler<ProductRatingChanged>>(
             provider => provider.GetRequiredService<SearchProjectionHandlers>());
     }
 }

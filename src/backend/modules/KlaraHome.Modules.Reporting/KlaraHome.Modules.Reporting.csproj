@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reporting (Step 21): the numbers the business is run on.
+
+    The module that owns no business rule and may change nothing. It reads its own schema and
+    nothing else - not because that is tidy, but because docs/01-architecture.md section 2.1 forbids
+    a cross-module table read outright, and a reporting module that quietly ignored that would be
+    the one place in the system where the boundaries were decoration.
+
+    So it keeps its own facts. Every fact table is written by an integration-event handler, one row
+    per transactional row, denormalised at write time with the category, the seller and the payment
+    method already on it. That shape is the whole design: a report is then a filtered aggregation
+    over a single table with no join at all, the numbers reconcile against the transactional data
+    because each row *is* a transactional row, and there is no staleness window to explain to
+    somebody asking why yesterday's figure moved.
+
+    There are deliberately no rollup tables and no materialised views (ADR-021). The one thing that
+    cannot be assembled from events is how long the stock currently on a shelf has been sitting
+    there, because no message carries it - so that one is a daily snapshot taken through
+    `IInventoryAgeing`, and it is the only scheduled write in the module.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>KlaraHome.Modules.Reporting</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj" />
+    <ProjectReference Include="../../shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Design-time only: `dotnet ef` needs it in the project that holds the migrations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KlaraHome.UnitTests" />
+    <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

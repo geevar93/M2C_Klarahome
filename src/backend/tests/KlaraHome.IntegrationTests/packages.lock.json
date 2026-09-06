@@ -454,7 +454,9 @@
           "KlaraHome.Modules.Payments": "[0.1.0, )",
           "KlaraHome.Modules.Platform": "[0.1.0, )",
           "KlaraHome.Modules.Pricing": "[0.1.0, )",
+          "KlaraHome.Modules.Reporting": "[0.1.0, )",
           "KlaraHome.Modules.Returns": "[0.1.0, )",
+          "KlaraHome.Modules.Reviews": "[0.1.0, )",
           "KlaraHome.Modules.Search": "[0.1.0, )",
           "KlaraHome.Modules.Settlements": "[0.1.0, )",
           "KlaraHome.Modules.Shipping": "[0.1.0, )",
@@ -587,7 +589,23 @@
           "KlaraHome.SharedKernel": "[0.1.0, )"
         }
       },
+      "klarahome.modules.reporting": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
       "klarahome.modules.returns": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.reviews": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",

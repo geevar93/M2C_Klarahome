@@ -99,6 +99,16 @@ public sealed class CatalogModule : IModule
             KlaraHome.Infrastructure.Persistence.Outbox.IIntegrationEventHandler<Contracts.Vendors.VendorOffboarded>>(
             provider => provider.GetRequiredService<VendorLifecycleHandlers>());
 
+        // And to what shoppers think of its products, added at Step 21. The aggregate is computed by
+        // the Reviews module — the only one that can — and stored here, because this is where the
+        // column a projection reads lives. It is what finally makes ProductProjection.RatingAverage
+        // something other than null.
+        services.AddScoped<ReviewRatingHandlers>();
+        services.AddScoped<
+            KlaraHome.Infrastructure.Persistence.Outbox.IIntegrationEventHandler<
+                Contracts.Reviews.ProductRatingChanged>>(
+            provider => provider.GetRequiredService<ReviewRatingHandlers>());
+
         services.AddHostedService<CatalogJobDispatcher>();
     }
 

@@ -330,7 +330,23 @@
           "KlaraHome.SharedKernel": "[0.1.0, )"
         }
       },
+      "klarahome.modules.reporting": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
       "klarahome.modules.returns": {
+        "type": "Project",
+        "dependencies": {
+          "KlaraHome.Contracts": "[0.1.0, )",
+          "KlaraHome.Infrastructure": "[0.1.0, )",
+          "KlaraHome.SharedKernel": "[0.1.0, )"
+        }
+      },
+      "klarahome.modules.reviews": {
         "type": "Project",
         "dependencies": {
           "KlaraHome.Contracts": "[0.1.0, )",

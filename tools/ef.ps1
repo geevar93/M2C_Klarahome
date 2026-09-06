@@ -58,6 +58,9 @@ $Contexts = @{
     'Returns' = 'ReturnsDbContext'
     'Settlements' = 'SettlementsDbContext'
     'Search' = 'SearchDbContext'
+    'Content' = 'ContentDbContext'
+    'Reviews' = 'ReviewsDbContext'
+    'Reporting' = 'ReportingDbContext'
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
