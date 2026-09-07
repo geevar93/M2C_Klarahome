@@ -16,7 +16,7 @@
 # --- Build -------------------------------------------------------------------
 # Node 24 for the reason storefront.Dockerfile gives: the workspace is pinned to
 # 24.20.0 and building it on another major is a difference nobody would find.
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src
 
 COPY src/frontend/package.json src/frontend/package-lock.json ./
