@@ -1,14 +1,65 @@
 <!--
-  The landmarks, and nothing else. Header, navigation and footer arrive at Step 23.
-  The skip link is first in the tab order on purpose: it is the only way a keyboard user reaches
-  the content without tabbing through the whole header that will eventually sit above it.
+  The shell, in tab order.
+
+  The skip link is first on purpose: it is the only way a keyboard user reaches the content
+  without tabbing through the whole header. The sticky action bar is last, which is where a
+  page's primary action belongs once everything else has been offered.
 -->
 <a class="kh-skip-link" href="#main-content">Skip to main content</a>
 
 @if (loading()) {
-<div class="kh-progress" role="progressbar" aria-label="Loading" aria-busy="true"></div>
+<kh-progress-bar />
 }
 
-<main id="main-content" tabindex="-1">
+<kh-offline-notice />
+
+<kh-site-header
+  [storeName]="shell.storeName()"
+  [menu]="shell.headerMenu()"
+  [cartCount]="shell.cartCount()"
+  [isAuthenticated]="shell.isAuthenticated()"
+  [menuOpen]="shell.isNavOpen()"
+  [cartOpen]="shell.isCartOpen()"
+  (menuToggled)="shell.toggleNav()"
+  (cartOpened)="shell.openCart()"
+>
+  <kh-search-entry
+    khHeaderSearch
+    inputId="kh-header-search"
+    [suggestions]="shell.suggestions()"
+    [suggestionsHeading]="shell.suggestionsHeading()"
+    (queryChanged)="shell.suggest($event)"
+    (suggestionChosen)="openSuggestion($event)"
+    (submitted)="search($event)"
+  />
+</kh-site-header>
+
+<kh-mobile-nav-drawer
+  [open]="shell.isNavOpen()"
+  [storeName]="shell.storeName()"
+  [menu]="shell.headerMenu()"
+  (closed)="shell.closeNav()"
+/>
+
+<kh-mini-cart
+  [open]="shell.isCartOpen()"
+  [loading]="shell.cartLoading()"
+  [lines]="shell.miniCartLines()"
+  [total]="shell.cartSubtotal()"
+  (closed)="shell.closeCart()"
+/>
+
+<!--
+  `tabindex="-1"` so focus can be moved here after a navigation without `<main>` joining the tab
+  order. The breadcrumb sits inside the main landmark because it describes this page's place, not
+  the site's structure.
+-->
+<main id="main-content" khContainer tabindex="-1" [class.has-sticky-action]="hasStickyAction()">
+  <kh-breadcrumbs [items]="breadcrumbs()" />
   <router-outlet />
 </main>
+
+<kh-site-footer [storeName]="shell.storeName()" [menu]="shell.footerMenu()" />
+
+<kh-sticky-action-bar />
+<kh-toast-host />

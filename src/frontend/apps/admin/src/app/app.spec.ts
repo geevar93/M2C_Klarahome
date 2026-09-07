@@ -7,14 +7,18 @@ import { provideKlaraHomeI18n } from '@klarahome/i18n';
 import { App } from './app';
 
 /**
- * A smoke test for the shell, not for its behaviour.
+ * A smoke test for the application component, not for its behaviour.
  *
  * It stands the app up against the real provider chain — runtime config, locale, the HTTP stack
  * and its five interceptors — so that a provider which cannot be constructed fails here rather
- * than as a blank page in a browser. The landmarks are asserted because they are the accessibility
- * contract every later step builds on: a `main` to skip to, and a skip link to reach it with.
+ * than as a blank page in a browser.
+ *
+ * What it asserts changed at Step 26 and the reason is worth recording: the landmarks moved into
+ * `kh-admin-shell`, which is rendered by the routed `ShellLayout`, because `/login` must not have
+ * a navigation sidebar around it. The application component is now the outlet and the progress
+ * indicator, and that is what is checked here.
  */
-describe('Admin app shell', () => {
+describe('Admin app component', () => {
   const config = {
     apiBaseUrl: 'http://api.klarahome.test',
     tenantCode: 'test',
@@ -36,16 +40,11 @@ describe('Admin app shell', () => {
     }).compileComponents();
   });
 
-  it('renders the main landmark and a skip link to it', () => {
+  it('constructs against the real provider chain and renders the routed outlet', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
 
     const element: HTMLElement = fixture.nativeElement;
-    const main = element.querySelector('main');
-    const skipLink = element.querySelector('a.kh-skip-link');
-
-    expect(main).not.toBeNull();
-    expect(main?.id).toBe('main-content');
-    expect(skipLink?.getAttribute('href')).toBe('#main-content');
+    expect(element.querySelector('router-outlet')).not.toBeNull();
   });
 });

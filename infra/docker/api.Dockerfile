@@ -33,10 +33,19 @@ COPY src/backend/Directory.Build.props src/backend/Directory.Packages.props src/
 COPY src/backend/shared/KlaraHome.SharedKernel/KlaraHome.SharedKernel.csproj    src/backend/shared/KlaraHome.SharedKernel/
 COPY src/backend/shared/KlaraHome.Contracts/KlaraHome.Contracts.csproj          src/backend/shared/KlaraHome.Contracts/
 COPY src/backend/shared/KlaraHome.Infrastructure/KlaraHome.Infrastructure.csproj src/backend/shared/KlaraHome.Infrastructure/
-COPY src/backend/modules/KlaraHome.Modules.Platform/KlaraHome.Modules.Platform.csproj src/backend/modules/KlaraHome.Modules.Platform/
-COPY src/backend/modules/KlaraHome.Modules.Identity/KlaraHome.Modules.Identity.csproj src/backend/modules/KlaraHome.Modules.Identity/
-COPY src/backend/modules/KlaraHome.Modules.Media/KlaraHome.Modules.Media.csproj       src/backend/modules/KlaraHome.Modules.Media/
-COPY src/backend/modules/KlaraHome.Modules.Notifications/KlaraHome.Modules.Notifications.csproj src/backend/modules/KlaraHome.Modules.Notifications/
+# Every module's project file, put back into the directory it belongs to. A wildcard COPY
+# flattens, so the loop restores the layout `dotnet restore` needs. It is written this way
+# deliberately: a hand-kept list of COPY lines is a second declaration of which modules exist,
+# and it silently fell eighteen modules behind the solution during the build sprint. A module
+# added later needs no change here.
+COPY src/backend/modules/*/*.csproj /tmp/modules/
+RUN set -eu; \
+    for project in /tmp/modules/*.csproj; do \
+        name="$(basename "$project" .csproj)"; \
+        mkdir -p "src/backend/modules/$name"; \
+        mv "$project" "src/backend/modules/$name/"; \
+    done; \
+    rmdir /tmp/modules
 COPY src/backend/host/KlaraHome.Api/KlaraHome.Api.csproj                        src/backend/host/KlaraHome.Api/
 
 # PublishReadyToRun has to be set at restore time as well: it is what pulls in the

@@ -44,6 +44,23 @@ export interface ApiRequestOptions {
   readonly retry?: number;
   /** Send no Authorization header. */
   readonly skipAuth?: boolean;
+  /**
+   * Extra query-string parameters, merged over whatever the generated method already sends.
+   *
+   * **The escape hatch for a query string that is data rather than a shape**, and there is
+   * exactly one of those: `GET /store/products`, the faceted listing. Its attribute filters are
+   * `?attr.color=beige&attr.size=m`, and which attributes exist is a merchandising decision — no
+   * OpenAPI operation can declare a parameter whose name a merchandiser invents, so the generated
+   * method has no query interface to carry them (the endpoint reads them off the request by
+   * prefix; see `StoreSearchEndpoints.ReadQuery`).
+   *
+   * It is not a general-purpose bypass. If a parameter *can* be declared in the contract, declare
+   * it there and regenerate: a call that passes a documented parameter through here is one CI's
+   * drift check can no longer see.
+   */
+  readonly params?: Readonly<
+    Record<string, string | number | boolean | readonly string[] | null | undefined>
+  >;
   /** Aborts the request when it fires. */
   readonly signal?: AbortSignal;
   /** An HttpContext to build on, when a caller already has one. */

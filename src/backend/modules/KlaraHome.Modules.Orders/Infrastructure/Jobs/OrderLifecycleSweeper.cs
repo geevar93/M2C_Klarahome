@@ -120,9 +120,11 @@ internal sealed partial class OrderLifecycleSweeper : BackgroundService
             // whichever tenant the ambient context happened to name. It is also why the transitions
             // below are taken as System: there is no principal to attribute them to.
             var due = await context.SubOrders
+                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
+                // maps it as this entity's concurrency token.
                 .FromSql(
                     $"""
-                     SELECT * FROM orders.sub_orders
+                     SELECT *, xmin FROM orders.sub_orders
                      WHERE (status = 'Delivered' AND return_window_ends_at IS NOT NULL
                             AND return_window_ends_at <= {now})
                         OR (status = 'PendingPayment' AND created_at <= {unpaidBefore})

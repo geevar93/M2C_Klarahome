@@ -1,0 +1,103 @@
+// The button, as a class rather than a component.
+//
+// It is a class because the same appearance has to sit on both a `<button>` and an `<a>`, and the
+// element is not a style decision: "add to cart" is a button because it acts, "view all" is a link
+// because it navigates, and a component that rendered one of them would force the wrong element
+// somewhere. The `khButton` directive applies these classes; nothing else should use them directly.
+//
+// Every value is a token. The 44px floor is the touch target from
+// docs/10-design-system-placeholder.md §4, and it is a floor rather than a size — the `sm` variant
+// keeps the hit area and only reduces the type.
+
+.kh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target-min);
+  padding-inline: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+
+  &:disabled,
+  &[aria-disabled='true'] {
+    // Never `display: none` and never a removed control: a disabled action the user can still see
+    // and read is the only way they learn why it is unavailable.
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+// ---- Variants ----------------------------------------------------------------------------------
+
+.kh-button--primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+
+  &:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-primary-hover);
+  }
+}
+
+.kh-button--secondary {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+
+  &:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-surface);
+  }
+}
+
+.kh-button--tertiary {
+  color: var(--color-primary);
+  padding-inline: var(--space-2);
+
+  &:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-primary-subtle);
+  }
+}
+
+.kh-button--danger {
+  background: var(--color-danger);
+  color: var(--color-text-inverse);
+}
+
+// ---- Sizes -------------------------------------------------------------------------------------
+// The hit area never shrinks; only the type and the horizontal padding do.
+
+.kh-button--sm {
+  font-size: var(--text-sm);
+  padding-inline: var(--space-3);
+}
+
+.kh-button--lg {
+  font-size: var(--text-lg);
+  padding-inline: var(--space-6);
+  min-height: calc(var(--touch-target-min) + var(--space-1));
+}
+
+// ---- Shapes ------------------------------------------------------------------------------------
+
+// A primary action on a phone is full width, in the thumb zone, and not a 96px target in the
+// middle of a 360px screen (docs/05-frontend-architecture.md §3.3).
+.kh-button--block {
+  display: flex;
+  width: 100%;
+}
+
+// An icon-only control is square, and it always carries an accessible name — the `khButton`
+// directive refuses to render one without it.
+.kh-button--icon {
+  padding-inline: 0;
+  min-width: var(--touch-target-min);
+}

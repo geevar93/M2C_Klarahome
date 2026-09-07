@@ -1,5 +1,10 @@
 import { Injectable, inject } from '@angular/core';
-import { IdentityApiClient, SignInResponse } from '@klarahome/data-access-api';
+import {
+  IdentityApiClient,
+  OtpRequestedResponse,
+  SignInResponse,
+  TwoFactorSetupResponse,
+} from '@klarahome/data-access-api';
 import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 
 import { Session, SessionStore } from './session.store';
@@ -60,6 +65,108 @@ export class AuthService {
     return this.inFlightRefresh;
   }
 
+  /**
+   * Asks for a one-time code.
+   *
+   * OTP is the storefront's primary sign-in: most Indian shoppers have a mobile number and no
+   * password, and the API creates the customer on first successful verification — so there is no
+   * separate "register with mobile" flow to keep in step with this one.
+   *
+   * The answer says how long the code lasts and how many digits it has, and the screen is built
+   * from that rather than from a constant: a deployment that shortens the code must not need a
+   * front-end release. Note that SMS can be switched off by an operator (Step 7A), in which case
+   * this is refused and the caller offers the password form instead.
+   */
+  requestOtp(mobile: string): Observable<OtpRequestedResponse> {
+    return this.identity.storeAuthOtpRequest({ mobile }, { skipAuth: true, silentErrors: true });
+  }
+
+  /** Verifies a code. A true answer means the session is live; the caller routes from there. */
+  verifyOtp(mobile: string, code: string): Observable<SignInResponse> {
+    return this.identity
+      .storeAuthOtpVerify({ mobile, code }, { skipAuth: true, silentErrors: true })
+      .pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
+   * Email and password.
+   *
+   * The **only** way into the admin app, and one of two ways into the storefront. Which endpoint
+   * is called follows `surface`, exactly as `refresh` and `signOut` already do: the two issue
+   * different cookies with different lifetimes and different session policies, and a storefront
+   * login that minted a staff session would be the most serious defect this application could
+   * have.
+   *
+   * A response carrying a `challenge` instead of a token is not a failure — it is the second
+   * factor being demanded, and `adopt` answers false so the caller shows the code step.
+   */
+  signIn(email: string, password: string): Observable<SignInResponse> {
+    const request =
+      this.surface === 'admin'
+        ? this.identity.adminAuthLogin({ email, password }, { skipAuth: true, silentErrors: true })
+        : this.identity.storeAuthLogin({ email, password }, { skipAuth: true, silentErrors: true });
+
+    return request.pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
+   * Creates an account with an email address and a password.
+   *
+   * The response is adopted the same way a sign-in is, because the API signs the new customer in —
+   * making them type their password again immediately after choosing it is a step that exists only
+   * to lose people.
+   */
+  register(body: {
+    email: string;
+    password: string;
+    mobile: string | null;
+    marketingConsent: boolean;
+  }): Observable<SignInResponse> {
+    return this.identity
+      .storeAuthRegister(body, { skipAuth: true, silentErrors: true })
+      .pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
+   * Starts a password reset.
+   *
+   * The API answers 204 whether or not the address is registered, and this passes that through
+   * unchanged: an endpoint that distinguished the two would be an account-enumeration oracle
+   * (docs/07-security-compliance.md). The screen therefore says "if that address is registered…"
+   * rather than "we have sent you an email", because only one of those is true.
+   */
+  forgotPassword(email: string): Observable<void> {
+    const body = { email };
+    return this.surface === 'admin'
+      ? this.identity.adminAuthPasswordForgot(body, { skipAuth: true, silentErrors: true })
+      : this.identity.storeAuthPasswordForgot(body, { skipAuth: true, silentErrors: true });
+  }
+
+  /** Finishes a reset with the token from the emailed link. */
+  resetPassword(email: string, token: string, newPassword: string): Observable<void> {
+    const body = { email, token, newPassword };
+    return this.surface === 'admin'
+      ? this.identity.adminAuthPasswordReset(body, { skipAuth: true, silentErrors: true })
+      : this.identity.storeAuthPasswordReset(body, { skipAuth: true, silentErrors: true });
+  }
+
+  /**
+   * The second factor, when a sign-in came back with a challenge instead of a token.
+   *
+   * Rare on the storefront — a customer with TOTP enrolled — but the response shape allows it on
+   * every sign-in path, and a screen that ignored the challenge would show a signed-in header for
+   * a session that does not exist.
+   */
+  verifyTwoFactor(challengeToken: string, code: string): Observable<SignInResponse> {
+    const body = { challengeToken, code };
+    const request =
+      this.surface === 'admin'
+        ? this.identity.adminAuthTwoFactorVerify(body, { skipAuth: true, silentErrors: true })
+        : this.identity.storeAuthTwoFactorVerify(body, { skipAuth: true, silentErrors: true });
+
+    return request.pipe(tap((response) => this.adopt(response)));
+  }
+
   /** Ends the session on the server, then locally — in that order, so the cookie is really gone. */
   signOut(): Observable<void> {
     const request =
@@ -72,6 +179,21 @@ export class AuthService {
       tap(() => this.store.signOut()),
       map(() => undefined),
     );
+  }
+
+  /**
+   * Enrols a second factor during sign-in, when the API demands one before it will issue a token.
+   *
+   * Distinct from `AdminSessionService.startTwoFactorSetup`, which is a signed-in user choosing to
+   * turn TOTP on. This is the other case: an operator has made two-factor mandatory for the role,
+   * so the user cannot get in until they have enrolled — and the only credential they hold at that
+   * moment is the challenge token their password earned.
+   */
+  enrolTwoFactor(challengeToken: string): Observable<TwoFactorSetupResponse> {
+    const body = { challengeToken };
+    return this.surface === 'admin'
+      ? this.identity.adminAuthTwoFactorEnrol(body, { skipAuth: true, silentErrors: true })
+      : this.identity.storeAuthTwoFactorEnrol(body, { skipAuth: true, silentErrors: true });
   }
 
   /**

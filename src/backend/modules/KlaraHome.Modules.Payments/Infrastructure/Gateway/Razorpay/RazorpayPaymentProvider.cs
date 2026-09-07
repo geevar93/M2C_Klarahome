@@ -371,7 +371,7 @@ internal sealed partial class RazorpayPaymentProvider(
     }
 
     /// <summary>Reads back the collection id this platform sent in the order's notes.</summary>
-    private static Guid? ReadPaymentId(IReadOnlyDictionary<string, string>? notes)
+    private static Guid? ReadPaymentId(Dictionary<string, string>? notes)
         => notes is not null
            && notes.TryGetValue(RazorpayNotes.PaymentId, out var value)
            && Guid.TryParse(value, out var parsed)
@@ -379,7 +379,7 @@ internal sealed partial class RazorpayPaymentProvider(
             : null;
 
     private async Task<Result<TResponse>> GetAsync<TResponse>(string path, CancellationToken cancellationToken)
-        => await SendAsync<TResponse>(HttpMethod.Get, path, body: null, cancellationToken, idempotencyKey: null)
+        => await SendAsync<TResponse>(HttpMethod.Get, path, body: null, idempotencyKey: null, cancellationToken)
             .ConfigureAwait(false);
 
     private async Task<Result<TResponse>> PostAsync<TResponse>(
@@ -387,7 +387,7 @@ internal sealed partial class RazorpayPaymentProvider(
         object body,
         CancellationToken cancellationToken,
         string? idempotencyKey = null)
-        => await SendAsync<TResponse>(HttpMethod.Post, path, body, cancellationToken, idempotencyKey)
+        => await SendAsync<TResponse>(HttpMethod.Post, path, body, idempotencyKey, cancellationToken)
             .ConfigureAwait(false);
 
     /// <summary>
@@ -402,8 +402,8 @@ internal sealed partial class RazorpayPaymentProvider(
         HttpMethod method,
         string path,
         object? body,
-        CancellationToken cancellationToken,
-        string? idempotencyKey)
+        string? idempotencyKey,
+        CancellationToken cancellationToken)
     {
         var settings = options.CurrentValue;
 

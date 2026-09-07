@@ -36,6 +36,12 @@
     Minimum total line coverage percentage over our own assemblies. Defaults to 70, the figure
     agreed in docs/09-nfr-testing-observability.md section 1.4.
 
+    The default is deliberately still 70 even though the build sprint left coverage far below it.
+    Measured at Step 28A over the two suites that run without Docker: 15.84% line, 29.08% branch,
+    on 941 unit tests and 14 architecture tests. Step 29 restores it to 70% by paying down
+    TEST_DEBT.md; until then a full local sweep needs -CoverageMinimum passed on the command line,
+    never lowered here.
+
 .PARAMETER SkipIntegrationTests
     Skip the suites that need a Docker daemon. They skip themselves gracefully, but this makes the
     intent explicit and keeps the test-count assertion honest.
@@ -77,8 +83,13 @@ $TestResultsDir = Join-Path $ArtifactsDir 'test-results'
 # Suite name -> the smallest number of tests that suite is allowed to report. Not a target: a
 # tripwire. It exists so a suite that silently discovers nothing cannot be mistaken for a pass.
 # Raise these when a step adds tests; never lower one to make a build go green.
+#
+# Restored at Step 28A to the counts the sprint actually ended on. They were frozen for Steps 9-28
+# (IMPLEMENTATION_PLAN.md section 3.2 rule 6) because the sprint wrote production code and deferred
+# tests, so a rising floor would have failed every step. The integration floor is unchanged: that
+# suite is Step 29's work and has not grown since Step 8.
 $TestSuites = [ordered]@{
-    'UnitTests'         = @{ Minimum = 380; NeedsDocker = $false }
+    'UnitTests'         = @{ Minimum = 941; NeedsDocker = $false }
     'ArchitectureTests' = @{ Minimum = 14; NeedsDocker = $false }
     'IntegrationTests'  = @{ Minimum = 180; NeedsDocker = $true }
 }
@@ -554,18 +565,134 @@ function Invoke-CodegenStage {
 }
 
 function Invoke-FrontendStage {
-    Write-Stage 'frontend' 'production builds of storefront and admin'
+    Write-Stage 'frontend' 'production builds of storefront and admin, then the performance budgets'
 
+    $built = $false
     try {
         $null = Invoke-Step -Label 'nx build' -Command 'npx' -WorkingDirectory $FrontendDir `
             -Arguments @('nx', 'run-many', '--target=build', '--projects=storefront,admin', '--configuration=production')
         Write-Ok 'both Angular apps build for production'
+        $built = $true
     }
     catch {
         Write-Fail 'an Angular production build failed'
     }
 
+    if ($built) {
+        # The budgets from 05-frontend-architecture.md section 3.4. They are checked here rather
+        # than through Angular's own `budgets` for one reason: the document states them GZIPPED and
+        # Angular measures RAW bytes, so a literal 180kb budget in project.json would fail a build
+        # that is comfortably inside the real limit. A budget that fires spuriously gets raised
+        # until it never fires, which is worse than no budget at all.
+        Test-BundleBudget -App 'storefront' -InitialKb 180 -RouteChunkKb 80
+        Test-BundleBudget -App 'admin' -InitialKb 300 -RouteChunkKb 120
+    }
+
     Write-StageEnd
+}
+
+<#
+.SYNOPSIS
+    Fails the build when an app's gzipped JavaScript exceeds its budget.
+.DESCRIPTION
+    "Initial" is what the browser must download before the first route can render: the scripts the
+    entry document references plus the chunks it preloads. Angular writes both into index.html --
+    <script src> for the entry points and <link rel="modulepreload"> for the shared chunks they
+    import -- so parsing that file is an exact answer rather than an approximation.
+
+    Everything else in the browser output is a route chunk, and each is measured on its own: the
+    sum does not matter, because no visitor downloads every route.
+.PARAMETER App
+    The Nx project name; its output is expected under dist/apps/<app>/browser.
+.PARAMETER InitialKb
+    The initial-bundle budget, in gzipped kilobytes.
+.PARAMETER RouteChunkKb
+    The per-route-chunk budget, in gzipped kilobytes.
+#>
+function Test-BundleBudget {
+    param(
+        [Parameter(Mandatory)] [string] $App,
+        [Parameter(Mandatory)] [int] $InitialKb,
+        [Parameter(Mandatory)] [int] $RouteChunkKb
+    )
+
+    $browserDir = Join-Path $FrontendDir "dist/apps/$App/browser"
+    # An SSR build writes index.csr.html (the client-side shell); a plain SPA build writes index.html.
+    $entryDocument = @('index.csr.html', 'index.html') |
+        ForEach-Object { Join-Path $browserDir $_ } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+
+    if (-not $entryDocument) {
+        Write-Fail "$App bundle budget: no entry document under $browserDir - the build output is not where it is expected."
+        return
+    }
+
+    $html = Get-Content -Raw -LiteralPath $entryDocument
+    $initialFiles = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($pattern in @('<script[^>]+src="([^"]+\.js)"', '<link[^>]+rel="modulepreload"[^>]+href="([^"]+\.js)"')) {
+        foreach ($match in [regex]::Matches($html, $pattern)) {
+            $null = $initialFiles.Add(($match.Groups[1].Value -replace '^/', ''))
+        }
+    }
+
+    if ($initialFiles.Count -eq 0) {
+        Write-Fail "$App bundle budget: no scripts found in $(Split-Path -Leaf $entryDocument) - the check would pass vacuously."
+        return
+    }
+
+    $initialBytes = 0
+    foreach ($file in $initialFiles) {
+        $initialBytes += Get-GzipSize (Join-Path $browserDir $file)
+    }
+
+    # Named so it cannot collide with the $InitialKb parameter: PowerShell variable names are
+    # case-insensitive, so $initialKb and $InitialKb are one variable, and the budget would be
+    # overwritten by the measurement -- a check that always passes and always looks right.
+    $measuredKb = [math]::Round($initialBytes / 1KB, 1)
+    if ($measuredKb -gt $InitialKb) {
+        Write-Fail "$App initial JavaScript is ${measuredKb} kB gzipped, over the ${InitialKb} kB budget (05-frontend-architecture.md 3.4)."
+    }
+    else {
+        Write-Ok "$App initial JavaScript ${measuredKb} kB gzipped (budget ${InitialKb} kB)"
+    }
+    $script:StageResults["$App initial JS"] = "$measuredKb kB gzipped"
+
+    $worstChunk = 0.0
+    $worstName = ''
+    foreach ($chunk in Get-ChildItem -LiteralPath $browserDir -Filter '*.js' -File) {
+        if ($initialFiles.Contains($chunk.Name)) { continue }
+        $chunkKb = [math]::Round((Get-GzipSize $chunk.FullName) / 1KB, 1)
+        if ($chunkKb -gt $worstChunk) {
+            $worstChunk = $chunkKb
+            $worstName = $chunk.Name
+        }
+        if ($chunkKb -gt $RouteChunkKb) {
+            Write-Fail "$App route chunk $($chunk.Name) is ${chunkKb} kB gzipped, over the ${RouteChunkKb} kB budget."
+        }
+    }
+
+    if ($worstName) {
+        Write-Ok "$App largest route chunk ${worstChunk} kB gzipped (budget ${RouteChunkKb} kB)"
+    }
+}
+
+<# Compresses a file in memory and answers the number of bytes it would be sent as. #>
+function Get-GzipSize {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return 0 }
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $buffer = [System.IO.MemoryStream]::new()
+    try {
+        $gzip = [System.IO.Compression.GZipStream]::new($buffer, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+        try { $gzip.Write($bytes, 0, $bytes.Length) } finally { $gzip.Dispose() }
+        return $buffer.Length
+    }
+    finally {
+        $buffer.Dispose()
+    }
 }
 
 function Invoke-PackageStage {

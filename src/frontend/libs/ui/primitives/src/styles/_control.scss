@@ -1,0 +1,110 @@
+// Text controls, as classes rather than as a component.
+//
+// The same reasoning as `_button.scss`: the element carries the meaning. A single-line answer is
+// an `<input>`, a long one is a `<textarea>`, a choice from a known list is a `<select>`, and a
+// component that rendered one of them would force the wrong element somewhere — usually a
+// contenteditable div, which no password manager, no autofill and no mobile keyboard understands.
+//
+// Declared once for the document instead of once per component that renders a form. The `khControl`
+// directive applies these classes; nothing else should use them directly.
+//
+// Every size here is the 44px touch floor from docs/10-design-system-placeholder.md §4. A form on a
+// 360px screen is the single place where an under-sized target costs a sale.
+
+.kh-control {
+  display: block;
+  inline-size: 100%;
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+
+  &::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  &:disabled {
+    background: var(--color-surface);
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  // Driven by `aria-invalid` rather than by a class, so the visual state and the state announced
+  // to a screen reader cannot drift apart.
+  &[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
+}
+
+// A number that is read as a number — an amount, a PIN code, an OTP — lines up under itself.
+.kh-control--numeric {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.kh-control--textarea {
+  min-block-size: calc(var(--touch-target-min) * 2);
+  resize: vertical;
+}
+
+// `<select>` keeps the platform's own control: the native picker on Android is a full-screen list
+// with type-ahead that no custom dropdown matches, and it costs nothing.
+select.kh-control {
+  padding-inline-end: var(--space-8);
+}
+
+// ---- Choices -----------------------------------------------------------------------------------
+// A radio or checkbox with a label beside it, sized so the whole row is the target rather than the
+// 16px box. Used for payment methods, delivery options, addresses and consent.
+
+.kh-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+
+  input {
+    flex: none;
+    margin: 0;
+    inline-size: var(--space-5);
+    block-size: var(--space-5);
+    accent-color: var(--color-primary);
+  }
+
+  &:has(input:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-primary-subtle);
+  }
+
+  &:has(input:disabled) {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  // The ring belongs on the row, not on the 16px box inside it.
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+// A choice with nothing but a label — a consent tick — does not need a card around it.
+.kh-choice--bare {
+  border-color: transparent;
+  background: none;
+  padding-inline: 0;
+
+  &:has(input:checked) {
+    border-color: transparent;
+    background: none;
+  }
+}

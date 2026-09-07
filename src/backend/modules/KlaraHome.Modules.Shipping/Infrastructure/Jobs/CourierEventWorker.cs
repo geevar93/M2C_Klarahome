@@ -102,9 +102,11 @@ internal sealed partial class CourierEventWorker : BackgroundService
         // the platform draining its own inbox — and a filtered query would drain only whichever
         // tenant the ambient context happened to name.
         var due = await context.CourierEvents
+            // xmin is named explicitly because it is a system column: SELECT * omits it, and the model maps
+            // it as this entity's concurrency token.
             .FromSql(
                 $"""
-                 SELECT * FROM shipping.courier_events
+                 SELECT *, xmin FROM shipping.courier_events
                  WHERE signature_valid
                    AND (status = 'Pending'
                         OR (status = 'Failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= {now}))

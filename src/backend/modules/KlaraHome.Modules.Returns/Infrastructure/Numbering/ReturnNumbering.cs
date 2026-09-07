@@ -162,9 +162,11 @@ internal sealed class ReturnNumbering(ReturnsDbContext context, IOptions<Returns
         var tenantId = context.TenantId;
 
         return await context.NumberSequences
+            // xmin is named explicitly because it is a system column: SELECT * omits it, and the model maps
+            // it as this entity's concurrency token.
             .FromSql(
                 $"""
-                 SELECT * FROM returns.number_sequences
+                 SELECT *, xmin FROM returns.number_sequences
                  WHERE tenant_id = {tenantId}
                    AND kind = {kind}
                    AND scope_key = {scopeKey}

@@ -22,7 +22,7 @@ namespace KlaraHome.Modules.Content.Application;
 /// <param name="NoIndex">Whether crawlers are asked to leave it out of the index.</param>
 /// <param name="NoFollow">Whether crawlers are asked not to follow its links.</param>
 /// <param name="SitemapPriority">How strongly it is offered to a crawler, 0 to 1.</param>
-public sealed record SeoBody(
+internal sealed record SeoBody(
     string? MetaTitle,
     string? MetaDescription,
     string? MetaKeywords,
@@ -50,7 +50,7 @@ public sealed record SeoBody(
 /// <param name="IsVisible">Whether it is rendered.</param>
 /// <param name="StartsAt">When it starts appearing.</param>
 /// <param name="EndsAt">When it stops.</param>
-public sealed record BlockBody(
+internal sealed record BlockBody(
     Guid? Id,
     string? Type,
     JsonElement Config,
@@ -74,7 +74,7 @@ public sealed record BlockBody(
 /// <param name="OpensInNewTab">Whether it opens in a new tab.</param>
 /// <param name="IconFileId">Its icon.</param>
 /// <param name="Badge">Its badge.</param>
-public sealed record MenuItemBody(
+internal sealed record MenuItemBody(
     Guid? Id,
     Guid? ParentId,
     string? Label,
@@ -91,7 +91,7 @@ public sealed record MenuItemBody(
 /// <param name="Key">The attribute code, for an attribute condition.</param>
 /// <param name="Operator">How it compares.</param>
 /// <param name="Values">What it compares against.</param>
-public sealed record RuleConditionBody(
+internal sealed record RuleConditionBody(
     string? Field,
     string? Key,
     string? Operator,
@@ -103,7 +103,7 @@ public sealed record RuleConditionBody(
 /// <param name="Sort">How the results are ordered.</param>
 /// <param name="Limit">The most products the rule may add.</param>
 /// <param name="IncludeOutOfStock">Whether products with nothing to sell are included.</param>
-public sealed record CollectionRuleBody(
+internal sealed record CollectionRuleBody(
     bool MatchAll,
     IReadOnlyList<RuleConditionBody>? Conditions,
     string? Sort,
@@ -113,4 +113,4 @@ public sealed record CollectionRuleBody(
 /// <summary>One product's place in a hand-picked collection, as a caller sends it.</summary>
 /// <param name="ProductId">The product.</param>
 /// <param name="IsPinned">Whether it is fixed where it is, through every refresh.</param>
-public sealed record CollectionItemBody(Guid ProductId, bool IsPinned);
+internal sealed record CollectionItemBody(Guid ProductId, bool IsPinned);

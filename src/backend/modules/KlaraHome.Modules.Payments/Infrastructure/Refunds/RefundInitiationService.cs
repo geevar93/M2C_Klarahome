@@ -103,7 +103,7 @@ internal sealed partial class RefundInitiationService(
             return Result.Failure<RefundInitiationResult>(sent.Error);
         }
 
-        Raised(logger, request.ReturnId, request.Amount, refund.Status.ToString());
+        Raised(logger, request.ReturnId, request.Amount, refund.Status);
 
         return Result.Success(Describe(refund));
     }
@@ -154,5 +154,5 @@ internal sealed partial class RefundInitiationService(
 
     [LoggerMessage(EventId = 1560, Level = LogLevel.Information,
         Message = "A refund of {Amount} was raised for return {ReturnId}. It is {Status}.")]
-    private static partial void Raised(ILogger logger, Guid? returnId, decimal amount, string status);
+    private static partial void Raised(ILogger logger, Guid? returnId, decimal amount, RefundStatus status);
 }

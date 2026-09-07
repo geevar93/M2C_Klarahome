@@ -107,9 +107,11 @@ internal sealed partial class GatewayEventWorker : BackgroundService
         // the platform draining its own inbox — and a filtered query would drain only whichever
         // tenant the ambient context happened to name.
         var due = await context.GatewayEvents
+            // xmin is named explicitly because it is a system column: SELECT * omits it, and the model maps
+            // it as this entity's concurrency token.
             .FromSql(
                 $"""
-                 SELECT * FROM payments.gateway_events
+                 SELECT *, xmin FROM payments.gateway_events
                  WHERE signature_valid
                    AND (status = 'Pending'
                         OR (status = 'Failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= {now}))

@@ -228,9 +228,9 @@ internal sealed class SyncPaymentCommandHandler(
         // webhook went missing.
         var fetched = string.IsNullOrWhiteSpace(payment.ProviderPaymentId)
             ? await FirstForOrderAsync(resolved.Value, payment, cancellationToken).ConfigureAwait(false)
-            : await resolved.Value
+            : Widen(await resolved.Value
                 .FetchPaymentAsync(payment.ProviderPaymentId, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(false));
 
         if (fetched.IsFailure)
         {
@@ -269,8 +269,16 @@ internal sealed class SyncPaymentCommandHandler(
         return listed.IsFailure
             ? Result.Failure<ProviderPayment?>(listed.Error)
             : Result.Success(listed.Value.FirstOrDefault(candidate => candidate.IsCaptured)
-                             ?? listed.Value.FirstOrDefault());
+                             ?? (listed.Value.Count > 0 ? listed.Value[0] : null));
     }
+
+    // FetchPaymentAsync answers a payment or an error; FirstForOrderAsync answers a payment, no
+    // payment, or an error. Widening the first onto the second's shape is what lets the two
+    // branches of the sync be read as one value.
+    private static Result<ProviderPayment?> Widen(Result<ProviderPayment> fetched)
+        => fetched.IsFailure
+            ? Result.Failure<ProviderPayment?>(fetched.Error)
+            : Result.Success<ProviderPayment?>(fetched.Value);
 
     internal static async Task<Payment?> LoadAsync(
         PaymentsDbContext context,

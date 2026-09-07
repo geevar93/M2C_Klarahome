@@ -63,14 +63,20 @@ internal sealed partial class StockReconciliationJob : BackgroundService
     /// compared against zero rather than dropped — a cached quantity with no movement behind it is
     /// precisely the drift worth catching.
     /// </summary>
+    /// <remarks>
+    /// The aliases are snake_case, not the property names. <c>SqlQuery</c> maps a result to the
+    /// model's <em>column</em> names, and this model applies the snake-case naming convention to
+    /// every entity type it builds — a query type included. Aliasing to <c>"CachedOnHand"</c>
+    /// produces a column EF then reports as missing under the name it was actually looking for.
+    /// </remarks>
     internal const string DriftQuery =
         """
-        SELECT  i.id             AS "StockItemId",
-                i.sku            AS "Sku",
-                i.quantity_on_hand   AS "CachedOnHand",
-                COALESCE(l.on_hand, 0)  AS "LedgerOnHand",
-                i.quantity_reserved  AS "CachedReserved",
-                COALESCE(l.reserved, 0) AS "LedgerReserved"
+        SELECT  i.id             AS "stock_item_id",
+                i.sku            AS "sku",
+                i.quantity_on_hand   AS "cached_on_hand",
+                COALESCE(l.on_hand, 0)  AS "ledger_on_hand",
+                i.quantity_reserved  AS "cached_reserved",
+                COALESCE(l.reserved, 0) AS "ledger_reserved"
         FROM inventory.stock_items i
         LEFT JOIN (
             SELECT stock_item_id,

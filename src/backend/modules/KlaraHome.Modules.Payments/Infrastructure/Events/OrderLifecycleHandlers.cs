@@ -40,7 +40,6 @@ namespace KlaraHome.Modules.Payments.Infrastructure.Events;
 /// <param name="orders">Reads the order's payment method and totals, over the contract.</param>
 /// <param name="workflow">Raises refunds, applying the maker-checker threshold.</param>
 /// <param name="refunds">Sends the ones that were approved on creation.</param>
-/// <param name="events">Announces the cash movements.</param>
 /// <param name="settings">Supplies the automatic-refund switch.</param>
 /// <param name="clock">The sanctioned clock.</param>
 /// <param name="logger">Reports what was opened and what was given back.</param>
@@ -49,7 +48,6 @@ internal sealed partial class OrderLifecycleHandlers(
     IOrderPaymentSync orders,
     PaymentWorkflow workflow,
     RefundDispatcher refunds,
-    PaymentsEventPublisher events,
     IStoreSettings settings,
     IClock clock,
     ILogger<OrderLifecycleHandlers> logger)
@@ -189,7 +187,7 @@ internal sealed partial class OrderLifecycleHandlers(
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        RefundRaised(logger, integrationEvent.SubOrderNumber, amount, raised.Value.Status.ToString());
+        RefundRaised(logger, integrationEvent.SubOrderNumber, amount, raised.Value.Status);
     }
 
     /// <summary>Stands down cash nobody is going to collect, because the parcel was cancelled.</summary>
@@ -261,7 +259,7 @@ internal sealed partial class OrderLifecycleHandlers(
         ILogger logger,
         string subOrderNumber,
         decimal amount,
-        string status);
+        RefundStatus status);
 
     [LoggerMessage(EventId = 1612, Level = LogLevel.Error,
         Message = "No refund was raised for cancelled sub-order {SubOrderNumber}: {Detail}")]

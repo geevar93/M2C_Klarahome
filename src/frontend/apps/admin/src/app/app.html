@@ -1,14 +1,12 @@
 <!--
-  The landmarks, and nothing else. Header, navigation and footer arrive at Step 23.
-  The skip link is first in the tab order on purpose: it is the only way a keyboard user reaches
-  the content without tabbing through the whole header that will eventually sit above it.
--->
-<a class="kh-skip-link" href="#main-content">Skip to main content</a>
+  The progress bar and the outlet, and nothing else.
 
+  Everything a signed-in user sees around a screen — the skip link, the navigation landmarks, the
+  `main` element, the toasts — lives in `kh-admin-shell`, which the routed `ShellLayout` renders.
+  Putting them here would wrap them around the sign-in page too.
+-->
 @if (loading()) {
 <div class="kh-progress" role="progressbar" aria-label="Loading" aria-busy="true"></div>
 }
 
-<main id="main-content" tabindex="-1">
-  <router-outlet />
-</main>
+<router-outlet />

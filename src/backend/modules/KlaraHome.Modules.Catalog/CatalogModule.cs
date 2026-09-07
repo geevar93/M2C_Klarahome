@@ -3,7 +3,9 @@ using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Storage;
+using KlaraHome.Modules.Catalog.Application.Import;
 using KlaraHome.Modules.Catalog.Application.Products;
+using KlaraHome.Modules.Catalog.Application.Storefront;
 using KlaraHome.Modules.Catalog.Endpoints;
 using KlaraHome.Modules.Catalog.Infrastructure;
 using KlaraHome.Modules.Catalog.Infrastructure.Directory;
@@ -68,6 +70,10 @@ public sealed class CatalogModule : IModule
         services.AddScoped<CatalogScope>();
         services.AddScoped<ProductReader>();
         services.AddScoped<ProductWriter>();
+        services.AddScoped<VariantWriter>();
+        services.AddScoped<ProductLifecycle>();
+        services.AddScoped<StorefrontCatalogService>();
+        services.AddScoped<CatalogJobProjection>();
         services.AddScoped<CatalogEventPublisher>();
         services.AddScoped<ProductImportRunner>();
 

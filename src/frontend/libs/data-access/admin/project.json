@@ -1,0 +1,18 @@
+{
+  "name": "data-access-admin",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/data-access/admin/src",
+  "prefix": "kh",
+  "projectType": "library",
+  "tags": ["type:data-access", "scope:shared"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/data-access/admin/jest.config.cts",
+        "tsConfig": "libs/data-access/admin/tsconfig.spec.json"
+      }
+    }
+  }
+}

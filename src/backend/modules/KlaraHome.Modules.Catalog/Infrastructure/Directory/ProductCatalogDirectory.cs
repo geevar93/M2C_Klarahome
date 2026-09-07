@@ -28,8 +28,7 @@ internal sealed class ProductCatalogDirectory(CatalogDbContext context) : IProdu
         Guid listingId,
         CancellationToken cancellationToken = default)
     {
-        var summary = await Query()
-            .Where(row => row.ListingId == listingId)
+        var summary = await Query(context.Listings.AsNoTracking().Where(listing => listing.Id == listingId))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -57,8 +56,7 @@ internal sealed class ProductCatalogDirectory(CatalogDbContext context) : IProdu
 
         var ids = listingIds.Distinct().ToList();
 
-        var rows = await Query()
-            .Where(row => ids.Contains(row.ListingId))
+        var rows = await Query(context.Listings.AsNoTracking().Where(listing => ids.Contains(listing.Id)))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -79,8 +77,14 @@ internal sealed class ProductCatalogDirectory(CatalogDbContext context) : IProdu
     /// and three separate booleans on the wire would be three chances to combine them differently.
     /// Whether there is any <em>stock</em> is Inventory's question, deliberately not this one.
     /// </remarks>
-    private IQueryable<ListingSummary> Query()
-        => from listing in context.Listings.AsNoTracking()
+    /// <remarks>
+    /// The caller passes the listings it wants rather than filtering the result, because a
+    /// predicate over <see cref="ListingSummary"/> is a predicate over a constructed record:
+    /// PostgreSQL cannot see inside one, so EF refuses to translate the query at all.
+    /// </remarks>
+    /// <param name="listings">The listings to project, already narrowed.</param>
+    private IQueryable<ListingSummary> Query(IQueryable<Listing> listings)
+        => from listing in listings
            join variant in context.Variants.AsNoTracking() on listing.VariantId equals variant.Id
            join product in context.Products.AsNoTracking() on listing.ProductId equals product.Id
            join category in context.Categories.AsNoTracking() on product.CategoryId equals category.Id

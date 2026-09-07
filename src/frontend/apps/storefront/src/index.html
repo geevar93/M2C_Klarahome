@@ -1,10 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-IN">
   <head>
     <meta charset="utf-8" />
-    <title>storefront</title>
+    <!--
+      The title here is only what a browser tab says before Angular has rendered; `SeoService`
+      replaces it on every route, on the server, so the HTML a crawler receives never carries it.
+    -->
+    <title>Klara Home</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Never `maximum-scale` or `user-scalable=no`: preventing zoom fails WCAG 1.4.4 outright, and
+      on a 360px screen pinch-zoom is how a lot of people read a specification table.
+    -->
+    <!-- `theme-color` is a brand decision and belongs to Step 30, along with the icon set. -->
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
   </head>
   <body>

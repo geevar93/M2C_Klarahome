@@ -123,9 +123,11 @@ internal sealed partial class AbandonedCartSweeper : BackgroundService
             // is the platform tidying up after itself — and a filtered query would sweep only
             // whichever tenant the ambient context happened to name.
             var stale = await context.Carts
+                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
+                // maps it as this entity's concurrency token.
                 .FromSql(
                     $"""
-                     SELECT * FROM carts.carts
+                     SELECT *, xmin FROM carts.carts
                      WHERE (status = 'Active' AND last_activity_at <= {abandonBefore})
                         OR (status = 'Abandoned' AND abandoned_at <= {retireBefore})
                         OR (status = 'Active' AND expires_at <= {now})
@@ -164,9 +166,11 @@ internal sealed partial class AbandonedCartSweeper : BackgroundService
             }
 
             var sessions = await context.CheckoutSessions
+                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
+                // maps it as this entity's concurrency token.
                 .FromSql(
                     $"""
-                     SELECT * FROM carts.checkout_sessions
+                     SELECT *, xmin FROM carts.checkout_sessions
                      WHERE status IN ('Draft', 'AddressSet', 'ShippingSet', 'PaymentSet')
                        AND expires_at <= {now}
                      ORDER BY expires_at

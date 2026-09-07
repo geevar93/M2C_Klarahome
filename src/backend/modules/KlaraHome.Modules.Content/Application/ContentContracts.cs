@@ -6,7 +6,7 @@ namespace KlaraHome.Modules.Content.Application;
 /// <param name="Name">The rendition key — <c>thumb</c>, <c>small</c>, <c>medium</c>, <c>large</c>.</param>
 /// <param name="Width">Target width in CSS pixels.</param>
 /// <param name="Url">A ready-to-use URL.</param>
-public sealed record ContentImageVariantResponse(string Name, int Width, string Url);
+internal sealed record ContentImageVariantResponse(string Name, int Width, string Url);
 
 /// <summary>
 /// An image a block, banner or card renders.
@@ -22,7 +22,7 @@ public sealed record ContentImageVariantResponse(string Name, int Width, string 
 /// <param name="Height">Pixel height, when it is a raster image.</param>
 /// <param name="Alt">The alt text, from whichever record referenced it.</param>
 /// <param name="Variants">Responsive renditions.</param>
-public sealed record ContentImageResponse(
+internal sealed record ContentImageResponse(
     Guid FileId,
     string? Url,
     int? Width,
@@ -42,7 +42,7 @@ public sealed record ContentImageResponse(
 /// <param name="NoIndex">Whether crawlers are asked to leave it out of the index.</param>
 /// <param name="NoFollow">Whether crawlers are asked not to follow its links.</param>
 /// <param name="SitemapPriority">How strongly it is offered to a crawler, 0 to 1.</param>
-public sealed record SeoResponse(
+internal sealed record SeoResponse(
     string? MetaTitle,
     string? MetaDescription,
     string? MetaKeywords,
@@ -62,7 +62,7 @@ public sealed record SeoResponse(
 /// <param name="IsList">Whether the value is an array.</param>
 /// <param name="MaxLength">The longest a text value may be, or the most items a list may hold.</param>
 /// <param name="Choices">The words accepted, for a choice field.</param>
-public sealed record BlockFieldResponse(
+internal sealed record BlockFieldResponse(
     string Name,
     string Kind,
     bool IsRequired,
@@ -85,7 +85,7 @@ public sealed record BlockFieldResponse(
 /// <param name="ItemFields">The fields of a repeated child, or null when it has none.</param>
 /// <param name="MaxItems">The most children it may hold.</param>
 /// <param name="IsPrivileged">Whether writing it needs the custom-HTML permission.</param>
-public sealed record BlockTypeResponse(
+internal sealed record BlockTypeResponse(
     string Type,
     string Label,
     string Description,
@@ -102,7 +102,7 @@ public sealed record BlockTypeResponse(
 /// <param name="IsVisible">Whether it is rendered.</param>
 /// <param name="StartsAt">When it starts appearing.</param>
 /// <param name="EndsAt">When it stops.</param>
-public sealed record BlockResponse(
+internal sealed record BlockResponse(
     Guid Id,
     string Type,
     int Position,
@@ -123,7 +123,7 @@ public sealed record BlockResponse(
 /// <param name="Version">How many versions have been snapshotted.</param>
 /// <param name="BlockCount">How many blocks it holds.</param>
 /// <param name="UpdatedAt">When the row last changed.</param>
-public sealed record PageSummaryResponse(
+internal sealed record PageSummaryResponse(
     Guid Id,
     string Slug,
     string Type,
@@ -158,7 +158,7 @@ public sealed record PageSummaryResponse(
 /// </param>
 /// <param name="CreatedAt">When it was opened.</param>
 /// <param name="UpdatedAt">When the row last changed.</param>
-public sealed record PageResponse(
+internal sealed record PageResponse(
     Guid Id,
     string Slug,
     string Type,
@@ -186,7 +186,7 @@ public sealed record PageResponse(
 /// <param name="BlockCount">How many blocks it holds.</param>
 /// <param name="CreatedAt">When it was taken.</param>
 /// <param name="CreatedBy">Who took it.</param>
-public sealed record PageVersionSummaryResponse(
+internal sealed record PageVersionSummaryResponse(
     int Version,
     string Title,
     string? Note,
@@ -204,7 +204,7 @@ public sealed record PageVersionSummaryResponse(
 /// <param name="RestoredFrom">The version restored, when it was a rollback.</param>
 /// <param name="CreatedAt">When it was taken.</param>
 /// <param name="CreatedBy">Who took it.</param>
-public sealed record PageVersionResponse(
+internal sealed record PageVersionResponse(
     int Version,
     string Title,
     SeoResponse Seo,
@@ -227,7 +227,7 @@ public sealed record PageVersionResponse(
 /// <param name="OpensInNewTab">Whether it opens in a new tab.</param>
 /// <param name="IconFileId">Its icon.</param>
 /// <param name="Badge">Its badge.</param>
-public sealed record MenuItemResponse(
+internal sealed record MenuItemResponse(
     Guid Id,
     Guid? ParentId,
     string Label,
@@ -249,7 +249,7 @@ public sealed record MenuItemResponse(
 /// <param name="IsActive">Whether it is served.</param>
 /// <param name="ItemCount">How many items it holds.</param>
 /// <param name="UpdatedAt">When it last changed.</param>
-public sealed record MenuSummaryResponse(
+internal sealed record MenuSummaryResponse(
     Guid Id,
     string Code,
     string Name,
@@ -267,7 +267,7 @@ public sealed record MenuSummaryResponse(
 /// <param name="Items">Its items, parents before their children.</param>
 /// <param name="CreatedAt">When it was opened.</param>
 /// <param name="UpdatedAt">When it last changed.</param>
-public sealed record MenuResponse(
+internal sealed record MenuResponse(
     Guid Id,
     string Code,
     string Name,
@@ -294,7 +294,7 @@ public sealed record MenuResponse(
 /// <param name="IsActive">Whether it is switched on.</param>
 /// <param name="IsLive">Whether it is being rendered right now.</param>
 /// <param name="UpdatedAt">When it last changed.</param>
-public sealed record BannerResponse(
+internal sealed record BannerResponse(
     Guid Id,
     string Name,
     string Placement,
@@ -317,7 +317,7 @@ public sealed record BannerResponse(
 /// <param name="Key">The attribute code, for an attribute condition.</param>
 /// <param name="Operator">How it compares.</param>
 /// <param name="Values">What it compares against.</param>
-public sealed record RuleConditionResponse(
+internal sealed record RuleConditionResponse(
     string Field,
     string? Key,
     string Operator,
@@ -329,7 +329,7 @@ public sealed record RuleConditionResponse(
 /// <param name="Sort">How the results are ordered.</param>
 /// <param name="Limit">The most products the rule may add.</param>
 /// <param name="IncludeOutOfStock">Whether products with nothing to sell are included.</param>
-public sealed record CollectionRuleResponse(
+internal sealed record CollectionRuleResponse(
     bool MatchAll,
     IReadOnlyList<RuleConditionResponse> Conditions,
     string Sort,
@@ -346,7 +346,7 @@ public sealed record CollectionRuleResponse(
 /// <param name="ItemCount">How many products are in it.</param>
 /// <param name="RefreshedAt">When the rule was last evaluated.</param>
 /// <param name="UpdatedAt">When it last changed.</param>
-public sealed record CollectionSummaryResponse(
+internal sealed record CollectionSummaryResponse(
     Guid Id,
     string Slug,
     string Name,
@@ -372,7 +372,7 @@ public sealed record CollectionSummaryResponse(
 /// <param name="RefreshedAt">When the rule was last evaluated.</param>
 /// <param name="CreatedAt">When it was opened.</param>
 /// <param name="UpdatedAt">When it last changed.</param>
-public sealed record CollectionResponse(
+internal sealed record CollectionResponse(
     Guid Id,
     string Slug,
     string Name,
@@ -411,7 +411,7 @@ public sealed record CollectionResponse(
 /// <param name="RatingCount">How many reviews that is over.</param>
 /// <param name="Image">Its primary image, resolved.</param>
 /// <param name="IsPurchasable">Whether it can be bought right now.</param>
-public sealed record ProductCardResponse(
+internal sealed record ProductCardResponse(
     Guid ProductId,
     Guid VariantId,
     Guid ListingId,
@@ -432,7 +432,7 @@ public sealed record ProductCardResponse(
 /// <param name="Name">Its name.</param>
 /// <param name="Slug">Its URL segment.</param>
 /// <param name="Image">Its tile image, resolved.</param>
-public sealed record CategoryTileResponse(
+internal sealed record CategoryTileResponse(
     Guid CategoryId,
     string Name,
     string Slug,
@@ -454,7 +454,7 @@ public sealed record CategoryTileResponse(
 /// <param name="Images">Every media file the block refers to, resolved.</param>
 /// <param name="Products">Every product it refers to, resolved, in the order it named them.</param>
 /// <param name="Categories">Every category it refers to, resolved.</param>
-public sealed record StoreBlockResponse(
+internal sealed record StoreBlockResponse(
     Guid Id,
     string Type,
     int Position,
@@ -476,7 +476,7 @@ public sealed record StoreBlockResponse(
 /// <param name="PublishedAt">When it first went live.</param>
 /// <param name="UpdatedAt">When its content last changed.</param>
 /// <param name="Blocks">Its blocks, in position order, windowed to this instant.</param>
-public sealed record StorePageResponse(
+internal sealed record StorePageResponse(
     Guid Id,
     string Slug,
     string Type,
@@ -498,7 +498,7 @@ public sealed record StorePageResponse(
 /// <param name="Tags">Its tags.</param>
 /// <param name="CoverImage">Its cover image, resolved.</param>
 /// <param name="PublishedAt">When it went live.</param>
-public sealed record BlogCardResponse(
+internal sealed record BlogCardResponse(
     string Slug,
     string Title,
     string? Summary,
@@ -517,7 +517,7 @@ public sealed record BlogCardResponse(
 /// <param name="Icon">Its icon, resolved.</param>
 /// <param name="Badge">Its badge.</param>
 /// <param name="Children">The items beneath it, in position order.</param>
-public sealed record StoreMenuItemResponse(
+internal sealed record StoreMenuItemResponse(
     string Label,
     string? Href,
     bool OpensInNewTab,
@@ -530,7 +530,7 @@ public sealed record StoreMenuItemResponse(
 /// <param name="Name">What an editor calls it.</param>
 /// <param name="Placement">Where it renders.</param>
 /// <param name="Items">Its top-level items, each carrying its own children.</param>
-public sealed record StoreMenuResponse(
+internal sealed record StoreMenuResponse(
     string Code,
     string Name,
     string? Placement,
@@ -546,7 +546,7 @@ public sealed record StoreMenuResponse(
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
 /// <param name="Priority">Which banner wins the placement, highest first.</param>
-public sealed record StoreBannerResponse(
+internal sealed record StoreBannerResponse(
     Guid Id,
     string Placement,
     ContentImageResponse? Image,
@@ -566,7 +566,7 @@ public sealed record StoreBannerResponse(
 /// <param name="ItemCount">How many products are in it altogether.</param>
 /// <param name="Products">This page of them, in the collection's own order.</param>
 /// <param name="NextCursor">The token for the next page, or null.</param>
-public sealed record StoreCollectionResponse(
+internal sealed record StoreCollectionResponse(
     string Slug,
     string Name,
     string? Description,
@@ -586,7 +586,7 @@ public sealed record StoreCollectionResponse(
 /// <param name="IsActive">Whether it is applied.</param>
 /// <param name="Note">Why it exists.</param>
 /// <param name="CreatedAt">When it was written.</param>
-public sealed record RedirectResponse(
+internal sealed record RedirectResponse(
     Guid Id,
     string FromPath,
     string? ToPath,
@@ -607,14 +607,14 @@ public sealed record RedirectResponse(
 /// </remarks>
 /// <param name="StatusCode">301, 302 or 410.</param>
 /// <param name="Location">Where to go, or null for a 410.</param>
-public sealed record RedirectResolutionResponse(int StatusCode, string? Location);
+internal sealed record RedirectResolutionResponse(int StatusCode, string? Location);
 
 /// <summary>One URL in a sitemap.</summary>
 /// <param name="Loc">The absolute URL.</param>
 /// <param name="LastModified">When the thing behind it last changed.</param>
 /// <param name="ChangeFrequency">How often it is expected to change.</param>
 /// <param name="Priority">How strongly it is offered, 0 to 1.</param>
-public sealed record SitemapUrlResponse(
+internal sealed record SitemapUrlResponse(
     string Loc,
     DateTimeOffset? LastModified,
     string ChangeFrequency,
@@ -624,7 +624,7 @@ public sealed record SitemapUrlResponse(
 /// <param name="Section">Which section — <c>pages</c>, <c>collections</c>, <c>categories</c>…</param>
 /// <param name="Page">Which page of it, one-based.</param>
 /// <param name="Urls">The URLs.</param>
-public sealed record SitemapPageResponse(string Section, int Page, IReadOnlyList<SitemapUrlResponse> Urls);
+internal sealed record SitemapPageResponse(string Section, int Page, IReadOnlyList<SitemapUrlResponse> Urls);
 
 /// <summary>One entry of the sitemap index.</summary>
 /// <param name="Section">Which section.</param>
@@ -632,7 +632,7 @@ public sealed record SitemapPageResponse(string Section, int Page, IReadOnlyList
 /// <param name="Loc">The absolute URL of that page's sitemap.</param>
 /// <param name="UrlCount">How many URLs it carries.</param>
 /// <param name="LastModified">The newest <c>lastmod</c> among them.</param>
-public sealed record SitemapIndexEntryResponse(
+internal sealed record SitemapIndexEntryResponse(
     string Section,
     int Page,
     string Loc,
@@ -649,7 +649,7 @@ public sealed record SitemapIndexEntryResponse(
 /// conditional fetches cheap.
 /// </remarks>
 /// <param name="Entries">The sitemaps.</param>
-public sealed record SitemapIndexResponse(IReadOnlyList<SitemapIndexEntryResponse> Entries);
+internal sealed record SitemapIndexResponse(IReadOnlyList<SitemapIndexEntryResponse> Entries);
 
 /// <summary>
 /// The structured-data graph for one page (schema.org, JSON-LD).
@@ -662,7 +662,7 @@ public sealed record SitemapIndexResponse(IReadOnlyList<SitemapIndexEntryRespons
 /// </remarks>
 /// <param name="Path">The path the graph describes.</param>
 /// <param name="Graph">The JSON-LD document, ready to be written into a script tag.</param>
-public sealed record StructuredDataResponse(string Path, JsonElement Graph);
+internal sealed record StructuredDataResponse(string Path, JsonElement Graph);
 
 /// <summary>The public SEO surface the storefront needs before it renders anything.</summary>
 /// <param name="CanonicalBaseUrl">The origin every absolute URL is built from.</param>
@@ -672,7 +672,7 @@ public sealed record StructuredDataResponse(string Path, JsonElement Graph);
 /// <param name="TwitterCardType">The card type to declare.</param>
 /// <param name="RobotsUrl">Where the robots document is served from.</param>
 /// <param name="SitemapUrl">Where the sitemap index is served from.</param>
-public sealed record SeoConfigResponse(
+internal sealed record SeoConfigResponse(
     string CanonicalBaseUrl,
     bool AllowIndexing,
     string TitleTemplate,

@@ -1,4 +1,5 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { CanMatchFn } from '@angular/router';
 
 import { RUNTIME_CONFIG } from './runtime-config';
 
@@ -37,3 +38,18 @@ export class FeatureFlags {
     this.flags.set({ ...flags });
   }
 }
+
+/**
+ * Keeps a route out of the router entirely while its flag is off.
+ *
+ * `CanMatch` rather than `CanActivate` on purpose: a route that cannot be matched is not
+ * navigated to and — the part that matters on a phone — **its lazy chunk is never requested**. A
+ * guard that activates and then redirects has already paid for the download.
+ *
+ * As with every guard on this platform, it decides what is rendered and not what is allowed: the
+ * API enforces the same flag on the endpoints behind the page.
+ */
+export const featureFlagGuard =
+  (key: string): CanMatchFn =>
+  (): boolean =>
+    inject(FeatureFlags).isEnabled(key);

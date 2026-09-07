@@ -178,7 +178,7 @@ internal sealed partial class GatewayEventProcessor(
             }
 
             var settled = listed.Value.FirstOrDefault(candidate => candidate.IsCaptured)
-                          ?? listed.Value.FirstOrDefault();
+                          ?? (listed.Value.Count > 0 ? listed.Value[0] : null);
 
             return settled is null
                 ? Result.Success()

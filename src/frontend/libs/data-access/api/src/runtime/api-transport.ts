@@ -37,7 +37,7 @@ export class ApiTransport {
   ): Observable<T> {
     return this.http.request<T>(method, url, {
       body: body ?? null,
-      params: toHttpParams(query),
+      params: toHttpParams(query, options?.params),
       headers: buildHeaders(options),
       context: toHttpContext(options),
       responseType: 'json',
@@ -64,18 +64,27 @@ function buildHeaders(options?: ApiRequestOptions): Record<string, string> | und
  * reads `?cursor=` as "an empty cursor", not "no cursor", and the two mean different pages.
  * An array becomes repeated keys, which is what ASP.NET Core binds a collection from.
  */
-function toHttpParams(query: QueryParameters | undefined): HttpParams | undefined {
-  if (!query) return undefined;
+function toHttpParams(
+  query: QueryParameters | undefined,
+  extra: QueryParameters | undefined,
+): HttpParams | undefined {
+  if (!query && !extra) return undefined;
+
   let params = new HttpParams();
-  for (const [key, value] of Object.entries(query as Record<string, unknown>)) {
-    if (value === null || value === undefined) continue;
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item !== null && item !== undefined) params = params.append(key, serialise(item));
+  // `extra` second, so a caller's explicit override wins over a generated default of the same
+  // name. In practice the two never collide — see `ApiRequestOptions.params` for why one exists.
+  for (const source of [query, extra]) {
+    if (!source) continue;
+    for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
+      if (value === null || value === undefined) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item !== null && item !== undefined) params = params.append(key, serialise(item));
+        }
+        continue;
       }
-      continue;
+      params = params.set(key, serialise(value));
     }
-    params = params.set(key, serialise(value));
   }
   return params.keys().length > 0 ? params : undefined;
 }

@@ -111,9 +111,11 @@ internal sealed partial class CatalogJobDispatcher : BackgroundService
             // job rather than blocking on this one, which is what makes horizontal scaling safe
             // without a distributed lock.
             var claimed = await context.Jobs
+                // xmin is named explicitly because it is a system column: SELECT * omits it, and the
+                // model maps it as this entity's concurrency token.
                 .FromSqlRaw(
                     $"""
-                     SELECT * FROM "{CatalogModule.SchemaName}"."catalog_jobs"
+                     SELECT *, xmin FROM "{CatalogModule.SchemaName}"."catalog_jobs"
                      WHERE status = 'Queued'
                      ORDER BY created_at
                      LIMIT 1
