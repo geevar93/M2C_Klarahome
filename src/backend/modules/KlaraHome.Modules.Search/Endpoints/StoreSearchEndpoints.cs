@@ -19,6 +19,50 @@ namespace KlaraHome.Modules.Search.Endpoints;
 internal sealed record SearchClickBody(string? QueryToken, int Position, Guid VariantId);
 
 /// <summary>
+/// The closed half of the faceted listing's query string.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Declared so the generated client can offer it as a typed query. The open half — the attribute
+/// facets, whose names are a merchandising decision — cannot be declared and is still read off the
+/// request by prefix. Half declared and half read is the honest shape here: the alternatives are
+/// declaring nothing, which is what left the storefront using the client's transport escape hatch,
+/// or pretending a merchandiser's vocabulary is known at compile time.
+/// </para>
+/// <para>
+/// The three identifier filters are strings rather than <see cref="Guid"/>s on purpose. They accept
+/// a repeated parameter or a comma-separated one, and a value that is not an identifier is dropped
+/// rather than refused — a filter URL somebody hand-edited should return a slightly wider result
+/// set, not a 400 on a page the shopper is already looking at.
+/// </para>
+/// </remarks>
+/// <param name="Q">The search text. Absent for a browse.</param>
+/// <param name="Category">One category id. Anything that is not an id is ignored.</param>
+/// <param name="Brand">Brand ids, repeated or comma-separated.</param>
+/// <param name="Vendor">Seller ids, repeated or comma-separated.</param>
+/// <param name="MinPrice">Lowest price to include, inclusive.</param>
+/// <param name="MaxPrice">Highest price to include, inclusive.</param>
+/// <param name="Rating">The minimum average rating — "4 and above".</param>
+/// <param name="Discount">The minimum discount percentage.</param>
+/// <param name="InStock">Whether to show only what can be bought right now.</param>
+/// <param name="Sort">One of the sorts the store declares. The default is relevance.</param>
+/// <param name="Cursor">Keyset cursor from the previous page. There are no page numbers.</param>
+/// <param name="Size">How many results to return.</param>
+internal sealed record ProductListingFilter(
+    string? Q,
+    string? Category,
+    string[]? Brand,
+    string[]? Vendor,
+    decimal? MinPrice,
+    decimal? MaxPrice,
+    decimal? Rating,
+    int? Discount,
+    bool? InStock,
+    string? Sort,
+    string? Cursor,
+    int? Size);
+
+/// <summary>
 /// What a shopper can search (docs/04-api-specification.md §3.2).
 /// </summary>
 /// <remarks>
@@ -32,7 +76,9 @@ internal sealed record SearchClickBody(string? QueryToken, int Position, Guid Va
 /// The attribute filters do not appear as named parameters, and cannot: they are
 /// <c>?attr.color=beige&amp;attr.size=m</c>, and which attributes exist is a merchandising decision
 /// rather than a compile-time one. They are read off the query string by prefix, which is the one
-/// place in this API where that is the right answer.
+/// place in this API where that is the right answer. Everything else <em>is</em> declared, in
+/// <see cref="ProductListingFilter"/>, so the generated client offers a typed query for the half
+/// that has a shape (Step 28B, deliverable 6).
 /// </para>
 /// <para>
 /// The click report is a <c>POST</c> that writes and answers 204. It is deliberately fire-and-forget
@@ -56,10 +102,13 @@ internal static class StoreSearchEndpoints
             .WithTags("Search")
             .RequireRateLimiting(RateLimitPolicies.StorefrontRead);
 
-        group.MapGet("/products", async (HttpContext context, IDispatcher dispatcher) =>
+        group.MapGet("/products", async (
+                [AsParameters] ProductListingFilter filter,
+                HttpContext context,
+                IDispatcher dispatcher) =>
             {
                 var result = await dispatcher
-                    .QueryAsync(ReadQuery(context), context.RequestAborted)
+                    .QueryAsync(ReadQuery(filter, context), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
@@ -111,17 +160,17 @@ internal static class StoreSearchEndpoints
     }
 
     /// <summary>
-    /// Reads the listing page's filters off the query string.
+    /// Joins the declared half of the query string to the undeclared one.
     /// </summary>
     /// <remarks>
-    /// Hand-read rather than bound with <c>[AsParameters]</c> because of the attribute filters. Their
-    /// names are data — a store that sells fabric has <c>attr.gsm</c> and one that sells lamps does
-    /// not — and no record type can declare a parameter whose name a merchandiser invents.
-    /// Everything else is read here too, rather than half-bound and half-read, so there is one place
-    /// that says what this endpoint accepts.
+    /// The attribute filters are hand-read because their names are data — a store that sells fabric
+    /// has <c>attr.gsm</c> and one that sells lamps does not — and no record type can declare a
+    /// parameter whose name a merchandiser invents. Everything else arrives bound, which is what
+    /// puts it in the contract and therefore in the generated client.
     /// </remarks>
-    /// <param name="context">The request.</param>
-    private static SearchProductsQuery ReadQuery(HttpContext context)
+    /// <param name="filter">The declared half, bound from the query string.</param>
+    /// <param name="context">The request, for the attribute half.</param>
+    private static SearchProductsQuery ReadQuery(ProductListingFilter filter, HttpContext context)
     {
         var query = context.Request.Query;
         var attributes = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
@@ -149,28 +198,33 @@ internal static class StoreSearchEndpoints
         }
 
         return new SearchProductsQuery(
-            query["q"],
-            Guid.TryParse(query["category"], out var category) ? category : null,
-            Guids(query["brand"]),
-            Guids(query["vendor"]),
-            Decimal(query["minPrice"]),
-            Decimal(query["maxPrice"]),
-            Decimal(query["rating"]),
-            Integer(query["discount"]),
-            Boolean(query["inStock"]),
+            filter.Q,
+            Guid.TryParse(filter.Category, out var category) ? category : null,
+            Guids(filter.Brand),
+            Guids(filter.Vendor),
+            filter.MinPrice,
+            filter.MaxPrice,
+            filter.Rating,
+            filter.Discount,
+            filter.InStock,
             attributes,
-            query["sort"],
-            query["cursor"],
-            Integer(query["size"]));
+            filter.Sort,
+            filter.Cursor,
+            filter.Size);
     }
 
     /// <summary>Reads a repeated or comma-separated list of identifiers.</summary>
-    /// <param name="values">The raw query-string values.</param>
-    private static List<Guid> Guids(Microsoft.Extensions.Primitives.StringValues values)
+    /// <remarks>
+    /// Both spellings a client might use: repeated parameters, and one parameter with commas.
+    /// Accepting only the first would make a filter URL that works in one HTTP client and not in
+    /// another, which is the sort of difference nobody finds until a customer reports it.
+    /// </remarks>
+    /// <param name="values">The bound query-string values.</param>
+    private static List<Guid> Guids(string[]? values)
     {
         var ids = new List<Guid>();
 
-        foreach (var value in values)
+        foreach (var value in values ?? [])
         {
             foreach (var candidate in (value ?? string.Empty)
                          .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -187,23 +241,4 @@ internal static class StoreSearchEndpoints
 
         return ids;
     }
-
-    /// <summary>Reads an optional decimal.</summary>
-    /// <param name="value">The raw query-string value.</param>
-    private static decimal? Decimal(string? value)
-        => decimal.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
-
-    /// <summary>Reads an optional integer.</summary>
-    /// <param name="value">The raw query-string value.</param>
-    private static int? Integer(string? value)
-        => int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
-
-    /// <summary>Reads an optional boolean.</summary>
-    /// <param name="value">The raw query-string value.</param>
-    private static bool? Boolean(string? value)
-        => bool.TryParse(value, out var parsed) ? parsed : null;
 }

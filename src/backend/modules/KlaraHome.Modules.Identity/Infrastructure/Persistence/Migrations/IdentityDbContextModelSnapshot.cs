@@ -928,6 +928,19 @@ namespace KlaraHome.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("device");
 
+                    b.Property<Guid?>("ImpersonatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("impersonated_by_user_id");
+
+                    b.Property<DateTimeOffset?>("ImpersonationExpiresAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("impersonation_expires_at");
+
+                    b.Property<string>("ImpersonationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("impersonation_reason");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)")
@@ -967,6 +980,10 @@ namespace KlaraHome.Modules.Identity.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_user_sessions");
 
+                    b.HasIndex("ImpersonatedByUserId")
+                        .HasDatabaseName("ix_user_sessions_impersonated_by_user_id")
+                        .HasFilter("impersonated_by_user_id IS NOT NULL");
+
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_user_sessions_tenant_id");
 
@@ -976,7 +993,7 @@ namespace KlaraHome.Modules.Identity.Infrastructure.Persistence.Migrations
 
                     b.ToTable("user_sessions", "identity", t =>
                         {
-                            t.HasCheckConstraint("ck_user_sessions_revoked_reason", "revoked_reason IS NULL OR revoked_reason IN ('SignedOut', 'SignedOutEverywhere', 'TokenReuseDetected', 'CredentialChanged', 'AccountClosed')");
+                            t.HasCheckConstraint("ck_user_sessions_revoked_reason", "revoked_reason IS NULL OR revoked_reason IN ('SignedOut', 'SignedOutEverywhere', 'TokenReuseDetected', 'CredentialChanged', 'AccountClosed', 'ImpersonationEnded')");
                         });
                 });
 

@@ -1,5 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { InventoryAdminService, WarehouseFilters, WarehouseResponse } from '@klarahome/data-access-admin';
+import { toSignal } from '@angular/core/rxjs-interop';
+import {
+  InventoryAdminService,
+  ReferenceDataService,
+  WarehouseFilters,
+  WarehouseResponse,
+} from '@klarahome/data-access-admin';
 import {
   CellTemplate,
   ConfirmDialog,
@@ -194,20 +200,19 @@ import { describeError, fieldErrors } from '../../core/describe-error';
               />
             </kh-field>
 
-            <kh-field
-              label="State"
-              for="warehouse-state"
-              hint="The state's own identifier, from the platform's reference data."
-              [error]="form.fields.stateId.error()"
-            >
-              <input
+            <kh-field label="State" for="warehouse-state" [error]="form.fields.stateId.error()">
+              <select
                 khControl
                 id="warehouse-state"
-                type="text"
                 [value]="form.fields.stateId.value()"
-                (input)="form.fields.stateId.set($any($event.target).value)"
-                (touched)="form.fields.stateId.markTouched()"
-              />
+                (change)="form.fields.stateId.set($any($event.target).value)"
+                (blur)="form.fields.stateId.markTouched()"
+              >
+                <option value="">Choose a state…</option>
+                @for (state of states(); track state.id) {
+                  <option [value]="state.id">{{ state.name }} ({{ state.code }})</option>
+                }
+              </select>
             </kh-field>
           </div>
 
@@ -319,6 +324,15 @@ import { describeError, fieldErrors } from '../../core/describe-error';
 export class WarehousesPage {
   private readonly inventory = inject(InventoryAdminService);
   private readonly toasts = inject(ToastService);
+
+  /**
+   * The platform's states, for the picker.
+   *
+   * A list rather than a typed identifier since Step 28B (deliverable 3): a warehouse's state is
+   * what every shipping rate out of it is computed from, and asking an operator to type a UUID for
+   * it was a way to get it wrong silently.
+   */
+  protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
 
   protected readonly list = this.inventory.warehouses();
   protected readonly values = signal<FilterValues>({});

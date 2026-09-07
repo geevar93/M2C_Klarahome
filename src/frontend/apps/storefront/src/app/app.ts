@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, ResolveEnd, Router, RouterOutlet } from '@angular/router';
 import {
+  AnnouncementBar,
   Breadcrumbs,
   MiniCart,
   MobileNavDrawer,
@@ -44,6 +45,7 @@ import { ShellStore } from './core/shell.store';
 @Component({
   selector: 'kh-root',
   imports: [
+    AnnouncementBar,
     Breadcrumbs,
     Container,
     MiniCart,

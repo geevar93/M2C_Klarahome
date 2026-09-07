@@ -653,9 +653,9 @@ export class ShipmentsPage {
   protected printLabel(parcel: ShipmentResponse): void {
     this.busy.set(true);
     this.documents.shipmentLabel(parcel.id).subscribe({
-      next: (blob) => {
+      next: (label) => {
         this.busy.set(false);
-        if (!this.documents.openInNewTab(blob)) {
+        if (!this.documents.openUrl(label.url)) {
           this.actionError.set('The label opened in a tab the browser blocked. Allow pop-ups and try again.');
         }
       },

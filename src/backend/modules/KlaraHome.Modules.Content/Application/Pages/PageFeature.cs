@@ -19,7 +19,12 @@ namespace KlaraHome.Modules.Content.Application.Pages;
 /// <param name="Status">Only pages in one state.</param>
 /// <param name="Cursor">Keyset cursor from a previous page.</param>
 /// <param name="Size">How many to return.</param>
-internal sealed record ListPagesQuery(string? Search, string? Type, string? Status, string? Cursor, int? Size)
+internal sealed record ListPagesQuery(
+    string? Search,
+    PageType? Type,
+    PageStatus? Status,
+    string? Cursor,
+    int? Size)
     : IQuery<PagedResult<PageSummaryResponse>>;
 
 /// <summary>Reads one page, blocks and all.</summary>
@@ -34,7 +39,7 @@ internal sealed record GetBlockTypesQuery : IQuery<IReadOnlyList<BlockTypeRespon
 /// <param name="Type">What it is for.</param>
 /// <param name="Title">Its title.</param>
 /// <param name="Summary">Its summary.</param>
-internal sealed record CreatePageCommand(string? Slug, string? Type, string? Title, string? Summary)
+internal sealed record CreatePageCommand(string? Slug, PageType Type, string? Title, string? Summary)
     : ICommand<PageResponse>;
 
 /// <summary>Rewrites a page: its details, its SEO block and its blocks.</summary>
@@ -74,10 +79,9 @@ internal sealed class CreatePageCommandValidator : AbstractValidator<CreatePageC
         RuleFor(command => command.Slug).MaximumLength(ContentPage.MaxSlugLength);
         RuleFor(command => command.Summary).MaximumLength(ContentPage.MaxSummaryLength);
 
-        RuleFor(command => command.Type)
-            .NotEmpty()
-            .Must(type => Enum.TryParse<PageType>(type, ignoreCase: true, out _))
-            .WithMessage($"A page type must be one of: {string.Join(", ", Enum.GetNames<PageType>())}.");
+        // A real enum in the contract, so an unknown word is refused by the model binder before a
+        // validator sees it and the generated client cannot send one (Step 28B, deliverable 11).
+        RuleFor(command => command.Type).IsInEnum();
     }
 }
 
@@ -138,12 +142,12 @@ internal sealed class ListPagesQueryHandler(ContentDbContext context)
                 || EF.Functions.ILike(page.Slug, pattern, "\\"));
         }
 
-        if (Enum.TryParse<PageType>(query.Type, ignoreCase: true, out var type))
+        if (query.Type is { } type)
         {
             rows = rows.Where(page => page.Type == type);
         }
 
-        if (Enum.TryParse<PageStatus>(query.Status, ignoreCase: true, out var status))
+        if (query.Status is { } status)
         {
             rows = rows.Where(page => page.Status == status);
         }
@@ -245,8 +249,6 @@ internal sealed class CreatePageCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var type = Enum.Parse<PageType>(command.Type!, ignoreCase: true);
-
         var slug = string.IsNullOrWhiteSpace(command.Slug)
             ? ContentFormats.ToSlug(command.Title!, ContentPage.MaxSlugLength)
             : ContentFormats.ToSlug(command.Slug, ContentPage.MaxSlugLength);
@@ -261,7 +263,7 @@ internal sealed class CreatePageCommandHandler(
             return Result.Failure<PageResponse>(ContentErrors.DuplicateSlug(slug));
         }
 
-        var page = ContentPage.Create(slug, type, command.Title!.Trim());
+        var page = ContentPage.Create(slug, command.Type, command.Title!.Trim());
 
         page.Describe(
             slug,

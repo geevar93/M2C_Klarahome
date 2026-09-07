@@ -1,4 +1,3 @@
-using System.Text;
 using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Errors;
 using KlaraHome.Infrastructure.Http;
@@ -18,6 +17,14 @@ namespace KlaraHome.Modules.Catalog.Endpoints;
 /// <param name="Cursor">Opaque token from the previous page.</param>
 /// <param name="Size">Page size.</param>
 internal sealed record CatalogJobListFilter(string? Cursor, int? Size);
+
+/// <summary>The shape a product import file must have.</summary>
+/// <param name="FileName">What to call the file the back office writes from this.</param>
+/// <param name="Columns">
+/// Every column the importer reads, in the order it expects them. This is the same list the
+/// exporter writes, so a file exported from the catalogue can be edited and imported back.
+/// </param>
+internal sealed record ProductImportTemplateResponse(string FileName, IReadOnlyList<string> Columns);
 
 /// <summary>
 /// Bulk import and export, and the job report that follows them
@@ -63,18 +70,23 @@ internal static class AdminCatalogJobEndpoints
             .RequireRateLimiting(RateLimitPolicies.AdminWrite)
             .Produces<CatalogJobResponse>(StatusCodes.Status202Accepted);
 
-        products.MapGet("/import-template", (HttpContext context) =>
-            {
+        products.MapGet("/import-template", () =>
                 // The header row on its own. A merchandiser starting from the real column list makes
-                // fewer mistakes than one starting from the documentation, and this is the file the
-                // exporter and the importer both agree on.
-                var csv = Csv.Write([[.. ImportColumns.All]]);
-
-                return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", "import-template.csv");
-            })
+                // fewer mistakes than one starting from the documentation, and these are the columns
+                // the exporter and the importer both agree on.
+                //
+                // The columns rather than the file. It used to stream CSV bytes behind the bearer
+                // token, which a plain link cannot carry — the access token lives in memory only —
+                // so the back office fetched it as a blob through a bypass of its own generated
+                // client. A template with no data in it is a *shape*, and answering with the shape
+                // lets the screen both write the file and show the columns (Step 28B, deliverable 7).
+                Results.Ok(new ProductImportTemplateResponse(
+                    "import-template.csv",
+                    [.. ImportColumns.All])))
             .WithName("adminProductImportTemplate")
-            .WithSummary("Downloads an empty import file with the correct column headers.")
-            .RequirePermission(CatalogPermissions.ImportRun);
+            .WithSummary("The column headers a product import must be shaped like, in order.")
+            .RequirePermission(CatalogPermissions.ImportRun)
+            .Produces<ProductImportTemplateResponse>();
 
         var jobs = admin.MapGroup("/jobs").WithTags("Catalog");
 

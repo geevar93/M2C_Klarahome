@@ -23,7 +23,7 @@ namespace KlaraHome.Modules.Vendors.Infrastructure.Payments;
 /// </para>
 /// </remarks>
 /// <param name="context">The Vendors data context.</param>
-/// <param name="accounts">The gateway seam. A no-op until Step 18.</param>
+/// <param name="accounts">The gateway seam: Route where it is configured, a no-op where it is not.</param>
 /// <param name="protector">Decrypts the account number for the one call that needs it.</param>
 /// <param name="logger">Reports a failure that must not become an exception.</param>
 internal sealed partial class VendorPayoutProvisioner(
@@ -80,6 +80,7 @@ internal sealed partial class VendorPayoutProvisioner(
                         vendor.Id,
                         vendor.LegalName,
                         vendor.DisplayName,
+                        vendor.BusinessType,
                         vendor.SupportEmail,
                         vendor.SupportPhone,
                         vendor.Pan,

@@ -64,6 +64,7 @@ namespace KlaraHome.Modules.Orders.Infrastructure.Placement;
 /// <param name="promotions">Commits the coupon the quote applied.</param>
 /// <param name="wallet">Spends the store credit the quote clamped.</param>
 /// <param name="stock">Commits the units held against the cart.</param>
+/// <param name="allocations">Reads which warehouse each held line came out of, to freeze on the line.</param>
 /// <param name="reference">Resolves the GST state code of the place of supply.</param>
 /// <param name="payments">Opens the collection. Refuses politely until Step 15.</param>
 /// <param name="events">Announces the order.</param>
@@ -78,6 +79,7 @@ internal sealed class OrderPlacementService(
     IPromotionLedger promotions,
     IStoreCredit wallet,
     IStockAvailability stock,
+    IStockAllocation allocations,
     IReferenceData reference,
     IPaymentInitiation payments,
     OrdersEventPublisher events,
@@ -131,6 +133,19 @@ internal sealed class OrderPlacementService(
             : await reference.StateCodeAsync(request.BillingAddress.StateId, cancellationToken)
                 .ConfigureAwait(false);
 
+        // Where the held units are, read before the commit settles the holds. It is frozen onto each
+        // line because it is a fact about the order: holds are swept, and "which shelf did this
+        // parcel come off" has to survive that. A single-warehouse deployment records the same id
+        // on every line and nothing downstream notices; a second warehouse is what makes a pick
+        // list wrong for both pickers without it (Step 28B, deliverable 12).
+        var allocated = await allocations
+            .GetAllocationsAsync(ReservationReferenceTypes.Cart, request.CartId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var warehouses = allocated
+            .GroupBy(allocation => allocation.ListingId)
+            .ToDictionary(group => group.Key, group => group.First().WarehouseId);
+
         var now = clock.UtcNow;
         var isCod = request.PaymentMethod == QuotePaymentMethod.CashOnDelivery;
 
@@ -145,7 +160,16 @@ internal sealed class OrderPlacementService(
 
             var orderNumber = await numbering.NextOrderNumberAsync(now, cancellationToken).ConfigureAwait(false);
 
-            var order = Build(request, customer, sellers, listings, orderNumber, shippingStateCode, billingStateCode, now);
+            var order = Build(
+                request,
+                customer,
+                sellers,
+                listings,
+                warehouses,
+                orderNumber,
+                shippingStateCode,
+                billingStateCode,
+                now);
 
             await ResolveCommissionsAsync(order, listings, cancellationToken).ConfigureAwait(false);
 
@@ -247,6 +271,7 @@ internal sealed class OrderPlacementService(
         CustomerSummary customer,
         IReadOnlyDictionary<Guid, VendorSummary> sellers,
         IReadOnlyDictionary<Guid, ListingSummary> listings,
+        IReadOnlyDictionary<Guid, Guid> warehouses,
         string orderNumber,
         string? shippingStateCode,
         string? billingStateCode,
@@ -342,7 +367,7 @@ internal sealed class OrderPlacementService(
                     continue;
                 }
 
-                subOrder.AddLine(BuildLine(subOrder, quoted, listings));
+                subOrder.AddLine(BuildLine(subOrder, quoted, listings, warehouses));
             }
 
             order.AddSubOrder(subOrder);
@@ -355,7 +380,8 @@ internal sealed class OrderPlacementService(
     private static OrderLine BuildLine(
         SubOrder subOrder,
         QuoteLine quoted,
-        IReadOnlyDictionary<Guid, ListingSummary> listings)
+        IReadOnlyDictionary<Guid, ListingSummary> listings,
+        IReadOnlyDictionary<Guid, Guid> warehouses)
     {
         var line = OrderLine.Create(
             subOrder.Id,
@@ -365,6 +391,9 @@ internal sealed class OrderPlacementService(
             quoted.Quantity);
 
         listings.TryGetValue(quoted.ListingId, out var listing);
+
+        line.AllocateFrom(
+            warehouses.TryGetValue(quoted.ListingId, out var warehouseId) ? warehouseId : null);
 
         line.Capture(
             listing?.VariantId ?? Guid.Empty,

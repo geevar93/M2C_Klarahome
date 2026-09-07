@@ -1,8 +1,10 @@
 using FluentValidation;
 using KlaraHome.Contracts.Platform;
+using KlaraHome.Contracts.Pricing;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Modules.Pricing.Domain;
+using KlaraHome.Modules.Pricing.Infrastructure.Calculation;
 using KlaraHome.Modules.Pricing.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Results;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +34,11 @@ internal sealed record PromotionTierPayload(decimal MinAmount, decimal Value);
 /// <summary>What a basket must satisfy, as the API states it.</summary>
 /// <param name="MinQuantity">The fewest matching units a basket must hold.</param>
 /// <param name="FirstOrderOnly">Whether only a shopper's first order qualifies.</param>
-/// <param name="PaymentMethods">Payment methods it is limited to. Empty means any.</param>
+/// <param name="PaymentMethods">
+/// Payment methods it is limited to. Empty means any. A real enum in the contract, so a condition
+/// cannot be written with a spelling the evaluator will never match — which was the quietest of the
+/// failures the client-side vocabulary existed to make less likely (Step 28B, deliverable 11).
+/// </param>
 /// <param name="MaxQuantityPerOrder">The most matching units one order may be discounted on.</param>
 /// <param name="BuyQuantity">Buy-X-get-Y: how many units must be bought.</param>
 /// <param name="GetQuantity">Buy-X-get-Y: how many units are earned per set.</param>
@@ -44,7 +50,7 @@ internal sealed record PromotionTierPayload(decimal MinAmount, decimal Value);
 internal sealed record PromotionConditionsPayload(
     int? MinQuantity,
     bool? FirstOrderOnly,
-    IReadOnlyList<string>? PaymentMethods,
+    IReadOnlyList<QuotePaymentMethod>? PaymentMethods,
     int? MaxQuantityPerOrder,
     int? BuyQuantity,
     int? GetQuantity,
@@ -80,12 +86,12 @@ internal sealed record PromotionResponse(
     string? Code,
     string Name,
     string? Description,
-    string Type,
-    string AppliesTo,
+    PromotionType Type,
+    PromotionApplication AppliesTo,
     decimal Value,
     PromotionScopePayload Scope,
     PromotionConditionsPayload Conditions,
-    string Stacking,
+    StackingMode Stacking,
     int Priority,
     DateTimeOffset StartsAt,
     DateTimeOffset? EndsAt,
@@ -126,7 +132,7 @@ internal sealed record PromotionRedemptionResponse(
 /// <param name="Cursor">Opaque page token.</param>
 /// <param name="Size">Page size.</param>
 internal sealed record ListPromotionsQuery(
-    string? Type,
+    PromotionType? Type,
     string? Code,
     bool? ActiveOnly,
     string? Search,
@@ -166,12 +172,12 @@ internal sealed record CreatePromotionCommand(
     string? Code,
     string Name,
     string? Description,
-    string Type,
-    string AppliesTo,
+    PromotionType Type,
+    PromotionApplication AppliesTo,
     decimal Value,
     PromotionScopePayload? Scope,
     PromotionConditionsPayload? Conditions,
-    string Stacking,
+    StackingMode Stacking,
     int Priority,
     DateTimeOffset StartsAt,
     DateTimeOffset? EndsAt,
@@ -201,12 +207,12 @@ internal sealed record UpdatePromotionCommand(
     Guid PromotionId,
     string Name,
     string? Description,
-    string Type,
-    string AppliesTo,
+    PromotionType Type,
+    PromotionApplication AppliesTo,
     decimal Value,
     PromotionScopePayload? Scope,
     PromotionConditionsPayload? Conditions,
-    string Stacking,
+    StackingMode Stacking,
     int Priority,
     DateTimeOffset StartsAt,
     DateTimeOffset? EndsAt,
@@ -224,58 +230,6 @@ internal sealed record SetPromotionActiveCommand(Guid PromotionId, bool IsActive
 /// <param name="PromotionId">The promotion.</param>
 internal sealed record DeletePromotionCommand(Guid PromotionId) : ICommand;
 
-/// <summary>The enum names the promotion API accepts.</summary>
-internal static class PromotionEnums
-{
-    /// <summary>Whether a type name is one this platform understands.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static bool IsKnownType(string? value) => Enum.TryParse<PromotionType>(value, ignoreCase: true, out _);
-
-    /// <summary>Whether an application name is one this platform understands.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static bool IsKnownApplication(string? value)
-        => Enum.TryParse<PromotionApplication>(value, ignoreCase: true, out _);
-
-    /// <summary>Whether a stacking name is one this platform understands.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static bool IsKnownStacking(string? value) => Enum.TryParse<StackingMode>(value, ignoreCase: true, out _);
-
-    /// <summary>Parses a type, defaulting to a percentage.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static PromotionType ParseType(string? value)
-        => Enum.TryParse<PromotionType>(value, ignoreCase: true, out var parsed) ? parsed : PromotionType.Percentage;
-
-    /// <summary>Parses an application, defaulting to the order.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static PromotionApplication ParseApplication(string? value)
-        => Enum.TryParse<PromotionApplication>(value, ignoreCase: true, out var parsed)
-            ? parsed
-            : PromotionApplication.Order;
-
-    /// <summary>
-    /// Parses a stacking mode, defaulting to exclusive.
-    /// </summary>
-    /// <remarks>
-    /// Exclusive is the safe default and the deliberate one: a promotion that stacks by accident
-    /// costs money on every order it touches, and a promotion that fails to stack costs a support
-    /// conversation.
-    /// </remarks>
-    /// <param name="value">What the caller sent.</param>
-    public static StackingMode ParseStacking(string? value)
-        => Enum.TryParse<StackingMode>(value, ignoreCase: true, out var parsed) ? parsed : StackingMode.Exclusive;
-
-    /// <summary>The validation message for a type.</summary>
-    public static string TypeMessage { get; } =
-        "Type must be one of: " + string.Join(", ", Enum.GetNames<PromotionType>());
-
-    /// <summary>The validation message for an application.</summary>
-    public static string ApplicationMessage { get; } =
-        "AppliesTo must be one of: " + string.Join(", ", Enum.GetNames<PromotionApplication>());
-
-    /// <summary>The validation message for a stacking mode.</summary>
-    public static string StackingMessage { get; } =
-        "Stacking must be one of: " + string.Join(", ", Enum.GetNames<StackingMode>());
-}
 
 /// <summary>Rejects a promotion that could never work.</summary>
 /// <remarks>
@@ -292,18 +246,18 @@ internal sealed class CreatePromotionValidator : AbstractValidator<CreatePromoti
             .When(command => !string.IsNullOrWhiteSpace(command.Code));
         RuleFor(command => command.Name).NotEmpty().MaximumLength(160);
         RuleFor(command => command.Description).MaximumLength(1000);
-        RuleFor(command => command.Type).NotEmpty().Must(PromotionEnums.IsKnownType)
-            .WithMessage(PromotionEnums.TypeMessage);
-        RuleFor(command => command.AppliesTo).NotEmpty().Must(PromotionEnums.IsKnownApplication)
-            .WithMessage(PromotionEnums.ApplicationMessage);
-        RuleFor(command => command.Stacking).NotEmpty().Must(PromotionEnums.IsKnownStacking)
-            .WithMessage(PromotionEnums.StackingMessage);
+        // No "is this a known type" rule: the three of them are enums in the contract now, so an
+        // unknown word is refused by the model binder before a validator sees it, and the generated
+        // client cannot send one at all (Step 28B, deliverable 11).
+        RuleFor(command => command.Type).IsInEnum();
+        RuleFor(command => command.AppliesTo).IsInEnum();
+        RuleFor(command => command.Stacking).IsInEnum();
         RuleFor(command => command.Priority).InclusiveBetween(0, Promotion.MaxPriority);
         RuleFor(command => command.Value).GreaterThanOrEqualTo(0m);
         RuleFor(command => command.MinOrderValue).GreaterThanOrEqualTo(0m);
 
         RuleFor(command => command.Value).LessThanOrEqualTo(100m)
-            .When(command => string.Equals(command.Type, nameof(PromotionType.Percentage), StringComparison.OrdinalIgnoreCase))
+            .When(command => command.Type == PromotionType.Percentage)
             .WithMessage("A percentage promotion cannot take off more than 100%.");
 
         RuleFor(command => command.EndsAt).GreaterThan(command => command.StartsAt)
@@ -311,11 +265,11 @@ internal sealed class CreatePromotionValidator : AbstractValidator<CreatePromoti
             .WithMessage("A promotion cannot close before it opens.");
 
         RuleFor(command => command.Conditions!.BundleListingIds).NotEmpty()
-            .When(command => string.Equals(command.Type, nameof(PromotionType.Bundle), StringComparison.OrdinalIgnoreCase))
+            .When(command => command.Type == PromotionType.Bundle)
             .WithMessage("A bundle needs the offers it is made of.");
 
         RuleFor(command => command.Conditions!.Tiers).NotEmpty()
-            .When(command => string.Equals(command.Type, nameof(PromotionType.Tiered), StringComparison.OrdinalIgnoreCase))
+            .When(command => command.Type == PromotionType.Tiered)
             .WithMessage("A tiered promotion needs at least one step.");
     }
 }
@@ -328,18 +282,18 @@ internal sealed class UpdatePromotionValidator : AbstractValidator<UpdatePromoti
         RuleFor(command => command.PromotionId).NotEmpty();
         RuleFor(command => command.Name).NotEmpty().MaximumLength(160);
         RuleFor(command => command.Description).MaximumLength(1000);
-        RuleFor(command => command.Type).NotEmpty().Must(PromotionEnums.IsKnownType)
-            .WithMessage(PromotionEnums.TypeMessage);
-        RuleFor(command => command.AppliesTo).NotEmpty().Must(PromotionEnums.IsKnownApplication)
-            .WithMessage(PromotionEnums.ApplicationMessage);
-        RuleFor(command => command.Stacking).NotEmpty().Must(PromotionEnums.IsKnownStacking)
-            .WithMessage(PromotionEnums.StackingMessage);
+        // No "is this a known type" rule: the three of them are enums in the contract now, so an
+        // unknown word is refused by the model binder before a validator sees it, and the generated
+        // client cannot send one at all (Step 28B, deliverable 11).
+        RuleFor(command => command.Type).IsInEnum();
+        RuleFor(command => command.AppliesTo).IsInEnum();
+        RuleFor(command => command.Stacking).IsInEnum();
         RuleFor(command => command.Priority).InclusiveBetween(0, Promotion.MaxPriority);
         RuleFor(command => command.Value).GreaterThanOrEqualTo(0m);
         RuleFor(command => command.MinOrderValue).GreaterThanOrEqualTo(0m);
 
         RuleFor(command => command.Value).LessThanOrEqualTo(100m)
-            .When(command => string.Equals(command.Type, nameof(PromotionType.Percentage), StringComparison.OrdinalIgnoreCase))
+            .When(command => command.Type == PromotionType.Percentage)
             .WithMessage("A percentage promotion cannot take off more than 100%.");
 
         RuleFor(command => command.EndsAt).GreaterThan(command => command.StartsAt)
@@ -362,9 +316,8 @@ internal sealed class ListPromotionsQueryHandler(PricingDbContext context)
         var size = Cursor.NormalizeSize(query.Size);
         var rows = context.Promotions.AsNoTracking();
 
-        if (PromotionEnums.IsKnownType(query.Type))
+        if (query.Type is { } type)
         {
-            var type = PromotionEnums.ParseType(query.Type);
             rows = rows.Where(promotion => promotion.Type == type);
         }
 
@@ -521,8 +474,8 @@ internal sealed class CreatePromotionCommandHandler(PricingDbContext context, IA
         var promotion = Promotion.Create(
             code,
             command.Name,
-            PromotionEnums.ParseType(command.Type),
-            PromotionEnums.ParseApplication(command.AppliesTo));
+            command.Type,
+            command.AppliesTo);
 
         Apply(promotion, command);
 
@@ -555,12 +508,12 @@ internal sealed class CreatePromotionCommandHandler(PricingDbContext context, IA
         => promotion.Update(
             command.Name,
             command.Description,
-            PromotionEnums.ParseType(command.Type),
-            PromotionEnums.ParseApplication(command.AppliesTo),
+            command.Type,
+            command.AppliesTo,
             command.Value,
             PromotionProjection.ToScope(command.Scope),
             PromotionProjection.ToConditions(command.Conditions),
-            PromotionEnums.ParseStacking(command.Stacking),
+            command.Stacking,
             command.Priority,
             command.StartsAt,
             command.EndsAt,
@@ -611,12 +564,12 @@ internal sealed class UpdatePromotionCommandHandler(PricingDbContext context, IA
         promotion.Update(
             command.Name,
             command.Description,
-            PromotionEnums.ParseType(command.Type),
-            PromotionEnums.ParseApplication(command.AppliesTo),
+            command.Type,
+            command.AppliesTo,
             command.Value,
             PromotionProjection.ToScope(command.Scope),
             PromotionProjection.ToConditions(command.Conditions),
-            PromotionEnums.ParseStacking(command.Stacking),
+            command.Stacking,
             command.Priority,
             command.StartsAt,
             command.EndsAt,
@@ -765,8 +718,8 @@ internal static class PromotionProjection
             promotion.Code,
             promotion.Name,
             promotion.Description,
-            promotion.Type.ToString(),
-            promotion.AppliesTo.ToString(),
+            promotion.Type,
+            promotion.AppliesTo,
             promotion.Value,
             new PromotionScopePayload(
                 promotion.Scope.CategoryIds,
@@ -778,7 +731,7 @@ internal static class PromotionProjection
             new PromotionConditionsPayload(
                 promotion.Conditions.MinQuantity,
                 promotion.Conditions.FirstOrderOnly,
-                promotion.Conditions.PaymentMethods,
+                [.. promotion.Conditions.PaymentMethods.Select(PromotionEvaluator.ToPaymentMethod)],
                 promotion.Conditions.MaxQuantityPerOrder,
                 promotion.Conditions.BuyQuantity,
                 promotion.Conditions.GetQuantity,
@@ -787,7 +740,7 @@ internal static class PromotionProjection
                 promotion.Conditions.BundlePrice,
                 [.. promotion.Conditions.Tiers.Select(tier => new PromotionTierPayload(tier.MinAmount, tier.Value))],
                 promotion.Conditions.TiersArePercentage),
-            promotion.Stacking.ToString(),
+            promotion.Stacking,
             promotion.Priority,
             promotion.StartsAt,
             promotion.EndsAt,
@@ -820,7 +773,7 @@ internal static class PromotionProjection
         {
             MinQuantity = Math.Max(1, payload?.MinQuantity ?? 1),
             FirstOrderOnly = payload?.FirstOrderOnly ?? false,
-            PaymentMethods = [.. payload?.PaymentMethods ?? []],
+            PaymentMethods = [.. (payload?.PaymentMethods ?? []).Select(PromotionEvaluator.ToConditionValue)],
             MaxQuantityPerOrder = payload?.MaxQuantityPerOrder is > 0 ? payload.MaxQuantityPerOrder : null,
             BuyQuantity = Math.Max(1, payload?.BuyQuantity ?? 1),
             GetQuantity = Math.Max(1, payload?.GetQuantity ?? 1),

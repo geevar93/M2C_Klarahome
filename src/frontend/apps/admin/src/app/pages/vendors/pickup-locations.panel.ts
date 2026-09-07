@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import {
   PickupLocationBody,
   PickupLocationResponse,
+  ReferenceDataService,
   VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { ConfirmDialog } from '@klarahome/ui-admin';
@@ -25,8 +27,9 @@ import { describeError, fieldErrors } from '../../core/describe-error';
  * Saying so on the row is the difference between a seller who fixes it and one who discovers it at
  * the first dispatch.
  *
- * The state is asked for as a `stateId` because that is what the API takes and there is no admin
- * endpoint that lists the platform's states — the same gap the Step 27 warehouse row records.
+ * The state is chosen from the platform's own list. It used to be a raw `stateId` an operator had
+ * to type, because the reference data was only on the storefront surface; Step 28B mapped it under
+ * `/admin` too (deliverable 3).
  */
 @Component({
   selector: 'kh-pickup-locations-panel',
@@ -198,19 +201,18 @@ import { describeError, fieldErrors } from '../../core/describe-error';
                 (input)="form.fields.city.set($any($event.target).value)"
               />
             </kh-field>
-            <kh-field
-              label="State id"
-              for="pickup-state"
-              [error]="form.fields.stateId.error()"
-              hint="The platform's identifier for the state."
-            >
-              <input
+            <kh-field label="State" for="pickup-state" [error]="form.fields.stateId.error()">
+              <select
                 khControl
                 id="pickup-state"
-                type="text"
                 [value]="form.fields.stateId.value()"
-                (input)="form.fields.stateId.set($any($event.target).value)"
-              />
+                (change)="form.fields.stateId.set($any($event.target).value)"
+              >
+                <option value="">Choose a state…</option>
+                @for (state of states(); track state.id) {
+                  <option [value]="state.id">{{ state.name }} ({{ state.code }})</option>
+                }
+              </select>
             </kh-field>
             <kh-field label="PIN code" for="pickup-pincode" [error]="form.fields.pincode.error()">
               <input
@@ -363,6 +365,9 @@ import { describeError, fieldErrors } from '../../core/describe-error';
 })
 export class PickupLocationsPanel {
   private readonly vendors = inject(VendorsAdminService);
+
+  /** The platform's states, so nobody types an identifier (Step 28B, deliverable 3). */
+  protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
   private readonly toasts = inject(ToastService);
 
   readonly vendorId = input.required<string>();

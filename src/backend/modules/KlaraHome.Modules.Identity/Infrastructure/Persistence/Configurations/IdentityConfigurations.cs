@@ -179,7 +179,8 @@ internal sealed class UserSessionConfiguration : IEntityTypeConfiguration<UserSe
         builder.ToTable("user_sessions", table => table.HasCheckConstraint(
             "ck_user_sessions_revoked_reason",
             "revoked_reason IS NULL OR revoked_reason IN "
-            + "('SignedOut', 'SignedOutEverywhere', 'TokenReuseDetected', 'CredentialChanged', 'AccountClosed')"));
+            + "('SignedOut', 'SignedOutEverywhere', 'TokenReuseDetected', 'CredentialChanged', 'AccountClosed', "
+            + "'ImpersonationEnded')"));
 
         builder.HasKey(session => session.Id);
         builder.Property(session => session.Id).ValueGeneratedNever();
@@ -187,6 +188,13 @@ internal sealed class UserSessionConfiguration : IEntityTypeConfiguration<UserSe
         builder.Property(session => session.Device).HasMaxLength(200);
         builder.Property(session => session.IpAddress).HasMaxLength(45);
         builder.Property(session => session.RevokedReason).HasConversion<string>().HasMaxLength(32);
+        builder.Property(session => session.ImpersonationReason).HasMaxLength(500);
+
+        // A partial index: impersonated sessions are a rounding error beside ordinary ones, and the
+        // only query that asks for them is "what is this operator currently acting as".
+        builder
+            .HasIndex(session => session.ImpersonatedByUserId)
+            .HasFilter("impersonated_by_user_id IS NOT NULL");
 
         // The session list is "my live devices, newest first", which is exactly this index.
         builder

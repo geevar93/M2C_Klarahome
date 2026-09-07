@@ -372,11 +372,11 @@ internal sealed class ExportVendorStatementQueryHandler(
             rows.Add(new[]
             {
                 Csv.Date(entry.OccurredAt),
-                entry.EntryType,
+                LedgerEntryTypes.ToStored(entry.EntryType),
                 entry.Note,
                 entry.SubOrderId?.ToString() ?? entry.ReferenceId?.ToString(),
-                entry.Direction == nameof(LedgerDirection.Credit) ? Csv.Money(entry.Amount) : null,
-                entry.Direction == nameof(LedgerDirection.Debit) ? Csv.Money(entry.Amount) : null,
+                entry.Direction == LedgerDirection.Credit ? Csv.Money(entry.Amount) : null,
+                entry.Direction == LedgerDirection.Debit ? Csv.Money(entry.Amount) : null,
                 Csv.Money(running),
                 entry.CurrencyCode,
             });

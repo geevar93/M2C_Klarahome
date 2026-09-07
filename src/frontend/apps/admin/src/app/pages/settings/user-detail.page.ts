@@ -3,11 +3,12 @@ import { ActivatedRoute } from '@angular/router';
 import {
   AdminUserResponse,
   IdentityAdminService,
+  ImpersonationStore,
   RoleResponse,
   UserStatus,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { ConfirmDialog, PageHeader, StatusBadge } from '@klarahome/ui-admin';
+import { ConfirmDialog, Modal, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
@@ -48,6 +49,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
     Control,
     Field,
     HasPermission,
+    Modal,
     PageHeader,
     Skeleton,
     StatusBadge,
@@ -63,6 +65,17 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
         <kh-badge [tone]="current.twoFactorEnabled ? 'success' : 'neutral'">
           {{ current.twoFactorEnabled ? '2FA on' : '2FA off' }}
         </kh-badge>
+
+        @if (current.userType === 'Customer' && current.status === 'Active') {
+          <button
+            *khHasPermission="'identity.user.impersonate'"
+            khButton
+            type="button"
+            (click)="startImpersonation()"
+          >
+            Act as this customer
+          </button>
+        }
       }
     </kh-page-header>
 
@@ -220,6 +233,59 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       (confirmed)="saveStatus()"
       (cancelled)="confirmingStatus.set(false)"
     />
+
+    <kh-modal
+      [open]="impersonating()"
+      heading="Act as this customer"
+      width="30rem"
+      [dismissible]="!busy()"
+      (closed)="impersonating.set(false)"
+    >
+      <p class="hint">
+        A support session is opened in this customer's name for a fixed window. It cannot be extended, and
+        both the start and the stop are written to the audit trail against you.
+      </p>
+
+      @if (impersonationError(); as message) {
+        <kh-alert tone="danger" heading="It could not be started">{{ message }}</kh-alert>
+      }
+
+      <kh-field
+        label="Why"
+        for="impersonation-reason"
+        hint="What you are trying to reproduce. Recorded verbatim, and read by whoever reviews the trail."
+      >
+        <textarea
+          khControl
+          id="impersonation-reason"
+          rows="3"
+          maxlength="500"
+          [value]="impersonationReason()"
+          (input)="impersonationReason.set($any($event.target).value)"
+        ></textarea>
+      </kh-field>
+
+      <div slot="footer">
+        <button
+          khButton
+          type="button"
+          variant="tertiary"
+          [disabled]="busy()"
+          (click)="impersonating.set(false)"
+        >
+          Cancel
+        </button>
+        <button
+          khButton
+          type="button"
+          variant="primary"
+          [disabled]="busy() || impersonationReason().trim().length < 10"
+          (click)="impersonate()"
+        >
+          Start
+        </button>
+      </div>
+    </kh-modal>
   `,
   styles: `
     kh-alert {
@@ -306,6 +372,14 @@ export class UserDetailPage {
 
   protected readonly loading = signal(false);
   protected readonly busy = signal(false);
+
+  // ---- Support impersonation (Step 28B, deliverable 1) -------------------------------------------
+
+  private readonly impersonations = inject(ImpersonationStore);
+
+  protected readonly impersonating = signal(false);
+  protected readonly impersonationReason = signal('');
+  protected readonly impersonationError = signal<string | null>(null);
   protected readonly loadError = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly confirmingStatus = signal(false);
@@ -435,5 +509,38 @@ export class UserDetailPage {
     this.user.set(user);
     this.roleCodes.set(user.roles);
     this.status.set(user.status);
+  }
+
+  protected startImpersonation(): void {
+    this.impersonationReason.set('');
+    this.impersonationError.set(null);
+    this.impersonating.set(true);
+  }
+
+  /**
+   * Opens the support session.
+   *
+   * The reason is checked here for length only so the button can be disabled rather than the
+   * request refused; the API is the authority on it, and its refusal is what is shown.
+   */
+  protected impersonate(): void {
+    const reason = this.impersonationReason().trim();
+    if (this.busy() || reason.length < 10) return;
+
+    this.busy.set(true);
+    this.impersonationError.set(null);
+
+    this.identity.impersonate(this.id, reason).subscribe({
+      next: (started) => {
+        this.busy.set(false);
+        this.impersonating.set(false);
+        this.impersonations.start(started);
+        this.toasts.success('You are now acting as this customer. The banner ends it.');
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.impersonationError.set(describeError(error, 'That session could not be started.'));
+      },
+    });
   }
 }

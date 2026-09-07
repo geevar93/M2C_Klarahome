@@ -20,7 +20,7 @@ namespace KlaraHome.Modules.Shipping.Application.Ndr;
 /// <param name="Cursor">Keyset cursor from a previous page.</param>
 /// <param name="Size">How many to return.</param>
 internal sealed record ListNdrQuery(
-    string? Action,
+    NdrAction? Action,
     Guid? VendorId,
     string? ReasonCode,
     string? Cursor,
@@ -41,7 +41,7 @@ internal sealed record ListNdrQuery(
 /// <param name="RescheduledFor">The date the shopper asked for, when they asked for one.</param>
 internal sealed record ActionNdrCommand(
     Guid NdrId,
-    string Action,
+    NdrAction Action,
     string? Remark,
     DateTimeOffset? RescheduledFor) : ICommand<NdrResponse>;
 
@@ -50,7 +50,7 @@ internal sealed class ActionNdrValidator : AbstractValidator<ActionNdrCommand>
 {
     public ActionNdrValidator()
     {
-        RuleFor(command => command.Action).NotEmpty().MaximumLength(24);
+        RuleFor(command => command.Action).IsInEnum();
         RuleFor(command => command.Remark).MaximumLength(500);
     }
 }
@@ -75,9 +75,7 @@ internal sealed class ListNdrQueryHandler(
 
         // The queue, by default. An operator opening this screen wants the questions nobody has
         // answered, not a history of every failed attempt the platform has ever seen.
-        var action = Enum.TryParse<NdrAction>(query.Action, ignoreCase: true, out var parsed)
-            ? parsed
-            : NdrAction.Pending;
+        var action = query.Action ?? NdrAction.Pending;
 
         rows = rows.Where(record => record.Action == action);
 
@@ -129,12 +127,15 @@ internal sealed class ActionNdrCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!Enum.TryParse<NdrAction>(command.Action, ignoreCase: true, out var action)
-            || action == NdrAction.Pending)
+        var action = command.Action;
+
+        // Pending is the state a report is in before anybody has decided, not a decision. It is an
+        // enum in the contract now, so this is the only refusal left on this path.
+        if (action == NdrAction.Pending)
         {
             return Result.Failure<NdrResponse>(
-                ShippingErrors.InvalidRule($"'{command.Action}' is not something that can be done about a "
-                                           + "failed delivery."));
+                ShippingErrors.InvalidRule("'Pending' is not something that can be done about a failed "
+                                           + "delivery: it is what the report says before somebody decides."));
         }
 
         var record = await context.NdrRecords

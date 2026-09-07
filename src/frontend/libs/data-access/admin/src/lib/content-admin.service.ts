@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import {
+  AddCollectionItemBody,
   BannerBody,
+  BannerPlacement,
   BannerResponse,
   BlockTypeResponse,
   CollectionResponse,
@@ -13,7 +15,9 @@ import {
   MenuResponse,
   MenuSummaryResponse,
   PageResponse,
+  PageStatus,
   PageSummaryResponse,
+  PageType,
   PageVersionResponse,
   PageVersionSummaryResponse,
   ProductCardResponse,
@@ -33,12 +37,12 @@ import { CursorList, CursorPage } from './cursor-list';
 
 export interface PageFilters {
   readonly search?: string;
-  readonly type?: string;
-  readonly status?: string;
+  readonly type?: PageType;
+  readonly status?: PageStatus;
 }
 
 export interface BannerFilters {
-  readonly placement?: string;
+  readonly placement?: BannerPlacement;
   readonly activeOnly?: boolean;
 }
 
@@ -277,6 +281,22 @@ export class ContentAdminService {
   /** Pins and unpins. A pinned item survives the next rule refresh; the rest do not. */
   setCollectionItems(id: string, body: SetCollectionItemsBody): Observable<CollectionResponse> {
     return this.api.adminSetCollectionItems(id, body);
+  }
+
+  /**
+   * Adds one product to a collection, leaving the rest alone.
+   *
+   * Not `setCollectionItems` with the screen's rows plus one: that replaces the whole hand-picked
+   * set, so pinning a fifty-first product would delete the rows the screen had not loaded
+   * (Step 28B, deliverable 9).
+   */
+  addCollectionItem(id: string, body: AddCollectionItemBody): Observable<CollectionResponse> {
+    return this.api.adminAddCollectionItem(id, body);
+  }
+
+  /** Takes one product out. A row a rule put there is refused; the rule has to change instead. */
+  removeCollectionItem(id: string, productId: string): Observable<CollectionResponse> {
+    return this.api.adminRemoveCollectionItem(id, productId);
   }
 
   /** Turns a manual collection into a rule-driven one, or edits the rule it already has. */

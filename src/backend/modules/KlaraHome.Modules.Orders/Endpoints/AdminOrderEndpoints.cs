@@ -120,19 +120,21 @@ internal static class AdminOrderEndpoints
         subOrders.MapGet("/", async (
                 string? status,
                 Guid? vendorId,
+                Guid? warehouseId,
                 bool? overdueOnly,
                 string? cursor,
                 int? size,
                 IDispatcher dispatcher,
                 HttpContext context) =>
             {
-                var query = new ListSubOrdersQuery(status, vendorId, overdueOnly, cursor, size);
+                var query = new ListSubOrdersQuery(status, vendorId, warehouseId, overdueOnly, cursor, size);
                 var result = await dispatcher.QueryAsync(query, context.RequestAborted).ConfigureAwait(false);
 
                 return result.ToOk(context);
             })
             .WithName("adminListSubOrders")
-            .WithSummary("The fulfilment worklist. A vendor caller sees only their own.")
+            .WithSummary("The fulfilment worklist. A vendor caller sees only their own, and warehouseId "
+                         + "narrows it to the parcels a given location is packing.")
             .RequirePermission(OrdersPermissions.OrderRead)
             .Produces<PagedResult<SubOrderResponse>>();
 

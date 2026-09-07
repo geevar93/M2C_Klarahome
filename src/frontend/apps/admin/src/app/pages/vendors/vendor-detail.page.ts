@@ -2,14 +2,17 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { ActivatedRoute } from '@angular/router';
 import {
   CommissionPlanResponse,
+  IdentityAdminService,
   VendorReadiness,
   VendorResponse,
-  VendorStaffResponse,
   VendorsAdminService,
+  VendorStaffResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { ConfirmDialog, PageHeader, StatusBadge } from '@klarahome/ui-admin';
+import { ConfirmDialog, EntityOption, EntityPicker, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Rating, Skeleton } from '@klarahome/ui-primitives';
+import { Observable, map } from 'rxjs';
+
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -44,11 +47,12 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
   selector: 'kh-vendor-detail-page',
   imports: [
     Alert,
-    BankAccountsPanel,
     Badge,
+    BankAccountsPanel,
     Button,
     ConfirmDialog,
     Control,
+    EntityPicker,
     Field,
     HasPermission,
     Icon,
@@ -248,15 +252,13 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
             }
 
             <div class="add-staff" *khHasPermission="'vendors.vendor.manage'">
-              <kh-field label="User id" for="staff-user">
-                <input
-                  khControl
-                  id="staff-user"
-                  type="text"
-                  [value]="staffUserId()"
-                  (input)="staffUserId.set($any($event.target).value)"
-                />
-              </kh-field>
+              <kh-entity-picker
+                label="User"
+                inputId="staff-user"
+                hint="An existing seller account, by email or mobile."
+                [search]="userSearch"
+                (chose)="staffUserId.set($event?.id ?? '')"
+              />
               <kh-field label="Job title" for="staff-title" [optional]="true">
                 <input
                   khControl
@@ -408,6 +410,24 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
 })
 export class VendorDetailPage {
   private readonly vendors = inject(VendorsAdminService);
+  private readonly identity = inject(IdentityAdminService);
+
+  /**
+   * Finds seller accounts for the staff picker.
+   *
+   * Narrowed to `Vendor` accounts: a seller's staff member is somebody who already has a seller
+   * login, and offering customers here would be offering a mistake (Step 28B, deliverable 15).
+   */
+  protected readonly userSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.identity.searchUsers(term, 'Vendor').pipe(
+      map((users) =>
+        users.map((user) => ({
+          id: user.id,
+          label: user.email ?? user.mobile ?? user.id,
+          hint: user.status,
+        })),
+      ),
+    );
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);
 
@@ -440,11 +460,16 @@ export class VendorDetailPage {
     return `${current.code} · ${current.legalName} · ${since}`;
   });
 
-  /** The edges normally taken from where this seller is. See the class remarks on the copy. */
+  /**
+   * The edges the server says are available from here.
+   *
+   * Read off `nextStatuses` rather than off a table this app keeps, so a life-cycle rule that
+   * changes on the server changes the buttons without a release.
+   */
   protected readonly available = computed<readonly VendorTransition[]>(() => {
-    const status = this.vendor()?.status;
-    if (!status) return [];
-    return VENDOR_TRANSITIONS.filter((transition) => transition.from.includes(status));
+    const next = this.vendor()?.nextStatuses;
+    if (!next?.length) return [];
+    return VENDOR_TRANSITIONS.filter((transition) => next.includes(transition.to));
   });
 
   protected readonly pendingMessage = computed(() => {

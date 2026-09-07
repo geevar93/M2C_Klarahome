@@ -5,6 +5,7 @@ import {
   CreateManifestBody,
   CreateShipmentBody,
   ManifestResponse,
+  NdrAction,
   NdrActionBody,
   NdrResponse,
   PackBody,
@@ -29,7 +30,7 @@ export interface ShipmentFilters {
 }
 
 export interface NdrFilters {
-  readonly action?: string;
+  readonly action?: NdrAction;
   readonly vendorId?: string;
   readonly reasonCode?: string;
 }
@@ -74,8 +75,15 @@ export class FulfilmentService {
    * Unpaged and capped by `size`, because it is a piece of paper — a warehouse works one printed
    * round at a time, and a pick list with a Next button is a pick list somebody will half-do.
    */
-  pickList(vendorId?: string, size = 100): Observable<PickListLineResponse[]> {
-    return this.api.adminShipmentPickList({ vendorId, size });
+  /**
+   * Everything waiting to be packed, one row per item.
+   *
+   * `warehouseId` narrows it to one location. Without it a store with two warehouses hands every
+   * picker every parcel, and neither can tell which are theirs — which is the failure Step 28B's
+   * deliverable 12 describes, and why each row now names the shelf it is on.
+   */
+  pickList(vendorId?: string, warehouseId?: string, size = 100): Observable<PickListLineResponse[]> {
+    return this.api.adminShipmentPickList({ vendorId, warehouseId, size });
   }
 
   // ---- Shipments --------------------------------------------------------------------------------

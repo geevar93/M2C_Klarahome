@@ -2,6 +2,7 @@ using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Vendors;
 using KlaraHome.Modules.Settlements.Domain;
 using KlaraHome.Modules.Settlements.Infrastructure.Events;
+using KlaraHome.Modules.Settlements.Infrastructure.Invoicing;
 using KlaraHome.Modules.Settlements.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Primitives;
 using KlaraHome.SharedKernel.Time;
@@ -37,6 +38,7 @@ namespace KlaraHome.Modules.Settlements.Infrastructure.Accounting;
 /// <param name="poster">The one place the ledger is written to.</param>
 /// <param name="vendors">Reads the seller's PAN, which decides the TDS rate.</param>
 /// <param name="settings">Supplies the store's settlement policy.</param>
+/// <param name="invoices">Raises the platform's own tax invoice for the commission the cycle charged.</param>
 /// <param name="events">Announces a closed period.</param>
 /// <param name="clock">The sanctioned clock.</param>
 /// <param name="logger">Reports what was closed and what was skipped.</param>
@@ -45,6 +47,7 @@ internal sealed partial class SettlementCycleService(
     SettlementPoster poster,
     IVendorPayouts vendors,
     IStoreSettings settings,
+    CommissionInvoiceService invoices,
     SettlementsEventPublisher events,
     IClock clock,
     ILogger<SettlementCycleService> logger)
@@ -144,6 +147,12 @@ internal sealed partial class SettlementCycleService(
         var taxEntries = poster.PostDeductions(vendorId, cycle.Id, deduction, cycle.CurrencyCode, clock.UtcNow);
 
         cycle.Close(totals, deduction.Tcs, deduction.Tds, entries.Count + taxEntries.Count, clock.UtcNow, closedBy);
+
+        // The platform's own tax invoice for what it charged in this period. Raised here because a
+        // cycle is already the period the charges are agreed over, and inventing a second period for
+        // the invoice would give two answers to what a seller was charged in January. It writes and
+        // does not commit, on the same terms as everything else in this method.
+        await invoices.RaiseAsync(cycle, cancellationToken).ConfigureAwait(false);
 
         events.CycleClosed(cycle);
 

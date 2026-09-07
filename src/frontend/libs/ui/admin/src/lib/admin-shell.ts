@@ -4,6 +4,7 @@ import { Drawer } from '@klarahome/ui-primitives';
 import { AdminNavSection } from './admin.model';
 import { AdminIdentityView, AdminTopBar } from './admin-top-bar';
 import { AdminSidebar } from './admin-sidebar';
+import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
 
 /**
  * The frame the whole back office sits in.
@@ -22,14 +23,27 @@ import { AdminSidebar } from './admin-sidebar';
  * The same `AdminSidebar` renders in both, from the same sections. Two sidebars would be two
  * navigations, and one of them would be the one nobody updated.
  *
- * The shell owns no state: `navOpen`, `collapsed` and the identity are inputs, and every control
- * emits. The app holds them, so a sign-out or a route change can move them.
+ * The shell owns no state: `navOpen`, `collapsed`, the identity and the impersonation are inputs,
+ * and every control emits. The app holds them, so a sign-out or a route change can move them.
+ *
+ * The impersonation banner sits **above** the header rather than inside it, and that is deliberate:
+ * the header is sticky and the banner has to be, so putting it inside would make the one thing that
+ * must never scroll away depend on the one thing that already does not
+ * (docs/07-security-compliance.md §2, Step 28B deliverable 1).
  */
 @Component({
   selector: 'kh-admin-shell',
-  imports: [AdminSidebar, AdminTopBar, Drawer],
+  imports: [AdminSidebar, AdminTopBar, Drawer, ImpersonationBanner],
   template: `
     <a class="kh-skip-link" href="#main-content">Skip to main content</a>
+
+    @if (impersonation(); as acting) {
+      <kh-impersonation-banner
+        [view]="acting"
+        [busy]="endingImpersonation()"
+        (exited)="impersonationExited.emit()"
+      />
+    }
 
     <header>
       <kh-admin-top-bar
@@ -146,9 +160,18 @@ export class AdminShell {
   readonly showNotifications = input(false);
   readonly notificationCount = input<number | null>(null);
 
+  /** The support impersonation in progress, or null. Non-null shows the banner. */
+  readonly impersonation = input<ImpersonationView | null>(null);
+
+  /** Whether the stop is in flight, so the banner's button can say so. */
+  readonly endingImpersonation = input(false);
+
   /** The menu button was pressed: open the drawer on a tablet, collapse the rail on a desktop. */
   readonly navToggled = output<void>();
   readonly navClosed = output<void>();
   readonly searchOpened = output<void>();
   readonly signedOut = output<void>();
+
+  /** The banner's Stop was pressed. The app ends the session and clears the input. */
+  readonly impersonationExited = output<void>();
 }

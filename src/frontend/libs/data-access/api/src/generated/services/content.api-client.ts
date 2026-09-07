@@ -19,7 +19,7 @@ export interface AdminGetStructuredDataQuery {
 
 /** Query string for `adminListBanners`. */
 export interface AdminListBannersQuery {
-  placement?: string;
+  placement?: Models.BannerPlacement;
   activeOnly?: boolean;
   cursor?: string;
   size?: number;
@@ -48,8 +48,8 @@ export interface AdminListMenusQuery {
 /** Query string for `adminListPages`. */
 export interface AdminListPagesQuery {
   search?: string;
-  type?: string;
-  status?: string;
+  type?: Models.PageType;
+  status?: Models.PageStatus;
   cursor?: string;
   size?: number;
 }
@@ -105,6 +105,14 @@ export interface StoreResolveRedirectQuery {
 export class ContentApiClient {
   private readonly http = inject(ApiTransport);
   private readonly baseUrl = this.http.baseUrl;
+
+  /**
+   * Adds one product to the end of the hand-picked membership, leaving the rest alone. A product already there is re-pinned rather than refused.
+   * `POST /api/v1/admin/collections/{id}/items`
+   */
+  adminAddCollectionItem(id: string, body: Models.AddCollectionItemBody, options?: ApiRequestOptions): Observable<Models.CollectionResponse> {
+    return this.http.request<Models.CollectionResponse>('POST', `${this.baseUrl}/api/v1/admin/collections/${encodeURIComponent(String(id))}/items`, body, undefined, options);
+  }
 
   /**
    * Opens a banner.
@@ -331,6 +339,14 @@ export class ContentApiClient {
   }
 
   /**
+   * Takes one product out of the hand-picked membership. A row the rule put there is refused: it would come back on the next refresh.
+   * `DELETE /api/v1/admin/collections/{id}/items/{productId}`
+   */
+  adminRemoveCollectionItem(id: string, productId: string, options?: ApiRequestOptions): Observable<Models.CollectionResponse> {
+    return this.http.request<Models.CollectionResponse>('DELETE', `${this.baseUrl}/api/v1/admin/collections/${encodeURIComponent(String(id))}/items/${encodeURIComponent(String(productId))}`, undefined, undefined, options);
+  }
+
+  /**
    * Restores a version's content, as a new version. Never changes the status.
    * `POST /api/v1/admin/pages/{id}/versions/{version}/rollback`
    */
@@ -347,7 +363,7 @@ export class ContentApiClient {
   }
 
   /**
-   * Replaces the hand-picked membership. A rule's own rows are left alone.
+   * Replaces the hand-picked membership in one ordered list. This is how a collection is reordered; adding or removing a single product has its own routes, because sending back only the rows a screen has loaded would delete the rest.
    * `PUT /api/v1/admin/collections/{id}/items`
    */
   adminSetCollectionItems(id: string, body: Models.SetCollectionItemsBody, options?: ApiRequestOptions): Observable<Models.CollectionResponse> {

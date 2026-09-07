@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import {
   DeliveryCoverageResponse,
   PincodeRangeModel,
+  RateBody,
   ServiceabilityResponse,
   ShippingRateResponse,
   ShippingZonesService,
@@ -47,9 +48,12 @@ interface ZoneView {
  * `PINCODE_NOT_SERVICEABLE` (the courier's), and "why can this customer not order" is answered by
  * knowing which of the two it is.
  *
- * Rates are read-only here: `POST`/`PUT` for a rate exist in `ShippingZonesService`, but a rate-card
- * editor is a table of eleven numeric fields per band and belongs with the rest of the logistics
- * configuration rather than beside the zone list. Recorded in `PARKING_LOT.md`.
+ * **Rates are editable here, and they had to be somewhere.** Until Step 28B nothing on this
+ * platform called `createRate` or `updateRate`, so a store could not change its shipping prices
+ * without a seeder — which is a first-run path blocked by an absent screen rather than by a
+ * decision (deliverable 14). It is a drawer of eleven numeric fields rather than an inline table
+ * because a band is a *rule*, and a rule that can be half-edited in a grid is one that prices a
+ * parcel wrongly between two keystrokes.
  */
 @Component({
   selector: 'kh-shipping-zones-page',
@@ -179,16 +183,12 @@ interface ZoneView {
               </span>
             </div>
 
-            <button
-              khButton
-              type="button"
-              size="sm"
-              variant="tertiary"
-              *khHasPermission="'shipping.rate.manage'"
-              (click)="startEdit(zone)"
-            >
-              Edit
-            </button>
+            <div class="zone-actions" *khHasPermission="'shipping.rate.manage'">
+              <button khButton type="button" size="sm" variant="tertiary" (click)="startEdit(zone)">
+                Edit zone
+              </button>
+              <button khButton type="button" size="sm" (click)="startCreateRate(zone)">Add a band</button>
+            </div>
           </header>
 
           @if (zone.rates.length === 0) {
@@ -213,6 +213,7 @@ interface ZoneView {
                   <th scope="col">Free above</th>
                   <th scope="col">COD</th>
                   <th scope="col">ETA</th>
+                  <th scope="col"><span class="kh-visually-hidden">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -237,6 +238,18 @@ interface ZoneView {
                       {{ rate.isCodAllowed ? money(rate.codFee, rate.currencyCode) : 'Not allowed' }}
                     </td>
                     <td>{{ rate.etaMinDays }}–{{ rate.etaMaxDays }} days</td>
+                    <td>
+                      <button
+                        khButton
+                        type="button"
+                        size="sm"
+                        variant="tertiary"
+                        *khHasPermission="'shipping.rate.manage'"
+                        (click)="startEditRate(zone, rate)"
+                      >
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -337,8 +350,208 @@ interface ZoneView {
         </kh-form-shell>
       </kh-entity-drawer>
     }
+
+    @if (rateDrawerOpen()) {
+      <kh-entity-drawer
+        [heading]="editingRate() ? 'Edit rate band' : 'New rate band'"
+        [subtitle]="rateZone()?.name ?? null"
+        (closed)="rateDrawerOpen.set(false)"
+      >
+        <kh-form-shell
+          heading="Rate band"
+          description="A band is a weight range and a basket range. The engine picks the narrowest one that matches."
+          [summary]="rateSummary()"
+          [saving]="saving()"
+          [dirty]="true"
+          [submitLabel]="editingRate() ? 'Save' : 'Create'"
+          (submitted)="saveRate()"
+          (cancelled)="rateDrawerOpen.set(false)"
+        >
+          <kh-field
+            label="Service"
+            for="rate-method"
+            hint="Which delivery service this prices. It cannot be changed on an existing band."
+          >
+            <select
+              khControl
+              id="rate-method"
+              [disabled]="!!editingRate()"
+              [value]="rateForm.fields.method.value()"
+              (change)="rateForm.fields.method.set($any($event.target).value)"
+            >
+              <option value="Standard">Standard</option>
+              <option value="Express">Express</option>
+            </select>
+          </kh-field>
+
+          <div class="pair">
+            <kh-field label="Minimum weight (g)" for="rate-min-weight">
+              <input
+                khControl
+                id="rate-min-weight"
+                type="number"
+                min="0"
+                [value]="rateForm.fields.minWeightGrams.value()"
+                (input)="rateForm.fields.minWeightGrams.set($any($event.target).value)"
+              />
+            </kh-field>
+            <kh-field label="Maximum weight (g)" for="rate-max-weight">
+              <input
+                khControl
+                id="rate-max-weight"
+                type="number"
+                min="0"
+                [value]="rateForm.fields.maxWeightGrams.value()"
+                (input)="rateForm.fields.maxWeightGrams.set($any($event.target).value)"
+              />
+            </kh-field>
+          </div>
+
+          <div class="pair">
+            <kh-field label="Minimum basket" for="rate-min-value">
+              <input
+                khControl
+                id="rate-min-value"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="rateForm.fields.minOrderValue.value()"
+                (input)="rateForm.fields.minOrderValue.set($any($event.target).value)"
+              />
+            </kh-field>
+            <kh-field
+              label="Maximum basket"
+              for="rate-max-value"
+              [optional]="true"
+              hint="Leave blank for no ceiling."
+            >
+              <input
+                khControl
+                id="rate-max-value"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="rateForm.fields.maxOrderValue.value()"
+                (input)="rateForm.fields.maxOrderValue.set($any($event.target).value)"
+              />
+            </kh-field>
+          </div>
+
+          <div class="pair">
+            <kh-field label="Base rate" for="rate-base">
+              <input
+                khControl
+                id="rate-base"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="rateForm.fields.baseRate.value()"
+                (input)="rateForm.fields.baseRate.set($any($event.target).value)"
+              />
+            </kh-field>
+            <kh-field label="Per kilogram" for="rate-per-kg">
+              <input
+                khControl
+                id="rate-per-kg"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="rateForm.fields.perKgRate.value()"
+                (input)="rateForm.fields.perKgRate.set($any($event.target).value)"
+              />
+            </kh-field>
+          </div>
+
+          <kh-field
+            label="Free above"
+            for="rate-free-above"
+            [optional]="true"
+            hint="Blank means delivery is never free on this band."
+          >
+            <input
+              khControl
+              id="rate-free-above"
+              type="number"
+              min="0"
+              step="0.01"
+              [value]="rateForm.fields.freeAbove.value()"
+              (input)="rateForm.fields.freeAbove.set($any($event.target).value)"
+            />
+          </kh-field>
+
+          <kh-checkbox
+            label="Cash on delivery allowed"
+            description="A band that refuses it takes COD off the payment step for every address it prices."
+            inputId="rate-cod-allowed"
+            [checked]="isCodAllowed()"
+            (checkedChange)="isCodAllowed.set($event)"
+          />
+
+          @if (isCodAllowed()) {
+            <kh-field label="COD handling fee" for="rate-cod-fee">
+              <input
+                khControl
+                id="rate-cod-fee"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="rateForm.fields.codFee.value()"
+                (input)="rateForm.fields.codFee.set($any($event.target).value)"
+              />
+            </kh-field>
+          }
+
+          <div class="pair">
+            <kh-field label="Fastest (days)" for="rate-eta-min">
+              <input
+                khControl
+                id="rate-eta-min"
+                type="number"
+                min="0"
+                [value]="rateForm.fields.etaMinDays.value()"
+                (input)="rateForm.fields.etaMinDays.set($any($event.target).value)"
+              />
+            </kh-field>
+            <kh-field label="Slowest (days)" for="rate-eta-max">
+              <input
+                khControl
+                id="rate-eta-max"
+                type="number"
+                min="0"
+                [value]="rateForm.fields.etaMaxDays.value()"
+                (input)="rateForm.fields.etaMaxDays.set($any($event.target).value)"
+              />
+            </kh-field>
+          </div>
+
+          <kh-checkbox
+            label="Active"
+            description="An inactive band is kept and not used. Nothing on a past order changes."
+            inputId="rate-active"
+            [checked]="rateIsActive()"
+            (checkedChange)="rateIsActive.set($event)"
+          />
+        </kh-form-shell>
+      </kh-entity-drawer>
+    }
   `,
   styles: `
+    .zone-actions {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .pair {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    @media (min-width: 40rem) {
+      .pair {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
     kh-alert {
       margin-block-end: var(--space-4);
     }
@@ -473,6 +686,39 @@ export class ShippingZonesPage {
     priority: formField('100', [], this.submitted),
   });
 
+  // ---- The rate-card editor (Step 28B, deliverable 14) -------------------------------------------
+
+  protected readonly rateDrawerOpen = signal(false);
+  protected readonly rateZone = signal<ZoneView | null>(null);
+  protected readonly editingRate = signal<ShippingRateResponse | null>(null);
+  protected readonly rateSummary = signal<readonly string[]>([]);
+  protected readonly isCodAllowed = signal(true);
+  protected readonly rateIsActive = signal(true);
+
+  private readonly rateSubmitted = signal(false);
+
+  /**
+   * Eleven numbers, and none of them is required in the "must not be blank" sense.
+   *
+   * Every field has a meaningful zero — a band with no base rate is free delivery, and one with no
+   * per-kilogram rate is flat — so a required-field rule here would refuse the most ordinary band
+   * a store writes. The two that must be *absent* rather than zero are the ceilings, and blank is
+   * how they say so.
+   */
+  protected readonly rateForm = formGroup(this.rateSubmitted, {
+    method: formField('Standard', [], this.rateSubmitted),
+    minWeightGrams: formField('0', [], this.rateSubmitted),
+    maxWeightGrams: formField('500', [], this.rateSubmitted),
+    minOrderValue: formField('0', [], this.rateSubmitted),
+    maxOrderValue: formField('', [], this.rateSubmitted),
+    baseRate: formField('0', [], this.rateSubmitted),
+    perKgRate: formField('0', [], this.rateSubmitted),
+    freeAbove: formField('', [], this.rateSubmitted),
+    codFee: formField('0', [], this.rateSubmitted),
+    etaMinDays: formField('2', [], this.rateSubmitted),
+    etaMaxDays: formField('5', [], this.rateSubmitted),
+  });
+
   constructor() {
     this.load();
   }
@@ -523,6 +769,116 @@ export class ShippingZonesPage {
     this.summary.set([]);
     this.form.reset({ name: '', code: '', priority: '100' });
     this.drawerOpen.set(true);
+  }
+
+  // ---- The rate card ----------------------------------------------------------------------------
+
+  protected startCreateRate(zone: ZoneView): void {
+    this.rateZone.set(zone);
+    this.editingRate.set(null);
+    this.isCodAllowed.set(true);
+    this.rateIsActive.set(true);
+    this.rateSummary.set([]);
+    this.rateForm.reset({
+      method: 'Standard',
+      minWeightGrams: '0',
+      maxWeightGrams: '500',
+      minOrderValue: '0',
+      maxOrderValue: '',
+      baseRate: '0',
+      perKgRate: '0',
+      freeAbove: '',
+      codFee: '0',
+      etaMinDays: '2',
+      etaMaxDays: '5',
+    });
+    this.rateDrawerOpen.set(true);
+  }
+
+  protected startEditRate(zone: ZoneView, rate: ShippingRateResponse): void {
+    this.rateZone.set(zone);
+    this.editingRate.set(rate);
+    this.isCodAllowed.set(rate.isCodAllowed);
+    this.rateIsActive.set(rate.isActive);
+    this.rateSummary.set([]);
+    this.rateForm.reset({
+      method: rate.method,
+      minWeightGrams: String(rate.minWeightGrams),
+      maxWeightGrams: String(rate.maxWeightGrams),
+      minOrderValue: String(rate.minOrderValue),
+      maxOrderValue: rate.maxOrderValue === null ? '' : String(rate.maxOrderValue),
+      baseRate: String(rate.baseRate),
+      perKgRate: String(rate.perKgRate),
+      freeAbove: rate.freeAbove === null ? '' : String(rate.freeAbove),
+      codFee: String(rate.codFee),
+      etaMinDays: String(rate.etaMinDays),
+      etaMaxDays: String(rate.etaMaxDays),
+    });
+    this.rateDrawerOpen.set(true);
+  }
+
+  /**
+   * Writes the band.
+   *
+   * The zone and the seller are not on the form. A band belongs to the zone it was opened from, and
+   * a per-seller override is a different decision on a different screen — offering a seller field
+   * here would let an operator create one by accident and then wonder why the default stopped
+   * applying to everybody.
+   */
+  protected saveRate(): void {
+    if (!this.rateForm.submit() || this.saving()) return;
+
+    const zone = this.rateZone();
+    if (!zone) return;
+
+    const values = this.rateForm.values();
+    const existing = this.editingRate();
+
+    const body: RateBody = {
+      zoneId: zone.id,
+      method: values.method,
+      vendorId: existing?.vendorId ?? null,
+      terms: {
+        minWeightGrams: Number(values.minWeightGrams) || 0,
+        maxWeightGrams: Number(values.maxWeightGrams) || 0,
+        minOrderValue: Number(values.minOrderValue) || 0,
+
+        // Blank is "no ceiling", which is a different band from one capped at zero. An empty string
+        // coerced through Number() would be exactly that mistake.
+        maxOrderValue: values.maxOrderValue.trim() === '' ? null : Number(values.maxOrderValue),
+        baseRate: Number(values.baseRate) || 0,
+        perKgRate: Number(values.perKgRate) || 0,
+        freeAbove: values.freeAbove.trim() === '' ? null : Number(values.freeAbove),
+        codFee: this.isCodAllowed() ? Number(values.codFee) || 0 : 0,
+        isCodAllowed: this.isCodAllowed(),
+        etaMinDays: Number(values.etaMinDays) || 0,
+        etaMaxDays: Number(values.etaMaxDays) || 0,
+      },
+      isActive: this.rateIsActive(),
+    };
+
+    this.saving.set(true);
+    this.rateSummary.set([]);
+
+    const request = existing ? this.shipping.updateRate(existing.id, body) : this.shipping.createRate(body);
+
+    request.subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.rateDrawerOpen.set(false);
+        this.toasts.success(existing ? 'Rate band saved.' : 'Rate band created.');
+        this.load();
+      },
+      error: (error: unknown) => {
+        this.saving.set(false);
+        const errors = fieldErrors(error);
+        this.rateSummary.set(
+          errors
+            ? this.rateForm.applyServerErrors(errors)
+            : [describeError(error, 'That band could not be saved.')],
+        );
+      },
+    });
   }
 
   protected startEdit(zone: ZoneView): void {

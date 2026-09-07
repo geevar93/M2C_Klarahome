@@ -14,14 +14,14 @@ import type * as Models from '../models';
 
 /** Query string for `adminAuditLogsGet`. */
 export interface AdminAuditLogsGetQuery {
-  EntityType?: string;
-  EntityId?: string;
-  ActorId?: string;
-  Action?: string;
-  From?: string;
-  To?: string;
-  Cursor?: string;
-  Size?: number;
+  entityType?: string;
+  entityId?: string;
+  actorId?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** `Platform` endpoints, generated from the API's OpenAPI document. */
@@ -68,6 +68,14 @@ export class PlatformApiClient {
    */
   adminSettingsPut(key: string, body: unknown, options?: ApiRequestOptions): Observable<Models.SettingsSectionResponse> {
     return this.http.request<Models.SettingsSectionResponse>('PUT', `${this.baseUrl}/api/v1/admin/settings/${encodeURIComponent(String(key))}`, body, undefined, options);
+  }
+
+  /**
+   * The shape of every settings section and the rules its values must satisfy, so the settings form can draw the right control and enforce the same bounds the server does. Advisory: the server validates every write regardless.
+   * `GET /api/v1/admin/settings/schema`
+   */
+  adminSettingsSchemaGet(options?: ApiRequestOptions): Observable<Models.SettingsSchemaResponse> {
+    return this.http.request<Models.SettingsSchemaResponse>('GET', `${this.baseUrl}/api/v1/admin/settings/schema`, undefined, undefined, options);
   }
 
   /**

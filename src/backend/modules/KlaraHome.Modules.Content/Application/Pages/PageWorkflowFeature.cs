@@ -16,7 +16,11 @@ namespace KlaraHome.Modules.Content.Application.Pages;
 /// <param name="Status">Where it is being moved to.</param>
 /// <param name="ScheduledAt">When it should go live, for a schedule.</param>
 /// <param name="Note">Why, recorded on the version this publish snapshots.</param>
-internal sealed record TransitionPageCommand(Guid Id, string? Status, DateTimeOffset? ScheduledAt, string? Note)
+internal sealed record TransitionPageCommand(
+    Guid Id,
+    PageStatus Status,
+    DateTimeOffset? ScheduledAt,
+    string? Note)
     : ICommand<PageResponse>;
 
 /// <summary>Lists a page's version history, newest first.</summary>
@@ -54,16 +58,14 @@ internal sealed class TransitionPageCommandValidator : AbstractValidator<Transit
     {
         RuleFor(command => command.Id).NotEmpty();
 
-        RuleFor(command => command.Status)
-            .NotEmpty()
-            .Must(status => Enum.TryParse<PageStatus>(status, ignoreCase: true, out _))
-            .WithMessage($"A status must be one of: {string.Join(", ", Enum.GetNames<PageStatus>())}.");
+        // A real enum in the contract, so an unknown word never reaches a validator.
+        RuleFor(command => command.Status).IsInEnum();
 
         RuleFor(command => command.Note).MaximumLength(500);
 
         RuleFor(command => command.ScheduledAt)
             .NotNull()
-            .When(command => string.Equals(command.Status, nameof(PageStatus.Scheduled), StringComparison.OrdinalIgnoreCase))
+            .When(command => command.Status == PageStatus.Scheduled)
             .WithMessage("A scheduled page needs a time to go live.");
     }
 }
@@ -102,7 +104,7 @@ internal sealed class TransitionPageCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var next = Enum.Parse<PageStatus>(command.Status!, ignoreCase: true);
+        var next = command.Status;
 
         var page = await context.Pages
             .Include(row => row.Blocks)

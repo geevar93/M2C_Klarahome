@@ -103,8 +103,13 @@ internal sealed class GetSessionsQueryHandler(IdentityDbContext context, ICaller
             return Error.Unauthorized();
         }
 
+        // Impersonated sessions are excluded: they are not the user's devices, they are support
+        // activity, and the record of them is the audit trail. Listing one here would show a
+        // shopper a "device" they never signed in on and offer them a button that ends it.
         var sessions = await context.Sessions
-            .Where(session => session.UserId == userId && session.RevokedAt == null)
+            .Where(session => session.UserId == userId
+                              && session.RevokedAt == null
+                              && session.ImpersonatedByUserId == null)
             .OrderByDescending(session => session.LastSeenAt)
             .Select(session => new
             {

@@ -14,10 +14,10 @@ import type * as Models from '../models';
 
 /** Query string for `adminMediaList`. */
 export interface AdminMediaListQuery {
-  Visibility?: string;
-  ContentType?: string;
-  Cursor?: string;
-  Size?: number;
+  visibility?: string;
+  contentType?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminMediaUpload`. */

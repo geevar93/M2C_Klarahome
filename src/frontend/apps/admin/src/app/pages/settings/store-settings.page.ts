@@ -1,5 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { PlatformSettingsService, SettingsSectionResponse } from '@klarahome/data-access-admin';
+import {
+  PlatformSettingsService,
+  SettingsFieldSchema,
+  SettingsSchemaResponse,
+  SettingsSectionResponse,
+} from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
 import { PageHeader } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
@@ -14,6 +19,8 @@ interface SettingField {
   readonly kind: 'text' | 'number' | 'boolean' | 'json';
   value: string;
   checked: boolean;
+  /** The rules the server holds for this leaf, where it declared any. */
+  schema?: SettingsFieldSchema;
 }
 
 /**
@@ -26,12 +33,16 @@ interface SettingField {
  * per leaf — a string gets a text box, a number gets a number box, a boolean gets a tick, and
  * anything structured gets a JSON editor.
  *
- * That has an honest limit worth stating on the screen as well as here: **it knows the shape and
- * not the rules.** It can tell that `codThreshold` is a number because the value it was sent is a
- * number; it cannot tell that the number must be positive. The API is the validator, and a refusal
- * comes back as a field error against the section. There is deliberately no second copy of the
- * rules here to go stale — the alternative, a hand-written form per section, is a form that is
- * wrong the first time somebody adds a field on the server.
+ * **The rules come from the server too, and that is Step 28B's change** (deliverable 10). This
+ * screen used to know that `codThreshold` was a number and not that the number had to be positive,
+ * so an operator learnt the rule by being refused. `GET /admin/settings/schema` now serves what the
+ * validators encode — bounds, lengths, patterns, required fields and the words a choice accepts —
+ * and the controls carry them.
+ *
+ * It is still not a second validator, and the distinction matters: the schema is *advisory*, the
+ * API validates every write, and a rule the reader cannot express (a conditional, a comparison
+ * between two fields) is simply absent rather than approximated. A refusal still comes back as a
+ * field error against the section, and it is still the authority.
  *
  * **A section is saved whole**, because several of them hold rules that relate two fields to each
  * other and a per-field write would be a validation the server cannot perform.
@@ -50,9 +61,10 @@ interface SettingField {
     } @else if (loading()) {
       <kh-skeleton height="20rem" />
     } @else {
-      <kh-alert tone="info" heading="These forms know the shape, not the rules">
-        The controls below are built from the values the API returned. What is allowed in each is decided by
-        the API, and a refusal comes back against the section you saved.
+      <kh-alert tone="info" heading="These forms are built from the API's own schema">
+        The controls and their bounds come from the API. It has the last word regardless: a refusal comes back
+        against the section you saved, and some rules — a field that is only required when another is set —
+        cannot be shown here at all.
       </kh-alert>
 
       @for (section of sections(); track section.key) {
@@ -86,7 +98,8 @@ interface SettingField {
                 <kh-field
                   [label]="field.label"
                   [for]="section.key + '-' + field.path"
-                  [hint]="field.kind === 'json' ? 'JSON — a list or a nested object' : ''"
+                  [hint]="hintFor(field)"
+                  [optional]="!field.schema?.isRequired && field.kind !== 'json'"
                 >
                   @if (field.kind === 'json') {
                     <textarea
@@ -96,11 +109,27 @@ interface SettingField {
                       [value]="field.value"
                       (input)="setValue(section.key, field.path, $any($event.target).value)"
                     ></textarea>
+                  } @else if (choicesFor(field); as choices) {
+                    <select
+                      khControl
+                      [id]="section.key + '-' + field.path"
+                      [value]="field.value"
+                      (change)="setValue(section.key, field.path, $any($event.target).value)"
+                    >
+                      @for (choice of choices; track choice) {
+                        <option [value]="choice">{{ choice }}</option>
+                      }
+                    </select>
                   } @else {
                     <input
                       khControl
                       [id]="section.key + '-' + field.path"
                       [type]="field.kind === 'number' ? 'number' : 'text'"
+                      [attr.min]="field.schema?.minimum ?? null"
+                      [attr.max]="field.schema?.maximum ?? null"
+                      [attr.maxlength]="field.schema?.maxLength ?? null"
+                      [attr.pattern]="field.schema?.pattern ?? null"
+                      [attr.required]="field.schema?.isRequired ? '' : null"
                       [value]="field.value"
                       (input)="setValue(section.key, field.path, $any($event.target).value)"
                     />
@@ -188,6 +217,44 @@ export class StoreSettingsPage {
   private readonly fields = signal<Readonly<Record<string, readonly SettingField[]>>>({});
   private readonly errors = signal<Readonly<Record<string, string>>>({});
 
+  /** The served schema, indexed by `<section>.<field path>`. Empty until it arrives. */
+  private readonly schema = signal<ReadonlyMap<string, SettingsFieldSchema>>(new Map());
+
+  /**
+   * What the control says beneath itself.
+   *
+   * The declared rules in words, because a `min` attribute is enforced by the browser and read by
+   * nobody. A field with no declared rule keeps the old behaviour: a note for JSON, nothing
+   * otherwise.
+   */
+  /** The words a choice field accepts, or null when it is not one. */
+  protected choicesFor(field: SettingField): readonly string[] | null {
+    const choices = field.schema?.choices;
+    return choices && choices.length > 0 ? choices : null;
+  }
+
+  protected hintFor(field: SettingField): string {
+    if (field.kind === 'json') return 'JSON — a list or a nested object';
+
+    const rules = field.schema;
+    if (!rules) return '';
+
+    const parts: string[] = [];
+
+    if (rules.minimum !== null && rules.maximum !== null) {
+      parts.push(`Between ${rules.minimum} and ${rules.maximum}`);
+    } else if (rules.minimum !== null) {
+      parts.push(`At least ${rules.minimum}`);
+    } else if (rules.maximum !== null) {
+      parts.push(`At most ${rules.maximum}`);
+    }
+
+    if (rules.maxLength !== null) parts.push(`Up to ${rules.maxLength} characters`);
+    if (rules.pattern) parts.push('It has to match a set format');
+
+    return parts.join(' · ');
+  }
+
   protected fieldsFor(key: string): readonly SettingField[] {
     return this.fields()[key] ?? [];
   }
@@ -252,7 +319,10 @@ export class StoreSettingsPage {
         this.savingKey.set(null);
         this.toasts.success(`${this.humanise(sectionKey)} saved.`);
         // Refilled from what came back, so a value the API normalised is what is on screen.
-        this.fields.update((current) => ({ ...current, [sectionKey]: flatten(saved.value, '') }));
+        this.fields.update((current) => ({
+          ...current,
+          [sectionKey]: this.describe(sectionKey, flatten(saved.value, '')),
+        }));
       },
       error: (error: unknown) => {
         this.savingKey.set(null);
@@ -287,12 +357,34 @@ export class StoreSettingsPage {
 
   private load(): void {
     this.loading.set(true);
+
+    // The schema first, so the fields are built with their rules already in hand. A failure here is
+    // not fatal — the form falls back to the shape it can see in the values, which is what it did
+    // before Step 28B — so it does not stop the settings loading.
+    this.settings.settingsSchema().subscribe({
+      next: (response) => {
+        this.schema.set(indexSchema(response));
+        this.loadSections();
+      },
+      error: () => {
+        this.schema.set(new Map());
+        this.loadSections();
+      },
+    });
+  }
+
+  private loadSections(): void {
     this.settings.settings().subscribe({
       next: (response) => {
         this.loading.set(false);
         this.sections.set(response.sections);
         this.fields.set(
-          Object.fromEntries(response.sections.map((section) => [section.key, flatten(section.value, '')])),
+          Object.fromEntries(
+            response.sections.map((section) => [
+              section.key,
+              this.describe(section.key, flatten(section.value, '')),
+            ]),
+          ),
         );
       },
       error: (error: unknown) => {
@@ -300,6 +392,13 @@ export class StoreSettingsPage {
         this.loadError.set(describeError(error, 'They could not be loaded.'));
       },
     });
+  }
+
+  /** Attaches each leaf's declared rules, where the schema has any for it. */
+  private describe(sectionKey: string, fields: readonly SettingField[]): SettingField[] {
+    const schema = this.schema();
+
+    return fields.map((field) => ({ ...field, schema: schema.get(`${sectionKey}.${field.path}`) }));
   }
 }
 
@@ -359,4 +458,17 @@ function assign(target: Record<string, unknown>, path: string, value: unknown): 
   }
 
   current[segments[segments.length - 1]] = value;
+}
+
+/** The served schema as a lookup, keyed `<section>.<field path>`. */
+function indexSchema(response: SettingsSchemaResponse): ReadonlyMap<string, SettingsFieldSchema> {
+  const index = new Map<string, SettingsFieldSchema>();
+
+  for (const section of response.sections) {
+    for (const field of section.fields) {
+      index.set(`${section.key}.${field.name}`, field);
+    }
+  }
+
+  return index;
 }

@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
-  CategoryNode,
   CatalogAdminService,
+  CategoryNode,
   ContentAdminService,
   MenuItemBody,
   MenuItemResponse,
+  MenuLinkType,
   MenuResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
@@ -21,7 +22,7 @@ interface ItemDraft {
   readonly id: string;
   parentId: string | null;
   label: string;
-  linkType: string;
+  linkType: MenuLinkType;
   targetId: string | null;
   url: string | null;
   isVisible: boolean;
@@ -488,7 +489,11 @@ export class MenuEditorPage implements HasUnsavedChanges {
   /** Changing the kind clears the other kind's target, so a stale id is never sent. */
   protected setLinkType(itemId: string, linkType: string): void {
     this.items.update((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, linkType, targetId: null, url: null } : item)),
+      current.map((item) =>
+        item.id === itemId
+          ? { ...item, linkType: linkType as MenuLinkType, targetId: null, url: null }
+          : item,
+      ),
     );
     this.dirty.set(true);
   }

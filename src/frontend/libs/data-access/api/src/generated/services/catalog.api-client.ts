@@ -14,22 +14,22 @@ import type * as Models from '../models';
 
 /** Query string for `adminAttributesList`. */
 export interface AdminAttributesListQuery {
-  FilterableOnly: boolean;
-  VariantDefiningOnly: boolean;
+  filterableOnly: boolean;
+  variantDefiningOnly: boolean;
 }
 
 /** Query string for `adminBrandsList`. */
 export interface AdminBrandsListQuery {
-  Search?: string;
-  ActiveOnly: boolean;
-  Cursor?: string;
-  Size?: number;
+  search?: string;
+  activeOnly: boolean;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminCatalogJobsList`. */
 export interface AdminCatalogJobsListQuery {
-  Cursor?: string;
-  Size?: number;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminCategoriesTree`. */
@@ -41,38 +41,38 @@ export interface AdminCategoriesTreeQuery {
 
 /** Query string for `adminListingsList`. */
 export interface AdminListingsListQuery {
-  Status?: string;
-  VendorId?: string;
-  ProductId?: string;
-  VariantId?: string;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  vendorId?: string;
+  productId?: string;
+  variantId?: string;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminProductModerationQueue`. */
 export interface AdminProductModerationQueueQuery {
-  Status?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminProductsList`. */
 export interface AdminProductsListQuery {
-  Status?: string;
-  CategoryId?: string;
-  BrandId?: string;
-  VendorId?: string;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  categoryId?: string;
+  brandId?: string;
+  vendorId?: string;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `storeBrands`. */
 export interface StoreBrandsQuery {
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `storeCategories`. */
@@ -341,6 +341,14 @@ export class CatalogApiClient {
   }
 
   /**
+   * Moves several products to one status and reports on each. A product that could not move does not stop the ones that could; the response names it and why.
+   * `POST /api/v1/admin/products/bulk-status`
+   */
+  adminProductBulkStatus(body: Models.BulkProductStatusBody, options?: ApiRequestOptions): Observable<Models.BulkProductStatusResponse> {
+    return this.http.request<Models.BulkProductStatusResponse>('POST', `${this.baseUrl}/api/v1/admin/products/bulk-status`, body, undefined, options);
+  }
+
+  /**
    * Drafts a product. It is not sellable until it has a variant and is published.
    * `POST /api/v1/admin/products`
    */
@@ -381,11 +389,11 @@ export class CatalogApiClient {
   }
 
   /**
-   * Downloads an empty import file with the correct column headers.
+   * The column headers a product import must be shaped like, in order.
    * `GET /api/v1/admin/products/import-template`
    */
-  adminProductImportTemplate(options?: ApiRequestOptions): Observable<void> {
-    return this.http.request<void>('GET', `${this.baseUrl}/api/v1/admin/products/import-template`, undefined, undefined, options);
+  adminProductImportTemplate(options?: ApiRequestOptions): Observable<Models.ProductImportTemplateResponse> {
+    return this.http.request<Models.ProductImportTemplateResponse>('GET', `${this.baseUrl}/api/v1/admin/products/import-template`, undefined, undefined, options);
   }
 
   /**

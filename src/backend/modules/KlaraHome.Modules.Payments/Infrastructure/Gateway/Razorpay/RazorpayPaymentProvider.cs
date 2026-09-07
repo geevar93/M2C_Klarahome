@@ -352,13 +352,15 @@ internal sealed partial class RazorpayPaymentProvider(
         var payment = envelope.Payload?.Payment?.Entity;
         var refund = envelope.Payload?.Refund?.Entity;
         var order = envelope.Payload?.Order?.Entity;
+        var transfer = envelope.Payload?.Transfer?.Entity;
 
         // Razorpay's own event id header is optional on some plans, so the fallback is a
         // deterministic key built from what the event is about. Two deliveries of the same fact then
         // still collide on the unique index, which is what replay protection has to guarantee.
         var eventId = !string.IsNullOrWhiteSpace(envelope.Id)
             ? envelope.Id
-            : $"{envelope.Event}:{refund?.Id ?? payment?.Id ?? order?.Id ?? "unknown"}:{envelope.CreatedAt}";
+            : $"{envelope.Event}:{refund?.Id ?? payment?.Id ?? order?.Id ?? transfer?.Id ?? "unknown"}"
+              + $":{envelope.CreatedAt}";
 
         return Result.Success(new WebhookEnvelope(
             eventId,
@@ -367,7 +369,8 @@ internal sealed partial class RazorpayPaymentProvider(
             order?.Id ?? payment?.OrderId ?? refund?.OrderId,
             payment?.Id ?? refund?.PaymentId,
             refund?.Id,
-            ReadPaymentId(payment?.Notes)));
+            ReadPaymentId(payment?.Notes),
+            transfer?.Id));
     }
 
     /// <summary>Reads back the collection id this platform sent in the order's notes.</summary>

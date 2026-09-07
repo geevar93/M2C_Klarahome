@@ -33,6 +33,10 @@ internal sealed record SetUserRolesBody(IReadOnlyList<string> RoleCodes);
 /// <param name="Status">The status the account should have.</param>
 internal sealed record SetUserStatusBody(UserStatus Status);
 
+/// <summary>The body of an impersonation request.</summary>
+/// <param name="Reason">Why support needs to act as this customer. Recorded in the audit trail.</param>
+internal sealed record ImpersonateBody(string Reason);
+
 /// <summary>The body of a role definition.</summary>
 /// <param name="Code">The stable lowercase code.</param>
 /// <param name="Name">The display name.</param>
@@ -77,6 +81,7 @@ internal static class AdminIdentityEndpoints
         ArgumentNullException.ThrowIfNull(admin);
 
         MapUsers(admin);
+        MapImpersonation(admin);
         MapRoles(admin);
 
         return admin;
@@ -188,6 +193,58 @@ internal static class AdminIdentityEndpoints
             .RequirePermission(PermissionCatalog.IdentityUserManage)
             .RequireRateLimiting(RateLimitPolicies.AdminWrite)
             .Produces<AdminUserResponse>();
+    }
+
+    /// <summary>
+    /// Support impersonation (docs/07-security-compliance.md §2).
+    /// </summary>
+    /// <remarks>
+    /// Both routes are called with the operator's own token. Starting one hands back a second
+    /// access token rather than replacing the session, so the admin shell holds both at once: the
+    /// operator's, which is what ends the impersonation and what the banner is drawn from, and the
+    /// customer's, which is what the screens under the banner call with. Replacing the session
+    /// instead would leave nothing authorised to stop it.
+    /// </remarks>
+    private static void MapImpersonation(IEndpointRouteBuilder admin)
+    {
+        var users = admin.MapGroup("/users").WithTags("Identity");
+
+        users.MapPost("/{id:guid}/impersonate", async (
+                Guid id,
+                ImpersonateBody body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var command = new StartImpersonationCommand(id, body.Reason, AuthCookies.DeviceOf(context));
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminUserImpersonate")
+            .WithSummary("Starts acting as a customer for support. The token that comes back expires on its "
+                         + "own and cannot be refreshed; both the start and the stop are audited.")
+            .RequirePermission(PermissionCatalog.IdentityUserImpersonate)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<ImpersonationResponse>();
+
+        admin.MapDelete("/impersonation/{sessionId:guid}", async (
+                Guid sessionId,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .SendAsync(new EndImpersonationCommand(sessionId), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToNoContent(context);
+            })
+            .WithName("adminImpersonationEnd")
+            .WithTags("Identity")
+            .WithSummary("Ends an impersonation this operator started. Called with the operator's own token: "
+                         + "the impersonated customer holds no permission that could end it.")
+            .RequirePermission(PermissionCatalog.IdentityUserImpersonate)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces(StatusCodes.Status204NoContent);
     }
 
     private static void MapRoles(IEndpointRouteBuilder admin)

@@ -172,6 +172,23 @@ internal sealed record TrackingEventResponse(
     bool IsApplied,
     DateTimeOffset OccurredAt);
 
+/// <summary>A short-lived link to a shipment's label.</summary>
+/// <remarks>
+/// A link rather than the bytes: a label carries a customer's name, address and telephone number,
+/// so it lives in the private bucket and is reached through a URL that expires
+/// (docs/07-security-compliance.md §5). The link is in the body rather than a redirect because the
+/// back office opens it with a plain navigation, which carries no bearer token.
+/// </remarks>
+/// <param name="ShipmentId">The parcel this is the label for.</param>
+/// <param name="Url">The signed link. Minting it is the grant; it carries no authorisation of its own.</param>
+/// <param name="ExpiresAt">When the link stops working.</param>
+/// <param name="FileName">What to call the file, so a save produces something recognisable.</param>
+internal sealed record ShipmentLabelResponse(
+    Guid ShipmentId,
+    string Url,
+    DateTimeOffset ExpiresAt,
+    string FileName);
+
 /// <summary>A parcel in full, with what is in it and where it has been.</summary>
 /// <param name="Id">The consignment.</param>
 /// <param name="OrderId">The order.</param>
@@ -256,6 +273,11 @@ internal sealed record ShipmentResponse(
 /// <param name="Quantity">How many.</param>
 /// <param name="DestinationPincode">Where it is going, so a packer can batch by region.</param>
 /// <param name="DispatchDueAt">When the seller must have handed it over.</param>
+/// <param name="WarehouseId">
+/// The stock location the units were allocated from, or null when the offer was not stocked. With
+/// two warehouses and no location on the row, both pickers are handed every parcel.
+/// </param>
+/// <param name="WarehouseName">What that location is called, so the row names a place not an id.</param>
 internal sealed record PickListLineResponse(
     Guid ShipmentId,
     string OrderNumber,
@@ -264,7 +286,9 @@ internal sealed record PickListLineResponse(
     string Name,
     int Quantity,
     string DestinationPincode,
-    DateTimeOffset? DispatchDueAt);
+    DateTimeOffset? DispatchDueAt,
+    Guid? WarehouseId,
+    string? WarehouseName);
 
 /// <summary>A failed delivery attempt waiting for a decision.</summary>
 /// <param name="Id">The report.</param>
@@ -293,7 +317,7 @@ internal sealed record NdrResponse(
     int AttemptNumber,
     string ReasonCode,
     string? Reason,
-    string Action,
+    NdrAction Action,
     string? ActionRemark,
     DateTimeOffset? RescheduledFor,
     DateTimeOffset RaisedAt,
@@ -504,7 +528,7 @@ internal static class ShippingProjection
             record.AttemptNumber,
             record.ReasonCode.ToString(),
             record.Reason,
-            record.Action.ToString(),
+            record.Action,
             record.ActionRemark,
             record.RescheduledFor,
             record.RaisedAt,

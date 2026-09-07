@@ -5,10 +5,12 @@ import {
   EffectivePrice,
   PriceListItemResponse,
   PriceListResponse,
+  PriceListType,
   PricingApiClient,
   PromotionBody,
   PromotionRedemptionResponse,
   PromotionResponse,
+  PromotionType,
   QuoteResult,
   SimulatePromotionBody,
   TaxRateResolutionResponse,
@@ -22,7 +24,7 @@ import { Observable, map } from 'rxjs';
 import { CursorList, CursorPage } from './cursor-list';
 
 export interface PromotionFilters {
-  readonly type?: string;
+  readonly type?: PromotionType;
   readonly code?: string;
   readonly activeOnly?: boolean;
   readonly search?: string;
@@ -30,7 +32,7 @@ export interface PromotionFilters {
 
 export interface PriceListFilters {
   readonly vendorId?: string;
-  readonly type?: string;
+  readonly type?: PriceListType;
   readonly activeOnly?: boolean;
   readonly search?: string;
 }
@@ -74,12 +76,12 @@ export class PricingAdminService {
       (current, cursor, size) =>
         this.api
           .adminPromotionsList({
-            Type: current.type,
-            Code: current.code,
-            ActiveOnly: current.activeOnly,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            type: current.type,
+            code: current.code,
+            activeOnly: current.activeOnly,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<PromotionResponse> => result)),
       filters,
@@ -150,12 +152,12 @@ export class PricingAdminService {
       (current, cursor, size) =>
         this.api
           .adminPriceListsList({
-            VendorId: current.vendorId,
-            Type: current.type,
-            ActiveOnly: current.activeOnly,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            vendorId: current.vendorId,
+            type: current.type,
+            activeOnly: current.activeOnly,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<PriceListResponse> => result)),
       filters,
@@ -235,10 +237,10 @@ export class PricingAdminService {
       (current, cursor, size) =>
         this.api
           .adminTaxRatesList({
-            HsnCode: current.hsnCode,
-            ActiveOnly: current.activeOnly,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            hsnCode: current.hsnCode,
+            activeOnly: current.activeOnly,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<TaxRateResponse> => result)),
       filters,

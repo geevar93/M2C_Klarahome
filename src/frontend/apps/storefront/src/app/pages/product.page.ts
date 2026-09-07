@@ -17,8 +17,23 @@ import {
   StorefrontProduct,
 } from '@klarahome/data-access-catalog';
 import { DeliveryService } from '@klarahome/data-access-delivery';
-import { ProductEngagementService, WishlistStore } from '@klarahome/data-access-engagement';
-import { Alert, Badge, Button, Disclosure, Price, QuantityStepper, Rating } from '@klarahome/ui-primitives';
+import {
+  EligiblePurchaseResponse,
+  ProductEngagementService,
+  WishlistStore,
+} from '@klarahome/data-access-engagement';
+import {
+  Alert,
+  Badge,
+  Button,
+  Control,
+  Disclosure,
+  Drawer,
+  Field,
+  Price,
+  QuantityStepper,
+  Rating,
+} from '@klarahome/ui-primitives';
 import {
   DeliveryEstimateView,
   DeliveryEstimator,
@@ -49,6 +64,7 @@ import {
 import { map } from 'rxjs';
 
 import { CatalogMapper } from '../core/catalog.mapper';
+import { describeError } from '../core/describe-error';
 import { RecentlyViewedStore } from '../core/recently-viewed.store';
 
 /**
@@ -82,8 +98,11 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     Alert,
     Badge,
     Button,
+    Control,
     DeliveryEstimator,
     Disclosure,
+    Drawer,
+    Field,
     MoneyPipe,
     OfferList,
     Price,
@@ -225,9 +244,11 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
           <kh-review-list
             [reviews]="reviews()"
             [breakdown]="ratingBreakdown()"
+            [canWrite]="eligiblePurchases().length > 0"
             [hasMore]="reviewsCursor() !== null"
             [loadingMore]="loadingReviews()"
             (voted)="voteHelpful($event)"
+            (writeRequested)="startReview()"
             (moreRequested)="loadMoreReviews()"
           />
         } @placeholder {
@@ -272,6 +293,138 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
         <a khButton variant="secondary" [block]="true" routerLink="/">Browse other products</a>
       }
     </ng-template>
+
+    <!--
+      Both forms are drawers rather than pages. Writing a review or asking a question is something a
+      shopper does *about the product they are looking at*, and a route change would take away the
+      photographs and the price they are describing (Step 28B, deliverable 20).
+    -->
+    <kh-drawer [open]="reviewOpen()" side="end" label="Write a review" (closed)="reviewOpen.set(false)">
+      <h2>Write a review</h2>
+      <p class="prose">
+        Only the customer who received an item can review it, so every review on this page is from a real
+        purchase. Yours is published after moderation.
+      </p>
+
+      @if (writeError(); as message) {
+        <kh-alert tone="danger" heading="That could not be posted">{{ message }}</kh-alert>
+      }
+
+      @if (eligiblePurchases().length > 1) {
+        <kh-field label="Which purchase" for="review-purchase">
+          <select
+            khControl
+            id="review-purchase"
+            [value]="reviewOrderLineId()"
+            (change)="reviewOrderLineId.set($any($event.target).value)"
+          >
+            @for (purchase of eligiblePurchases(); track purchase.orderLineId) {
+              <option [value]="purchase.orderLineId">{{ purchase.orderNumber }} — {{ purchase.sku }}</option>
+            }
+          </select>
+        </kh-field>
+      }
+
+      <kh-field label="Rating" for="review-rating">
+        <select
+          khControl
+          id="review-rating"
+          [value]="reviewRating()"
+          (change)="reviewRating.set($any($event.target).value)"
+        >
+          <option value="5">5 — excellent</option>
+          <option value="4">4 — good</option>
+          <option value="3">3 — all right</option>
+          <option value="2">2 — poor</option>
+          <option value="1">1 — bad</option>
+        </select>
+      </kh-field>
+
+      <kh-field label="Headline" for="review-title" [optional]="true">
+        <input
+          khControl
+          id="review-title"
+          type="text"
+          maxlength="120"
+          [value]="reviewTitle()"
+          (input)="reviewTitle.set($any($event.target).value)"
+        />
+      </kh-field>
+
+      <kh-field label="What you thought" for="review-body">
+        <textarea
+          khControl
+          id="review-body"
+          rows="5"
+          maxlength="2000"
+          [value]="reviewBody()"
+          (input)="reviewBody.set($any($event.target).value)"
+        ></textarea>
+      </kh-field>
+
+      <div slot="footer">
+        <button
+          khButton
+          type="button"
+          variant="secondary"
+          [disabled]="posting()"
+          (click)="reviewOpen.set(false)"
+        >
+          Cancel
+        </button>
+        <button
+          khButton
+          type="button"
+          [disabled]="posting() || reviewBody().trim().length === 0"
+          (click)="submitReview()"
+        >
+          {{ posting() ? 'Posting…' : 'Post the review' }}
+        </button>
+      </div>
+    </kh-drawer>
+
+    <kh-drawer [open]="questionOpen()" side="end" label="Ask a question" (closed)="questionOpen.set(false)">
+      <h2>Ask a question</h2>
+      <p class="prose">
+        Answered by the seller or by us, and published on this page once it has been moderated — so write it
+        as something another shopper would find useful.
+      </p>
+
+      @if (writeError(); as message) {
+        <kh-alert tone="danger" heading="That could not be posted">{{ message }}</kh-alert>
+      }
+
+      <kh-field label="Your question" for="question-body">
+        <textarea
+          khControl
+          id="question-body"
+          rows="4"
+          maxlength="1000"
+          [value]="questionBody()"
+          (input)="questionBody.set($any($event.target).value)"
+        ></textarea>
+      </kh-field>
+
+      <div slot="footer">
+        <button
+          khButton
+          type="button"
+          variant="secondary"
+          [disabled]="posting()"
+          (click)="questionOpen.set(false)"
+        >
+          Cancel
+        </button>
+        <button
+          khButton
+          type="button"
+          [disabled]="posting() || questionBody().trim().length === 0"
+          (click)="submitQuestion()"
+        >
+          {{ posting() ? 'Posting…' : 'Ask it' }}
+        </button>
+      </div>
+    </kh-drawer>
   `,
   styles: `
     .pdp {
@@ -392,6 +545,29 @@ export class ProductPage {
 
   protected readonly quantity = signal(1);
   protected readonly adding = signal(false);
+
+  // ---- Writing a review, asking a question (Step 28B, deliverable 20) ----------------------------
+
+  protected readonly reviewOpen = signal(false);
+  protected readonly questionOpen = signal(false);
+  protected readonly posting = signal(false);
+  protected readonly writeError = signal<string | null>(null);
+
+  /**
+   * The deliveries this shopper could review.
+   *
+   * Empty for a visitor who is not signed in and for one who has not received the item, which is
+   * the same thing as far as this page is concerned: no control is offered either way. It is
+   * fetched with the rest of the engagement data rather than on the button, so the button's
+   * presence is already correct when the section renders.
+   */
+  protected readonly eligiblePurchases = signal<readonly EligiblePurchaseResponse[]>([]);
+
+  protected readonly reviewOrderLineId = signal('');
+  protected readonly reviewRating = signal('5');
+  protected readonly reviewTitle = signal('');
+  protected readonly reviewBody = signal('');
+  protected readonly questionBody = signal('');
 
   private readonly chosenListingId = signal<string | null>(null);
   private readonly offerRows = signal<readonly StorefrontOffer[]>([]);
@@ -639,15 +815,86 @@ export class ProductPage {
     });
   }
 
+  protected startReview(): void {
+    const first = this.eligiblePurchases()[0];
+    if (!first) return;
+
+    this.writeError.set(null);
+    this.reviewOrderLineId.set(first.orderLineId);
+    this.reviewRating.set('5');
+    this.reviewTitle.set('');
+    this.reviewBody.set('');
+    this.reviewOpen.set(true);
+  }
+
+  protected submitReview(): void {
+    const orderLineId = this.reviewOrderLineId();
+    if (!orderLineId || this.posting()) return;
+
+    this.posting.set(true);
+    this.writeError.set(null);
+
+    this.engagement
+      .writeReview(this.product().id, {
+        orderLineId,
+        rating: Number(this.reviewRating()) || 5,
+        title: this.reviewTitle().trim() || null,
+        body: this.reviewBody().trim(),
+
+        // Photographs are the media library's, and uploading one from the storefront is an upload
+        // surface this app does not have. The field is sent null rather than omitted.
+        images: null,
+      })
+      .subscribe({
+        next: () => {
+          this.posting.set(false);
+          this.reviewOpen.set(false);
+          this.toasts.success('Thank you. Your review is published once it has been moderated.');
+
+          // Not added to the list: it is not published yet, and showing it would tell the shopper
+          // that everybody can see it.
+          this.eligiblePurchases.update((current) =>
+            current.filter((purchase) => purchase.orderLineId !== orderLineId),
+          );
+        },
+        error: (error: unknown) => {
+          this.posting.set(false);
+          this.writeError.set(describeError(error, 'Your review could not be posted.'));
+        },
+      });
+  }
+
   /**
    * Asking a question.
    *
-   * The form is Step 25's — it needs the signed-in customer, the character limit and the
-   * moderation notice that go with an account surface. Until then this says so rather than
-   * offering a control that does nothing.
+   * Offered to anyone: unlike a review, a question does not require a purchase — the people who
+   * most need to ask one are the people deciding whether to buy. An anonymous visitor is refused by
+   * the API and the refusal is what they read.
    */
   protected askQuestion(): void {
-    this.toasts.info('Asking a question is coming with the account pages.');
+    this.writeError.set(null);
+    this.questionBody.set('');
+    this.questionOpen.set(true);
+  }
+
+  protected submitQuestion(): void {
+    const body = this.questionBody().trim();
+    if (!body || this.posting()) return;
+
+    this.posting.set(true);
+    this.writeError.set(null);
+
+    this.engagement.askQuestion(this.product().id, body).subscribe({
+      next: () => {
+        this.posting.set(false);
+        this.questionOpen.set(false);
+        this.toasts.success('Asked. It appears here once it has been answered and moderated.');
+      },
+      error: (error: unknown) => {
+        this.posting.set(false);
+        this.writeError.set(describeError(error, 'Your question could not be posted.'));
+      },
+    });
   }
 
   private reset(): void {
@@ -690,6 +937,10 @@ export class ProductPage {
       this.questionRows.set(page.items.map((question) => this.mapper.question(question)));
       this.questionsCursor.set(page.page.nextCursor);
     });
+
+    this.engagement
+      .reviewEligibility(product.id)
+      .subscribe((eligibility) => this.eligiblePurchases.set(eligibility.eligible));
   }
 
   private applySeo(product: StorefrontProduct): void {

@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import {
-  ReportColumn,
   ReportDefinition,
   ReportDownloadResponse,
+  ReportResult,
   ReportRunResponse,
   ReportScheduleResponse,
   ReportingApiClient,
@@ -12,38 +12,20 @@ import { Observable, map } from 'rxjs';
 
 import { CursorList, CursorPage } from './cursor-list';
 
-/** One row of a produced report, keyed on the column keys the definition declares. */
-export type ReportRow = Readonly<Record<string, unknown>>;
-
 /**
  * A produced report: what it is, what it covers, and its rows.
  *
- * **Hand-written, and it is the only response shape in this library that is.** The endpoint
- * declares two 200 bodies — this one for `format=json` and `ReportRunResponse` for `format=csv` —
- * and the OpenAPI document can only carry one, so the generator typed the operation as the CSV
- * answer and never emitted this shape at all. The request is correct; only the declared response
- * is wrong, so `table()` casts through `unknown` at that one call and this interface is what the
- * rest of the application sees. Recorded in `PARKING_LOT.md`: the durable fix is for the two
- * formats to be two operations, or for the JSON body to be the declared one.
- *
- * The rows are dictionaries rather than a type per report, deliberately and on the server's side
- * too: thirteen report shapes would be thirteen response types the admin app has to switch on,
- * whereas a declared column list plus untyped rows lets one table render all of them.
+ * The generated shape, not a hand-written one. It used to be written out here because the endpoint
+ * declared two 200 bodies — this one for `format=json` and `ReportRunResponse` for `format=csv` —
+ * and OpenAPI carries one body per status, so the generator typed the operation as the CSV answer
+ * and never emitted this shape at all; `table()` cast through `unknown` to use it. Step 28B split
+ * the two formats into two operations, which is what makes this an alias rather than a copy
+ * (deliverable 4).
  */
-export interface ReportTable {
-  readonly key: string;
-  readonly name: string;
-  readonly columns: readonly ReportColumn[];
-  readonly from: string;
-  readonly to: string;
-  readonly groupBy: string | null;
-  readonly currencyCode: string;
-  readonly rows: readonly ReportRow[];
-  /** Column totals, where totalling means anything. Null for a report of rates. */
-  readonly totals: ReportRow | null;
-  /** True when the row ceiling was hit. The screen says so rather than letting a partial read. */
-  readonly truncated: boolean;
-}
+export type ReportTable = ReportResult;
+
+/** One row of a produced report, keyed on the column keys the definition declares. */
+export type ReportRow = Readonly<Record<string, unknown>>;
 
 /** What a report is asked for. Every field is optional; the server has a default period. */
 export interface ReportRequest {
@@ -71,10 +53,12 @@ export interface RunFilters {
  * parameter, and the catalogue a seller is offered already excludes the reports that are about the
  * store rather than about them. `vendorId` exists for the manager who wants one seller's figures.
  *
- * **CSV is not a download; it is a run.** Asking for `format=csv` produces a file in the private
- * bucket and answers with the run, and `download()` then exchanges that for a short-lived signed
- * link. The indirection is what makes a report somebody asked for and one that arrives by email
- * every Monday the same artefact, produced by the same code and recorded in the same log.
+ * **CSV is not a download; it is a run.** `export()` produces a file in the private bucket and
+ * answers with the run, and `download()` then exchanges that for a short-lived signed link. The
+ * indirection is what makes a report somebody asked for and one that arrives by email every Monday
+ * the same artefact, produced by the same code and recorded in the same log. It is a POST rather
+ * than a format on the GET, because producing a file, recording a run and handing back a link is
+ * not a read (Step 28B, deliverable 4).
  */
 @Injectable({ providedIn: 'root' })
 export class ReportingAdminService {
@@ -85,33 +69,23 @@ export class ReportingAdminService {
     return this.api.adminListReports();
   }
 
-  /**
-   * Runs a report and returns its table.
-   *
-   * The cast is the one described on `ReportTable`: the operation's declared response is the CSV
-   * answer, and this call asks for JSON. It is a lie about the type, told in one place, rather
-   * than a lie about the request.
-   */
+  /** Runs a report and returns its table. */
   table(reportKey: string, request: ReportRequest = {}): Observable<ReportTable> {
-    return this.api
-      .adminRunReport(reportKey, {
-        from: request.from,
-        to: request.to,
-        groupBy: request.groupBy,
-        vendorId: request.vendorId,
-        format: 'json',
-      })
-      .pipe(map((result) => result as unknown as ReportTable));
-  }
-
-  /** Produces the same report as a file. Answers the run; `download` turns that into a link. */
-  export(reportKey: string, request: ReportRequest = {}): Observable<ReportRunResponse> {
     return this.api.adminRunReport(reportKey, {
       from: request.from,
       to: request.to,
       groupBy: request.groupBy,
       vendorId: request.vendorId,
-      format: 'csv',
+    });
+  }
+
+  /** Produces the same report as a file. Answers the run; `download` turns that into a link. */
+  export(reportKey: string, request: ReportRequest = {}): Observable<ReportRunResponse> {
+    return this.api.adminExportReport(reportKey, {
+      from: request.from ?? null,
+      to: request.to ?? null,
+      groupBy: request.groupBy ?? null,
+      vendorId: request.vendorId ?? null,
     });
   }
 

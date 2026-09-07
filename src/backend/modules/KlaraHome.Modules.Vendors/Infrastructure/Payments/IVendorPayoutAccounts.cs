@@ -1,3 +1,4 @@
+using KlaraHome.Modules.Vendors.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace KlaraHome.Modules.Vendors.Infrastructure.Payments;
@@ -6,6 +7,7 @@ namespace KlaraHome.Modules.Vendors.Infrastructure.Payments;
 /// <param name="VendorId">The seller.</param>
 /// <param name="LegalName">The registered name. Must match the PAN.</param>
 /// <param name="DisplayName">The trading name.</param>
+/// <param name="BusinessType">The legal form they trade as, which the gateway files them under.</param>
 /// <param name="Email">Where the gateway sends account correspondence.</param>
 /// <param name="Phone">The seller's contact number.</param>
 /// <param name="Pan">Their PAN.</param>
@@ -17,6 +19,7 @@ internal sealed record PayoutAccountRequest(
     Guid VendorId,
     string LegalName,
     string DisplayName,
+    VendorBusinessType BusinessType,
     string? Email,
     string? Phone,
     string? Pan,
@@ -31,11 +34,10 @@ internal sealed record PayoutAccountRequest(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The seam exists now and the implementation arrives at Step 18, which is where payouts are built
-/// and where the Razorpay credentials will exist. Declaring it here rather than there is what lets
-/// activation call it: a seller becomes payable at the moment they are activated, and wiring that
-/// call in nine steps' time would mean revisiting the activation path rather than replacing one DI
-/// registration.
+/// Declared at Step 9 so activation could call it, and filled in at Step 28B by
+/// <see cref="RazorpayLinkedAccounts"/> — inside this module rather than in Settlements, because the
+/// data it needs is this module's. Replacing the no-op was exactly the one DI registration this
+/// seam was shaped to be.
 /// </para>
 /// <para>
 /// Provisioning must never fail an activation. A gateway outage is not a reason to refuse a seller
@@ -64,8 +66,9 @@ internal interface IVendorPayoutAccounts
 /// <remarks>
 /// The same shape as the Media module's no-op virus scanner (ADR-016), and for the same reason: a
 /// seam whose default implementation pretends to have worked is worse than no seam at all, because
-/// the gap stops being visible. This one records the request at Information level, so an operator
-/// reading the log after Step 18 lands can see which sellers still need an account.
+/// the gap stops being visible. It is still registered, and still what a deployment with no gateway
+/// credentials or with Route switched off gets; it records each request at Information level so an
+/// operator can see which sellers are trading but not yet payable.
 /// </remarks>
 /// <param name="logger">Reports each seller that would have been provisioned.</param>
 internal sealed partial class UnprovisionedPayoutAccounts(ILogger<UnprovisionedPayoutAccounts> logger)
@@ -86,6 +89,6 @@ internal sealed partial class UnprovisionedPayoutAccounts(ILogger<UnprovisionedP
 
     [LoggerMessage(EventId = 1900, Level = LogLevel.Information,
         Message = "No payout provider is configured, so no linked account was created for vendor {VendorId} "
-                  + "({VendorLegalName}). They can trade but cannot yet be paid; Step 18 provisions them.")]
+                  + "({VendorLegalName}). They can trade but cannot yet be paid.")]
     private static partial void PayoutAccountNotProvisioned(ILogger logger, Guid vendorId, string vendorLegalName);
 }

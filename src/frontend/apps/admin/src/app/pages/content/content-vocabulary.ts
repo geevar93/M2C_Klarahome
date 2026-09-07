@@ -1,25 +1,38 @@
+import {
+  BannerAudience,
+  BannerPlacement,
+  CollectionKind,
+  CollectionSort,
+  MenuLinkType,
+  PageStatus,
+  PageType,
+  RuleField,
+  RuleOperator,
+} from '@klarahome/data-access-admin';
+
 /**
- * The words the content endpoints accept.
+ * The labels the content screens put on the words the content endpoints accept.
  *
- * Read off `KlaraHome.Modules.Content`'s own enums — `PageType`, `PageStatus`, `BannerPlacement`,
- * `BannerAudience`, `MenuLinkType`, `CollectionKind`, `RuleField`, `RuleOperator`,
- * `CollectionSort` — and typed as plain `string` in the OpenAPI document, so nothing here is
- * checked by a compiler. The same gap the Step 24, 26 and 27 parking-lot rows describe, recorded
- * again for this step.
+ * **Every value below is a generated enum**, so the arrays are checked by the compiler and a value
+ * renamed on the server breaks the build rather than a request. That was not true until Step 28B:
+ * these nine enumerations were declared as plain `string` in the OpenAPI document, and this file
+ * was a copy of a server vocabulary that nothing verified (deliverable 11).
  *
- * The exception, and it is the important one: **block types are not in this file.** Their schemas
- * are served by `GET /admin/content/block-types` and the composer builds its form from them, so a
- * block type added on the server needs no change here. That is what the rest of this file would
- * look like if the contract typed these too.
+ * What is left here is the part a compiler cannot check and should not: the wording an editor
+ * reads, which is deliberately not always the enum's own word.
+ *
+ * Block types are still not in this file, and that is the model the rest of it now follows one step
+ * behind: their schemas are served by `GET /admin/content/block-types` and the composer builds its
+ * form from them, so a block type added on the server needs no change here at all.
  */
 
-export interface Choice {
-  readonly value: string;
+export interface Choice<T extends string = string> {
+  readonly value: T;
   readonly label: string;
   readonly hint?: string;
 }
 
-export const PAGE_TYPES: readonly Choice[] = [
+export const PAGE_TYPES: readonly Choice<PageType>[] = [
   { value: 'Landing', label: 'Landing page', hint: 'A campaign page with its own URL.' },
   { value: 'Static', label: 'Static page', hint: 'About us, delivery, contact.' },
   { value: 'Legal', label: 'Legal page', hint: 'Terms, privacy, returns policy.' },
@@ -27,7 +40,7 @@ export const PAGE_TYPES: readonly Choice[] = [
   { value: 'Home', label: 'Home page', hint: 'There is one, and it cannot be deleted.' },
 ];
 
-export const PAGE_STATUSES: readonly Choice[] = [
+export const PAGE_STATUSES: readonly Choice<PageStatus>[] = [
   { value: 'Draft', label: 'Draft' },
   { value: 'InReview', label: 'In review' },
   { value: 'Scheduled', label: 'Scheduled' },
@@ -37,7 +50,7 @@ export const PAGE_STATUSES: readonly Choice[] = [
 ];
 
 /** What each transition means, in the words of the person taking it. */
-export const TRANSITION_LABELS: Readonly<Record<string, string>> = {
+export const TRANSITION_LABELS: Readonly<Record<PageStatus, string>> = {
   Draft: 'Back to draft',
   InReview: 'Send for review',
   Scheduled: 'Schedule',
@@ -46,7 +59,7 @@ export const TRANSITION_LABELS: Readonly<Record<string, string>> = {
   Archived: 'Archive',
 };
 
-export const BANNER_PLACEMENTS: readonly Choice[] = [
+export const BANNER_PLACEMENTS: readonly Choice<BannerPlacement>[] = [
   { value: 'AnnouncementBar', label: 'Announcement bar', hint: 'The strip above the header.' },
   { value: 'HomeHero', label: 'Home hero' },
   { value: 'HomeStrip', label: 'Home strip' },
@@ -56,7 +69,7 @@ export const BANNER_PLACEMENTS: readonly Choice[] = [
   { value: 'CartStrip', label: 'Cart strip' },
 ];
 
-export const BANNER_AUDIENCES: readonly Choice[] = [
+export const BANNER_AUDIENCES: readonly Choice<BannerAudience>[] = [
   { value: 'None', label: 'Everybody' },
   { value: 'Anonymous', label: 'Signed-out visitors only' },
   { value: 'SignedIn', label: 'Signed-in customers only' },
@@ -68,7 +81,7 @@ export const BANNER_AUDIENCES: readonly Choice[] = [
  * `Page`, `Category` and `Collection` take a target id and survive a rename, which is the reason
  * the model has link types at all; `Url` is the escape hatch and does not.
  */
-export const MENU_LINK_TYPES: readonly Choice[] = [
+export const MENU_LINK_TYPES: readonly Choice<MenuLinkType>[] = [
   { value: 'Page', label: 'A page', hint: 'Survives the page being renamed.' },
   { value: 'Category', label: 'A category', hint: 'Survives the category being renamed.' },
   { value: 'Collection', label: 'A collection', hint: 'Survives the collection being renamed.' },
@@ -76,13 +89,13 @@ export const MENU_LINK_TYPES: readonly Choice[] = [
   { value: 'None', label: 'Nothing — a heading', hint: 'A label with children under it.' },
 ];
 
-export const COLLECTION_KINDS: readonly Choice[] = [
+export const COLLECTION_KINDS: readonly Choice<CollectionKind>[] = [
   { value: 'Manual', label: 'Chosen by hand' },
   { value: 'Rule', label: 'Filled by a rule' },
 ];
 
 /** The facts a collection rule may be about. Each is a column the module can actually query. */
-export const RULE_FIELDS: readonly Choice[] = [
+export const RULE_FIELDS: readonly Choice<RuleField>[] = [
   { value: 'Category', label: 'Category' },
   { value: 'Brand', label: 'Brand' },
   { value: 'Vendor', label: 'Seller' },
@@ -93,7 +106,7 @@ export const RULE_FIELDS: readonly Choice[] = [
   { value: 'Attribute', label: 'An attribute' },
 ];
 
-export const RULE_OPERATORS: readonly Choice[] = [
+export const RULE_OPERATORS: readonly Choice<RuleOperator>[] = [
   { value: 'In', label: 'is any of' },
   { value: 'NotIn', label: 'is none of' },
   { value: 'GreaterThan', label: 'is more than' },
@@ -102,7 +115,7 @@ export const RULE_OPERATORS: readonly Choice[] = [
   { value: 'AtMost', label: 'is at most' },
 ];
 
-export const COLLECTION_SORTS: readonly Choice[] = [
+export const COLLECTION_SORTS: readonly Choice<CollectionSort>[] = [
   { value: 'Newest', label: 'Newest first' },
   { value: 'PriceAscending', label: 'Cheapest first' },
   { value: 'PriceDescending', label: 'Dearest first' },

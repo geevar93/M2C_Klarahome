@@ -23,7 +23,7 @@ namespace KlaraHome.Modules.Returns.Application.Returns;
 internal sealed record QcLineRequest(
     Guid ReturnLineId,
     int QuantityAccepted,
-    string? Disposition,
+    ReturnDisposition? Disposition,
     string? Note);
 
 /// <summary>The returns queue.</summary>
@@ -88,7 +88,7 @@ internal sealed record ReceiveReturnCommand(Guid ReturnId, string? Note) : IComm
 internal sealed record InspectReturnCommand(
     Guid ReturnId,
     bool Passed,
-    string? Disposition,
+    ReturnDisposition? Disposition,
     string? Notes,
     IReadOnlyList<QcLineRequest>? Lines) : ICommand<ReturnResponse>;
 
@@ -571,14 +571,14 @@ internal sealed class InspectReturnCommandHandler(
         var order = view.Value;
         var resolved = await policy.ResolveAsync(order.VendorId, cancellationToken).ConfigureAwait(false);
 
-        var fallback = ParseDisposition(command.Disposition)
+        var fallback = Chosen(command.Disposition)
                        ?? ReturnPolicyService.DefaultDisposition(command.Passed, resolved);
 
         var verdicts = (command.Lines ?? [])
             .Select(line => new LineVerdict(
                 line.ReturnLineId,
                 line.QuantityAccepted,
-                ParseDisposition(line.Disposition),
+                Chosen(line.Disposition),
                 line.Note))
             .ToArray();
 
@@ -624,11 +624,17 @@ internal sealed class InspectReturnCommandHandler(
     }
 
     /// <summary>Reads a disposition from the API's spelling of it.</summary>
-    private static ReturnDisposition? ParseDisposition(string? value)
-        => Enum.TryParse<ReturnDisposition>(value, ignoreCase: true, out var parsed)
-           && parsed != ReturnDisposition.Pending
-            ? parsed
-            : null;
+    /// <summary>
+    /// The disposition an inspector actually chose, or null to fall back to the store's default.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReturnDisposition.Pending"/> is treated as "not chosen" rather than as a choice:
+    /// it is the state a line is in before anybody has graded it, and sending it back as a verdict
+    /// would set a line to un-inspected while claiming to have inspected it.
+    /// </remarks>
+    /// <param name="value">What the caller sent.</param>
+    private static ReturnDisposition? Chosen(ReturnDisposition? value)
+        => value is { } chosen && chosen != ReturnDisposition.Pending ? chosen : null;
 }
 
 /// <summary>Pays a return out, when it was not paid automatically.</summary>

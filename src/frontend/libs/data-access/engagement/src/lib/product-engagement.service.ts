@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import {
   PagedResultOfQuestionResponse,
   PagedResultOfReviewResponse,
+  QuestionResponse,
   RatingSummaryResponse,
+  ReviewBody,
+  ReviewEligibilityResponse,
+  ReviewResponse,
   ReviewsApiClient,
 } from '@klarahome/data-access-api';
 import { Observable, catchError, of } from 'rxjs';
@@ -79,5 +83,39 @@ export class ProductEngagementService {
   /** Withdraws this visitor's vote. The API keys the vote on the voter, so it is idempotent. */
   withdrawVote(reviewId: string): Observable<void> {
     return this.api.storeWithdrawReviewVote(reviewId);
+  }
+
+  // ---- Writing (Step 28B, deliverable 20) --------------------------------------------------------
+
+  /**
+   * Whether this shopper may review this product, and which purchase each review would be against.
+   *
+   * A review exists if and only if the customer received the line (Step 21), so the answer is a
+   * list of *deliveries* rather than a yes. A product bought twice can be reviewed twice, and the
+   * form has to say which one it is about — which is why this returns the lines and not a boolean.
+   *
+   * A failure answers "no", quietly. An anonymous visitor gets a 401 here on every product page,
+   * and a toast for it would be an error message for browsing a shop.
+   */
+  reviewEligibility(productId: string): Observable<ReviewEligibilityResponse> {
+    return this.api
+      .storeGetReviewEligibility(productId, { silentErrors: true })
+      .pipe(catchError(() => of<ReviewEligibilityResponse>({ canReview: false, eligible: [] })));
+  }
+
+  /**
+   * Writes a review.
+   *
+   * Errors are **not** swallowed. A shopper who has typed three sentences and pressed the button
+   * must be told if it did not land, and the API's own refusal — already reviewed, not delivered,
+   * too long — is the only text that says which.
+   */
+  writeReview(productId: string, body: ReviewBody): Observable<ReviewResponse> {
+    return this.api.storeWriteReview(productId, body, { silentErrors: true });
+  }
+
+  /** Asks a question about a product. Answered publicly after moderation, which the form says. */
+  askQuestion(productId: string, body: string): Observable<QuestionResponse> {
+    return this.api.storeAskQuestion(productId, { body }, { silentErrors: true });
   }
 }

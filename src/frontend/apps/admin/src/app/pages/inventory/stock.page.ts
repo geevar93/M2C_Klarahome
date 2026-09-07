@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
+  CatalogAdminService,
   InventoryAdminService,
   StockFilters,
   StockItemResponse,
@@ -12,6 +13,8 @@ import {
   DataTable,
   DataTableColumn,
   EntityDrawer,
+  EntityOption,
+  EntityPicker,
   FilterBar,
   FilterDefinition,
   FilterValues,
@@ -20,6 +23,7 @@ import {
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field } from '@klarahome/ui-primitives';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
+import { Observable, map } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
@@ -43,6 +47,11 @@ import { tableDateTime } from '../../core/format';
  * Adjusting is a signed movement with a reason from a closed list, never a new balance — see
  * `InventoryAdminService`. The ledger drawer beside it is what that produces, and it is the only
  * account of why a number is what it is.
+ *
+ * **Tracking is how a row starts existing.** A listing nobody has purchased in has no stock item at
+ * all, and an untracked offer is one the checkout refuses — which reads to an operator exactly like
+ * "out of stock" and is not. `POST /admin/stock/open` existed from Step 11 and nothing called it;
+ * this is the button (Step 28B, deliverable 17).
  */
 @Component({
   selector: 'kh-stock-page',
@@ -55,6 +64,7 @@ import { tableDateTime } from '../../core/format';
     Control,
     DataTable,
     EntityDrawer,
+    EntityPicker,
     Field,
     FilterBar,
     HasPermission,
@@ -65,7 +75,17 @@ import { tableDateTime } from '../../core/format';
     <kh-page-header
       heading="Stock"
       description="One row per listing per warehouse. Available is what a shopper can actually buy."
-    />
+    >
+      <button
+        *khHasPermission="'inventory.stock.adjust'"
+        khButton
+        type="button"
+        variant="primary"
+        (click)="startTracking()"
+      >
+        Track a listing
+      </button>
+    </kh-page-header>
 
     @if (list.error(); as message) {
       <kh-alert tone="danger" heading="Stock could not be loaded">{{ message }}</kh-alert>
@@ -332,6 +352,59 @@ import { tableDateTime } from '../../core/format';
         </button>
       </div>
     </kh-modal>
+
+    <kh-modal
+      [open]="tracking()"
+      heading="Track a listing"
+      width="30rem"
+      [dismissible]="!busy()"
+      (closed)="tracking.set(false)"
+    >
+      <p class="hint">
+        Opens a stock row at zero so the listing can be received into and sold. It moves no stock.
+      </p>
+
+      @if (trackError(); as message) {
+        <kh-alert tone="danger" heading="It could not be opened">{{ message }}</kh-alert>
+      }
+
+      <kh-entity-picker
+        label="Listing"
+        inputId="track-listing"
+        hint="Search by SKU or product name, or paste the listing id."
+        [search]="listingSearch"
+        (chose)="trackListing.set($event?.id ?? null)"
+      />
+
+      <kh-field label="Warehouse" for="track-warehouse">
+        <select
+          khControl
+          id="track-warehouse"
+          [value]="trackWarehouse()"
+          (change)="trackWarehouse.set($any($event.target).value)"
+        >
+          <option value="">Choose a warehouse…</option>
+          @for (warehouse of warehouses.rows(); track warehouse.id) {
+            <option [value]="warehouse.id">{{ warehouse.name }} ({{ warehouse.code }})</option>
+          }
+        </select>
+      </kh-field>
+
+      <div slot="footer">
+        <button khButton type="button" variant="tertiary" [disabled]="busy()" (click)="tracking.set(false)">
+          Cancel
+        </button>
+        <button
+          khButton
+          type="button"
+          variant="primary"
+          [disabled]="busy() || !trackListing() || !trackWarehouse()"
+          (click)="track()"
+        >
+          Start tracking
+        </button>
+      </div>
+    </kh-modal>
   `,
   styles: `
     kh-alert {
@@ -396,6 +469,35 @@ import { tableDateTime } from '../../core/format';
 export class StockPage {
   private readonly inventory = inject(InventoryAdminService);
   private readonly toasts = inject(ToastService);
+
+  // ---- Tracking a listing (Step 28B, deliverable 17) ---------------------------------------------
+
+  private readonly catalog = inject(CatalogAdminService);
+
+  protected readonly tracking = signal(false);
+  protected readonly trackError = signal<string | null>(null);
+  protected readonly trackListing = signal<string | null>(null);
+  protected readonly trackWarehouse = signal('');
+
+  /** Every warehouse, for the picker. There are few enough that paging one is a control nobody uses. */
+  protected readonly warehouses = this.inventory.warehouses({}, 100);
+
+  /**
+   * Finds listings for the picker.
+   *
+   * An arrow property rather than a method, because it is passed into a component input and a bound
+   * method would lose its `this`.
+   */
+  protected readonly listingSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.catalog.searchListings(term).pipe(
+      map((listings) =>
+        listings.map((listing) => ({
+          id: listing.id,
+          label: listing.productName,
+          hint: `${listing.sku} · ${listing.status}`,
+        })),
+      ),
+    );
 
   /**
    * The reasons an operator may choose.
@@ -505,6 +607,36 @@ export class StockPage {
   protected reference(entry: StockLedgerEntryResponse): string {
     if (!entry.referenceType) return '—';
     return entry.referenceId ? `${entry.referenceType} ${entry.referenceId}` : entry.referenceType;
+  }
+
+  protected startTracking(): void {
+    this.trackError.set(null);
+    this.trackListing.set(null);
+    this.trackWarehouse.set('');
+    this.warehouses.load();
+    this.tracking.set(true);
+  }
+
+  protected track(): void {
+    const listingId = this.trackListing();
+    const warehouseId = this.trackWarehouse();
+    if (!listingId || !warehouseId || this.busy()) return;
+
+    this.busy.set(true);
+    this.trackError.set(null);
+
+    this.inventory.openStockItem({ listingId, warehouseId }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.tracking.set(false);
+        this.toasts.success('That listing is now tracked, at zero.');
+        this.list.refresh();
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.trackError.set(describeError(error, 'That listing could not be tracked.'));
+      },
+    });
   }
 
   protected applyFilters(values: FilterValues): void {

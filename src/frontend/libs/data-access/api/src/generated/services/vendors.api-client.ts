@@ -19,17 +19,17 @@ export interface AdminCommissionPlansListQuery {
 
 /** Query string for `adminCommissionPreview`. */
 export interface AdminCommissionPreviewQuery {
-  VendorId: string;
-  CategoryId?: string;
-  UnitPrice: number;
+  vendorId: string;
+  categoryId?: string;
+  unitPrice: number;
 }
 
 /** Query string for `adminVendorsList`. */
 export interface AdminVendorsListQuery {
-  Status?: string;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** `Vendors` endpoints, generated from the API's OpenAPI document. */

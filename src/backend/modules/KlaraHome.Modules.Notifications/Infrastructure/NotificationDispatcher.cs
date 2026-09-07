@@ -1,4 +1,5 @@
 using KlaraHome.Contracts.Notifications;
+using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Notifications.Domain;
 using KlaraHome.Modules.Notifications.Infrastructure.Channels;
 using KlaraHome.Modules.Notifications.Infrastructure.Persistence;
@@ -147,16 +148,20 @@ internal sealed partial class NotificationDispatcher : BackgroundService
     {
         var now = _clock.UtcNow;
 
-        var due = await context.Messages
-            .FromSql($"""
-                SELECT * FROM notifications.notification_messages
-                WHERE status = 'Queued'
-                  AND next_attempt_at IS NOT NULL
-                  AND next_attempt_at <= {now}
-                ORDER BY next_attempt_at
-                LIMIT {options.BatchSize}
-                FOR UPDATE SKIP LOCKED
-                """)
+        // No xmin in the projection, and that is not an oversight: this table is partitioned, so
+        // PostgreSQL will not return a system column from it and the entity deliberately maps no
+        // concurrency token (IPartitioned). The claim helper reads that off the model, which is why
+        // the decision is not written here.
+        var due = await context
+            .Claim<NotificationMessage>(
+                "notifications.notification_messages",
+                $"""
+                 status = 'Queued'
+                   AND next_attempt_at IS NOT NULL
+                   AND next_attempt_at <= {now}
+                 """,
+                "next_attempt_at",
+                options.BatchSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

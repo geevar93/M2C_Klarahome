@@ -34,9 +34,12 @@ internal sealed record CheckoutPaymentMethodBody(string Method);
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every route requires an account. An order needs somebody to send it to, somebody to answer for
-/// it and somewhere to send the invoice, and guest checkout would mean building a second identity
-/// for people the platform already has a way to identify (<c>CartsOptions.RequireSignInToCheckout</c>).
+/// Every route requires an account, and the requirement is on the group because every route in it
+/// needs one — a checkout session is opened against a customer id, the address step chooses from
+/// that customer's address book, and the order that comes out belongs to them. Guest checkout is
+/// therefore a feature rather than a setting: it needs a guest identity, an address collected onto
+/// the session rather than picked from a book, and an order that belongs to an email address. It is
+/// Phase 2's (PARKING_LOT.md, Step 28B).
 /// </para>
 /// <para>
 /// The session id is in the path, and it is safe there because every handler looks a session up by

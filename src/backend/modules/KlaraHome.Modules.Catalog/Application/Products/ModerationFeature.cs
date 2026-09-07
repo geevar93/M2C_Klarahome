@@ -351,3 +351,102 @@ internal sealed class ChangeProductStatusCommandHandler(
         return await lifecycle.StateAsync(product.Id, cancellationToken).ConfigureAwait(false);
     }
 }
+
+/// <summary>Moves several products at once.</summary>
+/// <param name="ProductIds">The products. Duplicates are collapsed.</param>
+/// <param name="Status">Where to take them all.</param>
+internal sealed record BulkProductStatusCommand(IReadOnlyList<Guid> ProductIds, ProductStatus Status)
+    : ICommand<BulkProductStatusResponse>;
+
+/// <summary>What became of one product in a bulk status change.</summary>
+/// <param name="ProductId">The product.</param>
+/// <param name="Changed">Whether it moved.</param>
+/// <param name="ErrorCode">The refusal's code, when it did not.</param>
+/// <param name="Message">The refusal in words, so the screen can name the row and the reason.</param>
+internal sealed record BulkProductStatusOutcome(
+    Guid ProductId,
+    bool Changed,
+    string? ErrorCode,
+    string? Message);
+
+/// <summary>The result of a bulk status change.</summary>
+/// <param name="Changed">How many moved.</param>
+/// <param name="Failed">How many did not.</param>
+/// <param name="Results">One entry per product asked about, in the order they were asked about.</param>
+internal sealed record BulkProductStatusResponse(
+    int Changed,
+    int Failed,
+    IReadOnlyList<BulkProductStatusOutcome> Results);
+
+/// <summary>
+/// Applies one status change to many products, and reports on each.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Partial success is the contract, not a compromise. Publishing forty products where two have
+/// incomplete mandatory disclosures should publish thirty-eight and name the two; refusing the
+/// batch would make the operator find the offenders by bisection, and succeeding silently would
+/// leave them believing forty went live.
+/// </para>
+/// <para>
+/// Each product goes through the single-product command rather than through a copy of its rules.
+/// Publishability, scope, the transition table and the listing withdrawal that follows an
+/// unpublish are all decided in exactly one place, which is the only way a bulk action and a
+/// single one cannot drift apart. It costs one query per product; the alternative the back office
+/// had was one HTTP request per product.
+/// </para>
+/// </remarks>
+/// <param name="dispatcher">Runs the single-product command, so its rules are the only rules.</param>
+internal sealed class BulkProductStatusCommandHandler(IDispatcher dispatcher)
+    : ICommandHandler<BulkProductStatusCommand, BulkProductStatusResponse>
+{
+    /// <summary>
+    /// The most products one request may move. A cap rather than paging: this is a screenful of
+    /// selected rows, and a request that moves ten thousand products is a bulk job, not a click.
+    /// </summary>
+    public const int MaximumBatch = 200;
+
+    public async Task<Result<BulkProductStatusResponse>> HandleAsync(
+        BulkProductStatusCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var ids = command.ProductIds?.Distinct().ToList() ?? [];
+
+        if (ids.Count == 0)
+        {
+            return CatalogErrors.BulkStatusEmpty;
+        }
+
+        if (ids.Count > MaximumBatch)
+        {
+            return CatalogErrors.BulkStatusTooLarge(MaximumBatch);
+        }
+
+        var results = new List<BulkProductStatusOutcome>(ids.Count);
+        var changed = 0;
+
+        foreach (var id in ids)
+        {
+            var outcome = await dispatcher
+                .SendAsync(new ChangeProductStatusCommand(id, command.Status), cancellationToken)
+                .ConfigureAwait(false);
+
+            if (outcome.IsSuccess)
+            {
+                changed++;
+                results.Add(new BulkProductStatusOutcome(id, Changed: true, null, null));
+                continue;
+            }
+
+            results.Add(new BulkProductStatusOutcome(
+                id,
+                Changed: false,
+                outcome.Error.Code,
+                outcome.Error.Message));
+        }
+
+        return new BulkProductStatusResponse(changed, results.Count - changed, results);
+    }
+}

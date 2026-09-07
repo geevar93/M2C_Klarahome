@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { NotificationCentreService, VendorsAdminService } from '@klarahome/data-access-admin';
+import {
+  IdentityAdminService,
+  ImpersonationStore,
+  NotificationCentreService,
+  VendorsAdminService,
+} from '@klarahome/data-access-admin';
 import { SessionStore } from '@klarahome/data-access-auth';
 import { AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
 import { ToastHost } from '@klarahome/ui-primitives';
@@ -38,10 +43,13 @@ const RAIL_KEY = 'kh.admin.rail-collapsed';
       [collapsed]="collapsed()"
       [showNotifications]="canReadNotifications()"
       [notificationCount]="notificationCount()"
+      [impersonation]="impersonation()"
+      [endingImpersonation]="endingImpersonation()"
       (navToggled)="toggleNav()"
       (navClosed)="navOpen.set(false)"
       (searchOpened)="searchOpen.set(true)"
       (signedOut)="signOut()"
+      (impersonationExited)="endImpersonation()"
     >
       <router-outlet />
     </kh-admin-shell>
@@ -74,6 +82,52 @@ export class ShellLayout {
   protected readonly canReadNotifications = computed(() =>
     this.session.hasPermission('notifications.log.read'),
   );
+
+  // ---- Support impersonation (Step 28B, deliverable 1) -------------------------------------------
+
+  private readonly identityAdmin = inject(IdentityAdminService);
+  private readonly impersonations = inject(ImpersonationStore);
+
+  protected readonly endingImpersonation = signal(false);
+
+  /**
+   * What the banner shows, or null.
+   *
+   * The store's own shape minus the token: a component in `ui-admin` has no business holding an
+   * access token, and the banner has no use for one.
+   */
+  protected readonly impersonation = computed(() => {
+    const acting = this.impersonations.actingAs();
+
+    return acting
+      ? { displayName: acting.displayName, reason: acting.reason, expiresAt: acting.expiresAt }
+      : null;
+  });
+
+  /**
+   * Ends the impersonation, server first.
+   *
+   * The local state is cleared whatever the server says. A stop that failed leaves a session the
+   * clock will end within the window anyway, and a banner an operator cannot dismiss is worse than
+   * one that goes away a few seconds before the session does.
+   */
+  protected endImpersonation(): void {
+    const acting = this.impersonations.actingAs();
+    if (!acting || this.endingImpersonation()) return;
+
+    this.endingImpersonation.set(true);
+
+    this.identityAdmin.endImpersonation(acting.sessionId).subscribe({
+      next: () => {
+        this.endingImpersonation.set(false);
+        this.impersonations.end();
+      },
+      error: () => {
+        this.endingImpersonation.set(false);
+        this.impersonations.end();
+      },
+    });
+  }
 
   /**
    * The seller's own name, once it has been fetched.

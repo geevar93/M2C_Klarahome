@@ -3,6 +3,7 @@ import {
   FeatureFlagResponse,
   PlatformApiClient,
   RolloutModel,
+  SettingsSchemaResponse,
   SettingsSectionResponse,
   StoreSettingsResponse,
 } from '@klarahome/data-access-api';
@@ -34,6 +35,21 @@ export class PlatformSettingsService {
   /** Every settings section, public and private, with its current value. */
   settings(): Observable<StoreSettingsResponse> {
     return this.api.adminSettingsGet();
+  }
+
+  /**
+   * The shape of every section and the rules its values must satisfy.
+   *
+   * The settings form used to know a field was a number and not that the number had to be positive,
+   * so an operator learnt the rule by being refused. This is the same schema the validators encode,
+   * served rather than compiled into this app — the arrangement the CMS block types already use
+   * (Step 28B, deliverable 10).
+   *
+   * It is advisory. The server validates every write regardless, and its refusal is still what a
+   * failed save shows.
+   */
+  settingsSchema(): Observable<SettingsSchemaResponse> {
+    return this.api.adminSettingsSchemaGet();
   }
 
   /**

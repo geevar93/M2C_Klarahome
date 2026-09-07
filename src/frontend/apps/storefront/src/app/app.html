@@ -13,6 +13,12 @@
 
 <kh-offline-notice />
 
+<!--
+  Above the header, because that is where an announcement is read and because the header is sticky:
+  a strip inside it would compete for the space a shopper navigates from.
+-->
+<kh-announcement-bar [banners]="shell.announcementBanners()" />
+
 <kh-site-header
   [storeName]="shell.storeName()"
   [menu]="shell.headerMenu()"

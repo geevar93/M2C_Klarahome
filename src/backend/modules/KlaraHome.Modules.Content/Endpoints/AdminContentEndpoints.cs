@@ -9,6 +9,7 @@ using KlaraHome.Modules.Content.Application.Menus;
 using KlaraHome.Modules.Content.Application.Pages;
 using KlaraHome.Modules.Content.Application.Redirects;
 using KlaraHome.Modules.Content.Application.Seo;
+using KlaraHome.Modules.Content.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -20,7 +21,7 @@ namespace KlaraHome.Modules.Content.Endpoints;
 /// <param name="Type">What it is for.</param>
 /// <param name="Title">Its title.</param>
 /// <param name="Summary">Its summary.</param>
-internal sealed record CreatePageBody(string? Slug, string? Type, string? Title, string? Summary);
+internal sealed record CreatePageBody(string? Slug, PageType Type, string? Title, string? Summary);
 
 /// <summary>The body of a page edit.</summary>
 /// <param name="Slug">Its address.</param>
@@ -45,7 +46,7 @@ internal sealed record UpdatePageBody(
 /// <param name="Status">Where the page is being moved to.</param>
 /// <param name="ScheduledAt">When it should go live, for a schedule.</param>
 /// <param name="Note">Why, recorded on the version a publish snapshots.</param>
-internal sealed record TransitionPageBody(string? Status, DateTimeOffset? ScheduledAt, string? Note);
+internal sealed record TransitionPageBody(PageStatus Status, DateTimeOffset? ScheduledAt, string? Note);
 
 /// <summary>The body of a new menu.</summary>
 /// <param name="Code">Its stable key.</param>
@@ -80,7 +81,7 @@ internal sealed record UpdateMenuBody(
 /// <param name="IsActive">Whether it is switched on.</param>
 internal sealed record BannerBody(
     string? Name,
-    string? Placement,
+    BannerPlacement Placement,
     Guid? MediaFileId,
     Guid? MobileMediaFileId,
     string? Message,
@@ -90,7 +91,7 @@ internal sealed record BannerBody(
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt,
-    string? Audience,
+    BannerAudience? Audience,
     bool IsActive);
 
 /// <summary>The body of a banner switch.</summary>
@@ -128,16 +129,25 @@ internal sealed record SetCollectionRuleBody(CollectionRuleBody? Rule);
 /// <param name="Items">The products, in the order they should render.</param>
 internal sealed record SetCollectionItemsBody(IReadOnlyList<CollectionItemBody>? Items);
 
+/// <summary>The body of a single addition to a collection.</summary>
+/// <param name="ProductId">The product to add.</param>
+/// <param name="IsPinned">Whether it is fixed where it lands.</param>
+internal sealed record AddCollectionItemBody(Guid ProductId, bool IsPinned);
+
 /// <summary>The body of a new redirect.</summary>
 /// <param name="FromPath">The path being asked for.</param>
 /// <param name="ToPath">Where it goes.</param>
-/// <param name="StatusCode">301, 302 or 410.</param>
+/// <param name="StatusCode">
+/// 301, 302 or 410. A number rather than an enum, deliberately: it is the HTTP status the
+/// storefront actually answers with, and spelling it <c>MovedPermanently</c> on the wire would put
+/// a name in front of the one value every reader of a redirect table already knows by its number.
+/// </param>
 /// <param name="Note">Why.</param>
 internal sealed record CreateRedirectBody(string? FromPath, string? ToPath, int StatusCode, string? Note);
 
 /// <summary>The body of a redirect edit. The path it matches is not editable.</summary>
 /// <param name="ToPath">Where it goes.</param>
-/// <param name="StatusCode">301, 302 or 410.</param>
+/// <param name="StatusCode">301, 302 or 410. A number for the reason a create's is.</param>
 /// <param name="IsActive">Whether it is applied.</param>
 /// <param name="Note">Why.</param>
 internal sealed record UpdateRedirectBody(string? ToPath, int StatusCode, bool IsActive, string? Note);
@@ -185,8 +195,8 @@ internal static class AdminContentEndpoints
 
         group.MapGet("/", async (
                 string? search,
-                string? type,
-                string? status,
+                PageType? type,
+                PageStatus? status,
                 string? cursor,
                 int? size,
                 IDispatcher dispatcher,
@@ -454,7 +464,7 @@ internal static class AdminContentEndpoints
         var group = admin.MapGroup("/banners").WithTags("Content");
 
         group.MapGet("/", async (
-                string? placement,
+                BannerPlacement? placement,
                 bool? activeOnly,
                 string? cursor,
                 int? size,
@@ -705,7 +715,46 @@ internal static class AdminContentEndpoints
                 return result.ToOk(context);
             })
             .WithName("adminSetCollectionItems")
-            .WithSummary("Replaces the hand-picked membership. A rule's own rows are left alone.")
+            .WithSummary("Replaces the hand-picked membership in one ordered list. This is how a collection "
+                         + "is reordered; adding or removing a single product has its own routes, because "
+                         + "sending back only the rows a screen has loaded would delete the rest.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<CollectionResponse>();
+
+        group.MapPost("/{id:guid}/items", async (
+                Guid id,
+                AddCollectionItemBody body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var command = new AddCollectionItemCommand(id, body.ProductId, body.IsPinned);
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminAddCollectionItem")
+            .WithSummary("Adds one product to the end of the hand-picked membership, leaving the rest alone. "
+                         + "A product already there is re-pinned rather than refused.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<CollectionResponse>();
+
+        group.MapDelete("/{id:guid}/items/{productId:guid}", async (
+                Guid id,
+                Guid productId,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .SendAsync(new RemoveCollectionItemCommand(id, productId), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminRemoveCollectionItem")
+            .WithSummary("Takes one product out of the hand-picked membership. A row the rule put there is "
+                         + "refused: it would come back on the next refresh.")
             .RequirePermission(ContentPermissions.ContentManage)
             .RequireRateLimiting(RateLimitPolicies.AdminWrite)
             .Produces<CollectionResponse>();

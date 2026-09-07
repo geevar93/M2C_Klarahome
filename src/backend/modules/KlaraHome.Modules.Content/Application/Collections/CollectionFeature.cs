@@ -647,18 +647,10 @@ internal static class RuleBinder
 
         foreach (var condition in conditions)
         {
-            if (!Enum.TryParse<RuleField>(condition.Field, ignoreCase: true, out var field))
-            {
-                return Result.Failure<CollectionRuleSet>(ContentErrors.InvalidRule(
-                    $"'{condition.Field}' is not something this store can filter on. "
-                    + $"Use one of: {string.Join(", ", Enum.GetNames<RuleField>())}."));
-            }
-
-            if (!Enum.TryParse<RuleOperator>(condition.Operator, ignoreCase: true, out var op))
-            {
-                return Result.Failure<CollectionRuleSet>(ContentErrors.InvalidRule(
-                    $"'{condition.Operator}' is not a comparison this store understands."));
-            }
+            // The field and the operator are enums in the contract, so an unknown word is refused
+            // by the model binder before this runs (Step 28B, deliverable 11).
+            var field = condition.Field;
+            var op = condition.Operator;
 
             var values = (condition.Values ?? [])
                 .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -683,9 +675,7 @@ internal static class RuleBinder
             bound.Add(new RuleCondition(field, condition.Key?.Trim(), op, values));
         }
 
-        var sort = Enum.TryParse<CollectionSort>(body.Sort, ignoreCase: true, out var parsed)
-            ? parsed
-            : CollectionSort.Newest;
+        var sort = body.Sort ?? CollectionSort.Newest;
 
         var limit = body.Limit <= 0
             ? 100

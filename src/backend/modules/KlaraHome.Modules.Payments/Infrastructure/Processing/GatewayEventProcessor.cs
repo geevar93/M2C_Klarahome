@@ -1,3 +1,4 @@
+using KlaraHome.Contracts.Settlements;
 using KlaraHome.Modules.Payments.Application;
 using KlaraHome.Modules.Payments.Domain;
 using KlaraHome.Modules.Payments.Infrastructure.Gateway;
@@ -40,6 +41,12 @@ internal static class GatewayEventTypes
     /// <summary>A settlement was paid out. Ingestion pulls the report rather than trusting this.</summary>
     public const string SettlementProcessed = "settlement.processed";
 
+    /// <summary>A Route transfer to a seller's linked account has moved the money.</summary>
+    public const string TransferProcessed = "transfer.processed";
+
+    /// <summary>A Route transfer failed or was reversed.</summary>
+    public const string TransferFailed = "transfer.failed";
+
     /// <summary>Every type this platform subscribes to.</summary>
     public static readonly IReadOnlySet<string> Subscribed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -51,6 +58,8 @@ internal static class GatewayEventTypes
         RefundProcessed,
         RefundFailed,
         SettlementProcessed,
+        TransferProcessed,
+        TransferFailed,
     };
 }
 
@@ -82,11 +91,13 @@ internal static class GatewayEventTypes
 /// <param name="context">The Payments data context.</param>
 /// <param name="providers">Finds the adapter that can re-fetch the fact.</param>
 /// <param name="workflow">Applies it. The single place a payment moves.</param>
+/// <param name="payouts">Where a seller payout event goes, since this module owns no payouts.</param>
 /// <param name="logger">Reports what an event turned out to be about.</param>
 internal sealed partial class GatewayEventProcessor(
     PaymentsDbContext context,
     PaymentProviderRegistry providers,
     PaymentWorkflow workflow,
+    IPayoutOutcomes payouts,
     ILogger<GatewayEventProcessor> logger)
 {
     /// <summary>
@@ -138,9 +149,38 @@ internal sealed partial class GatewayEventProcessor(
             // that on its own schedule, so acknowledging this one is the whole of handling it.
             GatewayEventTypes.SettlementProcessed => Result.Success(),
 
+            // A seller payout. This module owns no payouts, so it hands the transfer id to the one
+            // that does and does nothing else with it (Step 28B, deliverable 22).
+            GatewayEventTypes.TransferProcessed or GatewayEventTypes.TransferFailed =>
+                await ApplyTransferEventAsync(envelope.Value, cancellationToken).ConfigureAwait(false),
+
             _ => await ApplyPaymentEventAsync(stored, envelope.Value, provider, cancellationToken)
                 .ConfigureAwait(false),
         };
+    }
+
+    /// <summary>
+    /// Hands a Route transfer event to Settlements, which owns payouts.
+    /// </summary>
+    /// <remarks>
+    /// Only the identifier crosses. Settlements re-fetches the transfer from the gateway and applies
+    /// what it says, on the same rule this module follows for every payment event: the signature
+    /// proves who sent the body, not that the body is current.
+    /// </remarks>
+    private async Task<Result> ApplyTransferEventAsync(
+        WebhookEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
+        if (envelope.ProviderTransferId is not { Length: > 0 } transferId)
+        {
+            // A transfer event that names no transfer is acknowledged rather than retried: there is
+            // nothing a redelivery of it could contain that this one did not.
+            TransferEventUnattributed(logger, envelope.ProviderEventId);
+            return Result.Success();
+        }
+
+        await payouts.RefreshAsync(transferId, cancellationToken).ConfigureAwait(false);
+        return Result.Success();
     }
 
     /// <summary>Applies a payment event by re-fetching the payment and letting the workflow decide.</summary>
@@ -312,4 +352,8 @@ internal sealed partial class GatewayEventProcessor(
     [LoggerMessage(EventId = 1541, Level = LogLevel.Warning,
         Message = "A {EventType} webhook named refund {Reference}, which this platform did not raise.")]
     private static partial void UnknownRefund(ILogger logger, string eventType, string? reference);
+
+    [LoggerMessage(EventId = 1542, Level = LogLevel.Warning,
+        Message = "Transfer webhook {ProviderEventId} named no transfer, so there was nothing to look up.")]
+    private static partial void TransferEventUnattributed(ILogger logger, string providerEventId);
 }

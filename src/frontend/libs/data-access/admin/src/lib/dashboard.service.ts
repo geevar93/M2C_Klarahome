@@ -105,7 +105,7 @@ export class DashboardService {
 
     if (this.session.hasPermission('catalog.product.moderate')) {
       sources.push(
-        this.catalog.adminProductModerationQueue({ Status: 'Pending', Size: 1 }, quiet).pipe(
+        this.catalog.adminProductModerationQueue({ status: 'Pending', size: 1 }, quiet).pipe(
           map((result) =>
             tile(
               'moderation',
@@ -122,7 +122,7 @@ export class DashboardService {
 
     if (this.session.hasPermission('vendors.vendor.approve')) {
       sources.push(
-        this.vendors.adminVendorsList({ Status: 'UnderReview', Size: 1 }, quiet).pipe(
+        this.vendors.adminVendorsList({ status: 'UnderReview', size: 1 }, quiet).pipe(
           map((result) =>
             tile('vendors', 'Sellers to approve', 'Applications under review', result.page.total, '/vendors'),
           ),
@@ -133,7 +133,7 @@ export class DashboardService {
 
     if (this.session.hasPermission('notifications.log.read')) {
       sources.push(
-        this.notifications.adminNotificationsList({ Status: 'Failed', Size: 1 }, quiet).pipe(
+        this.notifications.adminNotificationsList({ status: 'Failed', size: 1 }, quiet).pipe(
           map((result) =>
             tile(
               'notifications',

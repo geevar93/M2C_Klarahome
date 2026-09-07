@@ -250,7 +250,8 @@ internal sealed partial class OrderFulfilmentService(
                         line.Snapshot.Name,
                         line.QuantityLive,
                         line.Snapshot.WeightGrams,
-                        line.LineTotal - line.CancelledValue)),
+                        line.LineTotal - line.CancelledValue,
+                        line.WarehouseId)),
             ]);
     }
 

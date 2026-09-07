@@ -6,6 +6,7 @@ import {
   AttributeSetResponse,
   BrandBody,
   BrandResponse,
+  BulkProductStatusResponse,
   CatalogApiClient,
   CatalogJobResponse,
   CategoryBody,
@@ -19,6 +20,7 @@ import {
   ProductBody,
   ProductListItem,
   ProductResponse,
+  ProductStatus,
   UpdateListingBody,
   VariantBody,
   VariantResponse,
@@ -84,13 +86,13 @@ export class CatalogAdminService {
       (current, cursor, size) =>
         this.api
           .adminProductsList({
-            Status: current.status,
-            CategoryId: current.categoryId,
-            BrandId: current.brandId,
-            VendorId: current.vendorId,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            categoryId: current.categoryId,
+            brandId: current.brandId,
+            vendorId: current.vendorId,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<ProductListItem> => result)),
       filters,
@@ -150,6 +152,20 @@ export class CatalogAdminService {
     return this.api.adminProductArchive(id);
   }
 
+  /**
+   * Moves several products to one status in one request.
+   *
+   * The response reports on each product rather than answering yes or no: publishing forty where
+   * two have incomplete mandatory disclosures publishes thirty-eight and names the two, which is
+   * the only outcome that is both honest and useful (Step 28B, deliverable 8).
+   */
+  bulkProductStatus(
+    productIds: readonly string[],
+    status: ProductStatus,
+  ): Observable<BulkProductStatusResponse> {
+    return this.api.adminProductBulkStatus({ productIds: [...productIds], status });
+  }
+
   // ---- Variants ---------------------------------------------------------------------------------
 
   createVariant(productId: string, body: VariantBody): Observable<VariantResponse> {
@@ -179,18 +195,39 @@ export class CatalogAdminService {
       (current, cursor, size) =>
         this.api
           .adminListingsList({
-            Status: current.status,
-            VendorId: current.vendorId,
-            ProductId: current.productId,
-            VariantId: current.variantId,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            vendorId: current.vendorId,
+            productId: current.productId,
+            variantId: current.variantId,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<ListingResponse> => result)),
       filters,
       pageSize,
     );
+  }
+
+  /**
+   * A short list of products matching a search, for a picker.
+   *
+   * The same shape and the same reasoning as `searchListings`: a typeahead shows a handful and is
+   * re-run on the next keystroke, so a paging cursor is state nobody reads.
+   */
+  searchProducts(term: string, take = 10): Observable<ProductListItem[]> {
+    return this.api.adminProductsList({ search: term, size: take }).pipe(map((page) => page.items));
+  }
+
+  /**
+   * A short list of listings matching a search, for a picker.
+   *
+   * A plain observable rather than a `CursorList`: a typeahead shows the first handful and is
+   * re-run on the next keystroke, so paging state would be state nobody reads. Added at Step 28B
+   * for the entity picker (deliverable 15).
+   */
+  searchListings(term: string, take = 10): Observable<ListingResponse[]> {
+    return this.api.adminListingsList({ search: term, size: take }).pipe(map((page) => page.items));
   }
 
   createListing(body: CreateListingBody): Observable<ListingResponse> {
@@ -247,10 +284,10 @@ export class CatalogAdminService {
       (current, cursor, size) =>
         this.api
           .adminBrandsList({
-            Search: current.search,
-            ActiveOnly: current.activeOnly ?? false,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            search: current.search,
+            activeOnly: current.activeOnly ?? false,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<BrandResponse> => result)),
       filters,
@@ -279,8 +316,8 @@ export class CatalogAdminService {
    */
   attributes(filterableOnly = false, variantDefiningOnly = false): Observable<AttributeResponse[]> {
     return this.api.adminAttributesList({
-      FilterableOnly: filterableOnly,
-      VariantDefiningOnly: variantDefiningOnly,
+      filterableOnly: filterableOnly,
+      variantDefiningOnly: variantDefiningOnly,
     });
   }
 
@@ -322,9 +359,9 @@ export class CatalogAdminService {
       (current, cursor, size) =>
         this.api
           .adminProductModerationQueue({
-            Status: current.status,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<ModerationResponse> => result)),
       filters,
@@ -346,7 +383,7 @@ export class CatalogAdminService {
     return new CursorList<CatalogJobResponse, Record<string, never>>(
       (_filters, cursor, size) =>
         this.api
-          .adminCatalogJobsList({ Cursor: cursor ?? undefined, Size: size })
+          .adminCatalogJobsList({ cursor: cursor ?? undefined, size: size })
           .pipe(map((result): CursorPage<CatalogJobResponse> => result)),
       {},
       pageSize,

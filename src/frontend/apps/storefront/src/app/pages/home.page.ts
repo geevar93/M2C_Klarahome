@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { StorePageResponse } from '@klarahome/data-access-content';
+import { StoreContentService, StorePageResponse } from '@klarahome/data-access-content';
 import { EmptyState } from '@klarahome/ui-primitives';
-import { CmsBlockRenderer, ProductCarousel, ProductCardView } from '@klarahome/ui-patterns';
+import { BannerSlot, CmsBlockRenderer, ProductCarousel, ProductCardView } from '@klarahome/ui-patterns';
 import { AnalyticsEvents, AnalyticsService, SeoService } from '@klarahome/util';
 import { map } from 'rxjs';
 
+import { toBannerViews } from '../core/banner.mapper';
 import { CmsBlockMapper } from '../core/cms-block.mapper';
 import { RecentlyViewedStore } from '../core/recently-viewed.store';
 
@@ -26,11 +27,19 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
  * **A missing document is an empty shop, not a 404.** The header, footer and search still work,
  * so the resolver answers `null` and this says so plainly rather than sending a visitor to an
  * error page over a merchandising gap.
+ *
+ * **The two banner placements are not blocks.** A hero block is part of the document a merchandiser
+ * composes; a banner is scheduled independently with its own window and audience, which is why the
+ * CMS has both. They are fetched here rather than resolved because a banner is not the LCP element
+ * — the hero block above it is — and blocking the document on a merchandising strip would trade the
+ * page's most important paint for its least (Step 28B, deliverable 19).
  */
 @Component({
   selector: 'kh-home-page',
-  imports: [CmsBlockRenderer, EmptyState, ProductCarousel],
+  imports: [BannerSlot, CmsBlockRenderer, EmptyState, ProductCarousel],
   template: `
+    <kh-banner-slot [banners]="heroBanners()" />
+
     @if (blocks().length > 0) {
       <kh-cms-block-renderer
         [blocks]="blocks()"
@@ -44,6 +53,8 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
         message="Browse the categories in the menu, or search for what you are looking for."
       />
     }
+
+    <kh-banner-slot [banners]="stripBanners()" />
 
     @if (recentlyViewed().length > 0) {
       <kh-product-carousel heading="Recently viewed" [products]="recentlyViewed()" />
@@ -72,6 +83,18 @@ export class HomePage {
   );
 
   protected readonly blocks = computed(() => this.mapper.toViews(this.page()?.blocks ?? []));
+
+  private readonly content = inject(StoreContentService);
+
+  /** The masthead placement, above the document. Empty when no campaign is running. */
+  protected readonly heroBanners = toSignal(this.content.banners('HomeHero').pipe(map(toBannerViews)), {
+    initialValue: [],
+  });
+
+  /** The strip below it, which is usually a second campaign or a category promotion. */
+  protected readonly stripBanners = toSignal(this.content.banners('HomeStrip').pipe(map(toBannerViews)), {
+    initialValue: [],
+  });
 
   /**
    * The trail from `localStorage`.

@@ -1,20 +1,37 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, WritableSignal, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   CatalogAdminService,
   CategoryNode,
   PricingAdminService,
+  PromotionApplication,
   PromotionBody,
   PromotionConditionsPayload,
   PromotionResponse,
   PromotionScopePayload,
   PromotionTierPayload,
+  PromotionType,
   QuoteLinePayload,
+  QuotePaymentMethod,
   QuoteResult,
+  ReferenceDataService,
+  StackingMode,
+  VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { ConfirmDialog, DataTable, DataTableColumn, FormShell, PageHeader } from '@klarahome/ui-admin';
+import {
+  ConfirmDialog,
+  DataTable,
+  DataTableColumn,
+  EntityOption,
+  EntityPicker,
+  FormShell,
+  PageHeader,
+} from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Observable, map } from 'rxjs';
+
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -69,6 +86,7 @@ const NEW = 'new';
     ConfirmDialog,
     Control,
     DataTable,
+    EntityPicker,
     Field,
     FormShell,
     HasPermission,
@@ -424,6 +442,21 @@ const NEW = 'new';
               </select>
             </kh-field>
 
+            <!--
+              A picker beside the list rather than instead of it. A scope is genuinely a *set* of
+              ids, and a control that held one would be the wrong shape; the picker appends, and the
+              list stays editable for the operator who has forty of them on a clipboard
+              (Step 28B, deliverable 15).
+            -->
+            <kh-entity-picker
+              label="Find a listing to include"
+              inputId="promo-listing-picker"
+              [optional]="true"
+              hint="Adds it to the list below."
+              [search]="listingSearch"
+              (chose)="append(listingIds, $event?.id)"
+            />
+
             <kh-field label="Listings" for="promo-listings" [optional]="true" hint="One listing id per line.">
               <textarea
                 khControl
@@ -433,6 +466,15 @@ const NEW = 'new';
                 (input)="listingIds.set($any($event.target).value)"
               ></textarea>
             </kh-field>
+
+            <kh-entity-picker
+              label="Find a listing to exclude"
+              inputId="promo-excluded-picker"
+              [optional]="true"
+              hint="Adds it to the exclusions below."
+              [search]="listingSearch"
+              (chose)="append(excludedListingIds, $event?.id)"
+            />
 
             <kh-field
               label="Listings to exclude"
@@ -448,6 +490,15 @@ const NEW = 'new';
                 (input)="excludedListingIds.set($any($event.target).value)"
               ></textarea>
             </kh-field>
+
+            <kh-entity-picker
+              label="Find a seller"
+              inputId="promo-vendor-picker"
+              [optional]="true"
+              hint="Adds them to the list below."
+              [search]="vendorSearch"
+              (chose)="append(vendorIds, $event?.id)"
+            />
 
             <kh-field label="Sellers" for="promo-vendors" [optional]="true" hint="One seller id per line.">
               <textarea
@@ -621,14 +672,18 @@ const NEW = 'new';
                   }
                 </select>
               </kh-field>
-              <kh-field label="Place of supply (state id)" for="sim-state" [optional]="true">
-                <input
+              <kh-field label="Place of supply" for="sim-state" [optional]="true">
+                <select
                   khControl
                   id="sim-state"
-                  type="text"
                   [value]="simulationStateId()"
-                  (input)="simulationStateId.set($any($event.target).value)"
-                />
+                  (change)="simulationStateId.set($any($event.target).value)"
+                >
+                  <option value="">The store's own state</option>
+                  @for (state of states(); track state.id) {
+                    <option [value]="state.id">{{ state.name }} ({{ state.code }})</option>
+                  }
+                </select>
               </kh-field>
             </div>
 
@@ -857,6 +912,10 @@ const NEW = 'new';
 export class PromotionDetailPage {
   private readonly pricing = inject(PricingAdminService);
   private readonly catalog = inject(CatalogAdminService);
+  private readonly vendors = inject(VendorsAdminService);
+
+  /** The platform's states, for the place of supply. */
+  protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
@@ -877,9 +936,9 @@ export class PromotionDetailPage {
 
   // The mechanic and everything that hangs off it. Held apart from the text form because a select
   // decides which of the fields below are rendered at all, and a `formField` is a string.
-  protected readonly type = signal('Percentage');
-  protected readonly appliesTo = signal('Line');
-  protected readonly stacking = signal('Exclusive');
+  protected readonly type = signal<PromotionType>('Percentage');
+  protected readonly appliesTo = signal<PromotionApplication>('Line');
+  protected readonly stacking = signal<StackingMode>('Exclusive');
   protected readonly endsAt = signal('');
   protected readonly maxDiscount = signal('');
   protected readonly usageLimitTotal = signal('');
@@ -888,7 +947,7 @@ export class PromotionDetailPage {
   protected readonly minQuantity = signal('');
   protected readonly maxQuantityPerOrder = signal('');
   protected readonly firstOrderOnly = signal(false);
-  protected readonly selectedPaymentMethods = signal<readonly string[]>([]);
+  protected readonly selectedPaymentMethods = signal<readonly QuotePaymentMethod[]>([]);
   protected readonly buyQuantity = signal('');
   protected readonly getQuantity = signal('');
   protected readonly getDiscountPercent = signal('');
@@ -900,6 +959,47 @@ export class PromotionDetailPage {
   protected readonly categoryIds = signal<readonly string[]>([]);
   protected readonly brandIds = signal<readonly string[]>([]);
   protected readonly vendorIds = signal('');
+
+  /**
+   * Adds a chosen id to one of the scope lists.
+   *
+   * A no-op for an id already there — choosing the same product twice is a mis-click, not an
+   * instruction to list it twice, and the API would collapse the duplicate anyway.
+   */
+  protected append(target: WritableSignal<string>, id: string | undefined): void {
+    if (!id) return;
+
+    const lines = target()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.includes(id)) return;
+
+    target.set([...lines, id].join('\n'));
+  }
+
+  /** Finds listings for the two scope pickers. */
+  protected readonly listingSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.catalog.searchListings(term).pipe(
+      map((listings) =>
+        listings.map((listing) => ({
+          id: listing.id,
+          label: listing.productName,
+          hint: `${listing.sku} · ${listing.status}`,
+        })),
+      ),
+    );
+
+  /** Finds sellers for the scope picker. */
+  protected readonly vendorSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.vendors
+      .searchVendors(term)
+      .pipe(
+        map((sellers) =>
+          sellers.map((seller) => ({ id: seller.id, label: seller.displayName, hint: seller.code })),
+        ),
+      );
   protected readonly listingIds = signal('');
   protected readonly excludedListingIds = signal('');
 
@@ -910,7 +1010,13 @@ export class PromotionDetailPage {
   protected readonly simulationLines = signal<readonly SimulationLine[]>([{ listingId: '', quantity: '1' }]);
   protected readonly simulationCoupon = signal('');
   protected readonly simulationShipping = signal('0');
-  protected readonly simulationMethod = signal('prepaid');
+  protected readonly simulationMethod = signal<QuotePaymentMethod>('Prepaid');
+  /**
+   * Where the simulated basket is delivered, which decides the GST split.
+   *
+   * A list rather than a typed identifier since Step 28B (deliverable 3). Blank means the store's
+   * own state, which is what the quote engine falls back to.
+   */
   protected readonly simulationStateId = signal('');
   protected readonly simulationFirstOrder = signal(false);
   protected readonly simulating = signal(false);
@@ -1025,7 +1131,7 @@ export class PromotionDetailPage {
     this.brandIds.set(selectedValues(select));
   }
 
-  protected togglePaymentMethod(method: string, on: boolean): void {
+  protected togglePaymentMethod(method: QuotePaymentMethod, on: boolean): void {
     this.selectedPaymentMethods.update((current) =>
       on ? [...new Set([...current, method])] : current.filter((entry) => entry !== method),
     );

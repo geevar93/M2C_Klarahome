@@ -69,7 +69,7 @@ internal sealed class PageComposer(
         return new StorePageResponse(
             page.Id,
             page.Slug,
-            page.Type.ToString(),
+            page.Type,
             page.Title,
             page.Summary,
             ContentProjection.ToSeo(page.Seo, ogImage),

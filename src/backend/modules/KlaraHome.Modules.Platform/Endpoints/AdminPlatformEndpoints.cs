@@ -59,6 +59,21 @@ internal static class AdminPlatformEndpoints
             .RequirePermission(SettingsManagePermission)
             .Produces<StoreSettingsResponse>();
 
+        admin.MapGet("/settings/schema", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetSettingsSchemaQuery(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminSettingsSchemaGet")
+            .WithSummary("The shape of every settings section and the rules its values must satisfy, so the "
+                         + "settings form can draw the right control and enforce the same bounds the server "
+                         + "does. Advisory: the server validates every write regardless.")
+            .RequirePermission(SettingsManagePermission)
+            .Produces<SettingsSchemaResponse>();
+
         admin.MapPut("/settings/{key}", async (
                 string key,
                 JsonElement value,

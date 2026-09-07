@@ -26,7 +26,7 @@ internal sealed record ReturnLineResponse(
     int QuantityAccepted,
     decimal RefundAmount,
     decimal AcceptedRefund,
-    string Disposition,
+    ReturnDisposition Disposition,
     string? QcNote);
 
 /// <summary>A return, as the API states it.</summary>
@@ -55,7 +55,10 @@ internal sealed record ReturnLineResponse(
 /// <param name="QcPassed">Whether it passed inspection. Null until it has been inspected.</param>
 /// <param name="QcNotes">What the inspector wrote.</param>
 /// <param name="RejectedReason">Why it was refused.</param>
+/// <param name="CustomerId">Who asked. The back office needs it to raise the replacement order
+/// against the same shopper.</param>
 /// <param name="CreditNoteId">The credit note raised for it.</param>
+/// <param name="ReplacementOrderId">The order sent out in its place, once one has been raised.</param>
 /// <param name="RequestedAt">When the shopper asked.</param>
 /// <param name="ApprovedAt">When it was approved.</param>
 /// <param name="ReceivedAt">When the warehouse booked it in.</param>
@@ -92,7 +95,9 @@ internal sealed record ReturnResponse(
     bool? QcPassed,
     string? QcNotes,
     string? RejectedReason,
+    Guid CustomerId,
     Guid? CreditNoteId,
+    Guid? ReplacementOrderId,
     DateTimeOffset RequestedAt,
     DateTimeOffset? ApprovedAt,
     DateTimeOffset? ReceivedAt,
@@ -306,7 +311,9 @@ internal static class ReturnProjection
             request.QcPassed,
             request.QcNotes,
             request.RejectedReason,
+            request.CustomerId,
             request.CreditNoteId,
+            request.ReplacementOrderId,
             request.RequestedAt,
             request.ApprovedAt,
             request.ReceivedAt,
@@ -355,7 +362,7 @@ internal static class ReturnProjection
             line.QuantityAccepted,
             line.RefundAmount,
             line.AcceptedRefund,
-            line.Disposition.ToString(),
+            line.Disposition,
             line.QcNote);
     }
 

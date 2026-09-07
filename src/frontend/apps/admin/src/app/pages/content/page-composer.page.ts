@@ -8,6 +8,7 @@ import {
   ContentAdminService,
   MediaFileResponse,
   PageResponse,
+  PageStatus,
   PageVersionSummaryResponse,
   StorePageResponse,
 } from '@klarahome/data-access-admin';
@@ -19,6 +20,7 @@ import {
   PageHeader,
   ReorderItem,
   ReorderList,
+  SchemaField,
   StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
@@ -85,6 +87,7 @@ interface BlockDraft {
     Modal,
     PageHeader,
     ReorderList,
+    SchemaField,
     Skeleton,
     StatusBadge,
   ],
@@ -183,80 +186,84 @@ interface BlockDraft {
 
               @if (schemaFor(draft.type); as schema) {
                 @for (field of schema.fields; track field.name) {
-                  <kh-field
+                  <kh-schema-field
+                    [field]="field"
+                    [controlId]="draft.id + '-' + field.name"
                     [label]="humanise(field.name)"
-                    [for]="draft.id + '-' + field.name"
-                    [optional]="!field.isRequired"
                     [hint]="fieldHint(field)"
-                  >
-                    @if (field.choices && field.choices.length > 0) {
-                      <select
-                        khControl
-                        [id]="draft.id + '-' + field.name"
-                        [value]="text(draft.config[field.name])"
-                        (change)="setConfig(draft.id, field.name, $any($event.target).value)"
-                      >
-                        <option value=""></option>
-                        @for (choice of field.choices; track choice) {
-                          <option [value]="choice">{{ choice }}</option>
-                        }
-                      </select>
-                    } @else if (field.kind === 'Boolean') {
-                      <input
-                        khControl
-                        [id]="draft.id + '-' + field.name"
-                        type="checkbox"
-                        [checked]="draft.config[field.name] === true"
-                        (change)="setConfigBoolean(draft.id, field.name, $any($event.target).checked)"
-                      />
-                    } @else if (field.kind === 'Integer') {
-                      <input
-                        khControl
-                        [id]="draft.id + '-' + field.name"
-                        type="number"
-                        [value]="text(draft.config[field.name])"
-                        (input)="setConfigNumber(draft.id, field.name, $any($event.target).value)"
-                      />
-                    } @else if (isLongText(field)) {
-                      <textarea
-                        khControl
-                        [id]="draft.id + '-' + field.name"
-                        rows="3"
-                        [value]="text(draft.config[field.name])"
-                        (input)="setConfigText(draft.id, field, $any($event.target).value)"
-                      ></textarea>
-                    } @else {
-                      <input
-                        khControl
-                        [id]="draft.id + '-' + field.name"
-                        type="text"
-                        [attr.maxlength]="field.maxLength > 0 ? field.maxLength : null"
-                        [value]="text(draft.config[field.name])"
-                        (input)="setConfig(draft.id, field.name, $any($event.target).value)"
-                      />
-                    }
-                  </kh-field>
+                    [value]="draft.config[field.name]"
+                    (changed)="setConfig(draft.id, field.name, $event)"
+                  />
                 }
 
                 @if (schema.itemFields && schema.itemFields.length > 0) {
-                  <p class="hint">
-                    This block also holds up to {{ schema.maxItems }} items, which are edited as JSON until a
-                    repeater is built for them.
-                  </p>
-                  <kh-field
-                    label="Items (JSON)"
-                    [for]="draft.id + '-items'"
-                    [optional]="true"
-                    [hint]="itemsHint(schema)"
-                  >
-                    <textarea
-                      khControl
-                      [id]="draft.id + '-items'"
-                      rows="6"
-                      [value]="itemsJson(draft)"
-                      (input)="setItems(draft.id, $any($event.target).value)"
-                    ></textarea>
-                  </kh-field>
+                  <section class="items">
+                    <header>
+                      <h4>Items</h4>
+                      <p class="hint">{{ itemsHint(schema) }}</p>
+                    </header>
+
+                    @for (item of itemsOf(draft); track $index) {
+                      <article class="item">
+                        <header>
+                          <span>{{ $index + 1 }}</span>
+                          <div class="item-actions">
+                            <button
+                              khButton
+                              type="button"
+                              size="sm"
+                              variant="tertiary"
+                              [disabled]="$index === 0"
+                              (click)="moveItem(draft.id, $index, -1)"
+                            >
+                              Up
+                            </button>
+                            <button
+                              khButton
+                              type="button"
+                              size="sm"
+                              variant="tertiary"
+                              [disabled]="$index === itemsOf(draft).length - 1"
+                              (click)="moveItem(draft.id, $index, 1)"
+                            >
+                              Down
+                            </button>
+                            <button
+                              khButton
+                              type="button"
+                              size="sm"
+                              variant="danger"
+                              (click)="removeItem(draft.id, $index)"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </header>
+
+                        @for (field of schema.itemFields; track field.name) {
+                          <kh-schema-field
+                            [field]="field"
+                            [controlId]="draft.id + '-item-' + $index + '-' + field.name"
+                            [label]="humanise(field.name)"
+                            [hint]="fieldHint(field)"
+                            [value]="item[field.name]"
+                            (changed)="setItemField(draft.id, $index, field.name, $event)"
+                          />
+                        }
+                      </article>
+                    }
+
+                    <button
+                      khButton
+                      type="button"
+                      size="sm"
+                      [disabled]="itemsOf(draft).length >= schema.maxItems"
+                      (click)="addItem(draft.id)"
+                    >
+                      <kh-icon name="plus" size="sm" />
+                      Add an item
+                    </button>
+                  </section>
                 }
               } @else {
                 <kh-alert tone="warning" heading="Unknown block type">
@@ -565,6 +572,38 @@ interface BlockDraft {
     />
   `,
   styles: `
+    .items {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      padding: var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+    }
+
+    .items > header h4 {
+      margin: 0;
+      font-size: var(--text-sm);
+    }
+
+    .item {
+      padding: var(--space-3);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-sm);
+    }
+
+    .item > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-block-end: var(--space-2);
+    }
+
+    .item-actions {
+      display: flex;
+      gap: var(--space-2);
+    }
+
     kh-alert {
       margin-block-end: var(--space-4);
     }
@@ -744,7 +783,7 @@ export class PageComposerPage implements HasUnsavedChanges {
   protected readonly deleting = signal(false);
   protected readonly rollingBackTo = signal<number | null>(null);
 
-  protected readonly transitioning = signal<string | null>(null);
+  protected readonly transitioning = signal<PageStatus | null>(null);
   protected readonly transitionNote = signal('');
   protected readonly transitionError = signal<string | null>(null);
   protected readonly scheduledAt = signal('');
@@ -763,7 +802,10 @@ export class PageComposerPage implements HasUnsavedChanges {
     return `/${current.slug} · ${current.type} · v${current.version} · ${published}`;
   });
 
-  protected readonly transitionHeading = computed(() => this.transitionLabel(this.transitioning() ?? ''));
+  protected readonly transitionHeading = computed(() => {
+    const status = this.transitioning();
+    return status ? this.transitionLabel(status) : '';
+  });
 
   protected readonly blockItems = computed<readonly ReorderItem[]>(() =>
     this.blocks().map((draft) => ({
@@ -843,15 +885,23 @@ export class PageComposerPage implements HasUnsavedChanges {
     return JSON.stringify(value ?? {}, null, 2);
   }
 
-  protected itemsJson(draft: BlockDraft): string {
+  /**
+   * The block's repeated children.
+   *
+   * `itemFields` declares their schema and this is where they live in the config: an array of
+   * objects under `items`. Anything that is not an array reads as empty rather than throwing — a
+   * block written by an older release is a block to be re-edited, not a screen that breaks.
+   */
+  protected itemsOf(draft: BlockDraft): Record<string, unknown>[] {
     const items = draft.config['items'];
-    return items === undefined ? '[]' : JSON.stringify(items, null, 2);
+    return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
   }
 
   // ---- Editing ------------------------------------------------------------------------------------
 
-  protected setConfig(blockId: string, field: string, value: string): void {
-    this.patchConfig(blockId, field, value === '' ? null : value);
+  /** Writes one of the block's own fields. The control has already shaped the value. */
+  protected setConfig(blockId: string, field: string, value: unknown): void {
+    this.patchConfig(blockId, field, value);
   }
 
   protected setConfigBoolean(blockId: string, field: string, value: boolean): void {
@@ -885,14 +935,57 @@ export class PageComposerPage implements HasUnsavedChanges {
    * Invalid JSON is left on screen and not written into the draft, so a half-typed bracket does
    * not silently blank the block's items.
    */
-  protected setItems(blockId: string, value: string): void {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (!Array.isArray(parsed)) return;
-      this.patchConfig(blockId, 'items', parsed);
-    } catch {
-      // Deliberately silent: a keystroke mid-edit is not an error worth interrupting for.
-    }
+  /**
+   * Edits one field of one item.
+   *
+   * The whole list is rewritten rather than the one entry mutated, because the draft is a signal
+   * and a mutation in place is a change nothing re-renders for.
+   */
+  protected setItemField(blockId: string, index: number, field: string, value: unknown): void {
+    const draft = this.blocks().find((candidate) => candidate.id === blockId);
+    if (!draft) return;
+
+    const items = this.itemsOf(draft).map((item, at) => (at === index ? { ...item, [field]: value } : item));
+
+    this.patchConfig(blockId, 'items', items);
+  }
+
+  protected addItem(blockId: string): void {
+    const draft = this.blocks().find((candidate) => candidate.id === blockId);
+    if (!draft) return;
+
+    this.patchConfig(blockId, 'items', [...this.itemsOf(draft), {}]);
+  }
+
+  protected removeItem(blockId: string, index: number): void {
+    const draft = this.blocks().find((candidate) => candidate.id === blockId);
+    if (!draft) return;
+
+    this.patchConfig(
+      blockId,
+      'items',
+      this.itemsOf(draft).filter((_, at) => at !== index),
+    );
+  }
+
+  /**
+   * Moves an item one place.
+   *
+   * Two buttons rather than drag-and-drop: an FAQ has four questions and a grid six tiles, and a
+   * drag handle inside a form inside a drawer is a gesture that fights the scroll it sits in.
+   */
+  protected moveItem(blockId: string, index: number, delta: number): void {
+    const draft = this.blocks().find((candidate) => candidate.id === blockId);
+    if (!draft) return;
+
+    const items = this.itemsOf(draft);
+    const target = index + delta;
+    if (target < 0 || target >= items.length) return;
+
+    const reordered = [...items];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+
+    this.patchConfig(blockId, 'items', reordered);
   }
 
   /** The one place a block's configuration is written, so `dirty` cannot be forgotten. */
@@ -1067,11 +1160,11 @@ export class PageComposerPage implements HasUnsavedChanges {
       });
   }
 
-  protected transitionLabel(status: string): string {
+  protected transitionLabel(status: PageStatus): string {
     return TRANSITION_LABELS[status] ?? status;
   }
 
-  protected startTransition(status: string): void {
+  protected startTransition(status: PageStatus): void {
     this.transitionError.set(null);
     this.transitionNote.set('');
     this.scheduledAt.set('');

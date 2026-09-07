@@ -90,9 +90,28 @@ public sealed class VendorsModule : IModule
         // business being on the record a shopper's page loads.
         services.AddScoped<IVendorPayouts, VendorPayoutDirectory>();
 
-        // The Razorpay Route seam, with the implementation that is honest about creating nothing.
-        // Step 18 replaces this registration and nothing else.
-        services.AddScoped<IVendorPayoutAccounts, UnprovisionedPayoutAccounts>();
+        // The Razorpay Route seam, filled in at Step 28B. Both implementations are registered and
+        // the choice is made per request from configuration rather than at startup, so switching
+        // Route on is a settings change rather than a deploy — and a deployment with no credentials
+        // still gets the no-op that says so in the log rather than a class that throws.
+        services.AddValidatedOptions<RazorpayAccountOptions>(configuration, RazorpayAccountOptions.SectionName);
+        services.AddTransient<RazorpayAccountAllowedHostHandler>();
+
+        services
+            .AddHttpClient(RazorpayAccountHttp.ClientName)
+            .AddHttpMessageHandler<RazorpayAccountAllowedHostHandler>();
+
+        services.AddScoped<RazorpayLinkedAccounts>();
+        services.AddScoped<UnprovisionedPayoutAccounts>();
+
+        services.AddScoped<IVendorPayoutAccounts>(provider =>
+        {
+            var route = provider.GetRequiredService<RazorpayLinkedAccounts>();
+
+            return route.IsConfigured
+                ? route
+                : provider.GetRequiredService<UnprovisionedPayoutAccounts>();
+        });
 
         // A seller's rating, added at Step 21. It is the average over reviews of their own sales
         // rather than over the products they list, computed by Reviews and stored here — and it is a

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
+  BannerAudience,
   BannerBody,
   BannerFilters,
+  BannerPlacement,
   BannerResponse,
   ContentAdminService,
   MediaFileResponse,
@@ -417,8 +419,8 @@ export class BannersPage {
   protected readonly drawerOpen = signal(false);
   protected readonly deleting = signal(false);
   protected readonly editing = signal<BannerResponse | null>(null);
-  protected readonly placement = signal('HomeHero');
-  protected readonly audience = signal('None');
+  protected readonly placement = signal<BannerPlacement>('HomeHero');
+  protected readonly audience = signal<BannerAudience>('None');
   protected readonly startsAt = signal('');
   protected readonly endsAt = signal('');
   protected readonly mediaFileId = signal<string | null>(null);
@@ -521,7 +523,7 @@ export class BannersPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: BannerFilters = {
-      placement: values['placement'],
+      placement: (values['placement'] as BannerPlacement) || undefined,
       activeOnly: values['activeOnly'] === 'true' ? true : undefined,
     };
     this.list.setFilters(filters);

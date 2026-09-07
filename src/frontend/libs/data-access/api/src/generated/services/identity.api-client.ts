@@ -19,10 +19,10 @@ export interface AdminMeSessionsRevokeAllQuery {
 
 /** Query string for `adminUsersGet`. */
 export interface AdminUsersGetQuery {
-  Search?: string;
-  UserType?: Models.UserType;
-  Cursor?: string;
-  Size?: number;
+  search?: string;
+  userType?: Models.UserType;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `storeAuthExternalCallback`. */
@@ -109,6 +109,14 @@ export class IdentityApiClient {
    */
   adminAuthTwoFactorVerify(body: Models.TwoFactorVerifyBody, options?: ApiRequestOptions): Observable<Models.SignInResponse> {
     return this.http.request<Models.SignInResponse>('POST', `${this.baseUrl}/api/v1/admin/auth/2fa/verify`, body, undefined, options);
+  }
+
+  /**
+   * Ends an impersonation this operator started. Called with the operator's own token: the impersonated customer holds no permission that could end it.
+   * `DELETE /api/v1/admin/impersonation/{sessionId}`
+   */
+  adminImpersonationEnd(sessionId: string, options?: ApiRequestOptions): Observable<void> {
+    return this.http.request<void>('DELETE', `${this.baseUrl}/api/v1/admin/impersonation/${encodeURIComponent(String(sessionId))}`, undefined, undefined, options);
   }
 
   /**
@@ -237,6 +245,14 @@ export class IdentityApiClient {
    */
   adminUserGet(id: string, options?: ApiRequestOptions): Observable<Models.AdminUserResponse> {
     return this.http.request<Models.AdminUserResponse>('GET', `${this.baseUrl}/api/v1/admin/users/${encodeURIComponent(String(id))}`, undefined, undefined, options);
+  }
+
+  /**
+   * Starts acting as a customer for support. The token that comes back expires on its own and cannot be refreshed; both the start and the stop are audited.
+   * `POST /api/v1/admin/users/{id}/impersonate`
+   */
+  adminUserImpersonate(id: string, body: Models.ImpersonateBody, options?: ApiRequestOptions): Observable<Models.ImpersonationResponse> {
+    return this.http.request<Models.ImpersonationResponse>('POST', `${this.baseUrl}/api/v1/admin/users/${encodeURIComponent(String(id))}/impersonate`, body, undefined, options);
   }
 
   /**

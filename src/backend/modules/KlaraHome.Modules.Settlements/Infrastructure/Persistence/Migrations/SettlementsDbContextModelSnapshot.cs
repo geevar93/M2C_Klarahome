@@ -118,6 +118,148 @@ namespace KlaraHome.Modules.Settlements.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("KlaraHome.Modules.Settlements.Domain.CommissionInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Cgst")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cgst");
+
+                    b.Property<decimal>("Commission")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("commission");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<Guid?>("FileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("file_id");
+
+                    b.Property<decimal>("GstRate")
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("gst_rate");
+
+                    b.Property<decimal>("Igst")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("igst");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("invoice_number");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("issued_at");
+
+                    b.Property<decimal>("PaymentFee")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("payment_fee");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("period_end");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("period_start");
+
+                    b.Property<string>("PlaceOfSupplyStateCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("place_of_supply_state_code");
+
+                    b.Property<decimal>("PlatformFee")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("platform_fee");
+
+                    b.Property<string>("RecipientGstin")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("recipient_gstin");
+
+                    b.Property<Guid>("SettlementCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("settlement_cycle_id");
+
+                    b.Property<decimal>("Sgst")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("sgst");
+
+                    b.Property<string>("SupplierGstin")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)")
+                        .HasColumnName("supplier_gstin");
+
+                    b.Property<decimal>("TaxableValue")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_value");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("VendorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vendor_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_commission_invoices");
+
+                    b.HasIndex("SettlementCycleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_commission_invoices_settlement_cycle_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_commission_invoices_tenant_id");
+
+                    b.HasIndex("TenantId", "InvoiceNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_commission_invoices_tenant_id_invoice_number");
+
+                    b.HasIndex("TenantId", "VendorId", "IssuedAt")
+                        .HasDatabaseName("ix_commission_invoices_tenant_id_vendor_id_issued_at");
+
+                    b.ToTable("commission_invoices", "settlements", t =>
+                        {
+                            t.HasCheckConstraint("ck_commission_invoices_money", "commission >= 0 AND platform_fee >= 0 AND payment_fee >= 0 AND taxable_value >= 0 AND cgst >= 0 AND sgst >= 0 AND igst >= 0 AND total >= 0");
+                        });
+                });
+
             modelBuilder.Entity("KlaraHome.Modules.Settlements.Domain.LedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -262,8 +404,8 @@ namespace KlaraHome.Modules.Settlements.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("kind");
 
                     b.Property<long>("NextValue")
@@ -298,7 +440,7 @@ namespace KlaraHome.Modules.Settlements.Infrastructure.Persistence.Migrations
 
                     b.ToTable("number_sequences", "settlements", t =>
                         {
-                            t.HasCheckConstraint("ck_number_sequences_kind", "kind IN ('payout')");
+                            t.HasCheckConstraint("ck_number_sequences_kind", "kind IN ('payout', 'commission-invoice')");
 
                             t.HasCheckConstraint("ck_number_sequences_next", "next_value >= 1");
                         });

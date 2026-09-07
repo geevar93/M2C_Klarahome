@@ -1,4 +1,5 @@
 using System.Text.Json;
+using KlaraHome.Modules.Content.Domain;
 
 namespace KlaraHome.Modules.Content.Application;
 
@@ -78,7 +79,7 @@ internal sealed record MenuItemBody(
     Guid? Id,
     Guid? ParentId,
     string? Label,
-    string? LinkType,
+    MenuLinkType LinkType,
     Guid? TargetId,
     string? Url,
     bool IsVisible,
@@ -92,9 +93,9 @@ internal sealed record MenuItemBody(
 /// <param name="Operator">How it compares.</param>
 /// <param name="Values">What it compares against.</param>
 internal sealed record RuleConditionBody(
-    string? Field,
+    RuleField Field,
     string? Key,
-    string? Operator,
+    RuleOperator Operator,
     IReadOnlyList<string>? Values);
 
 /// <summary>A collection's rule, as a caller sends it.</summary>
@@ -106,7 +107,7 @@ internal sealed record RuleConditionBody(
 internal sealed record CollectionRuleBody(
     bool MatchAll,
     IReadOnlyList<RuleConditionBody>? Conditions,
-    string? Sort,
+    CollectionSort? Sort,
     int Limit,
     bool IncludeOutOfStock);
 

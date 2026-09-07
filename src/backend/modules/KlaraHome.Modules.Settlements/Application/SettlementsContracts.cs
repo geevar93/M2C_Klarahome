@@ -5,7 +5,7 @@ namespace KlaraHome.Modules.Settlements.Application;
 /// <summary>One movement on a seller's account, as an API caller sees it.</summary>
 /// <param name="Id">The entry.</param>
 /// <param name="VendorId">The seller.</param>
-/// <param name="EntryType">What kind of movement: one of <see cref="LedgerEntryTypes"/>.</param>
+/// <param name="EntryType">What kind of movement.</param>
 /// <param name="Direction">Which way it moved the balance: <c>Credit</c> or <c>Debit</c>.</param>
 /// <param name="Amount">How much, always positive.</param>
 /// <param name="SignedAmount">The same figure with its sign, for a caller that wants to add them up.</param>
@@ -20,8 +20,8 @@ namespace KlaraHome.Modules.Settlements.Application;
 internal sealed record LedgerEntryResponse(
     Guid Id,
     Guid VendorId,
-    string EntryType,
-    string Direction,
+    LedgerEntryType EntryType,
+    LedgerDirection Direction,
     decimal Amount,
     decimal SignedAmount,
     decimal TaxableValue,
@@ -63,7 +63,11 @@ internal sealed record LedgerStatementResponse(
 /// <param name="Count">How many of them there were.</param>
 /// <param name="Amount">What they came to, unsigned.</param>
 /// <param name="SignedAmount">What they moved the balance by.</param>
-internal sealed record LedgerTotalResponse(string EntryType, int Count, decimal Amount, decimal SignedAmount);
+internal sealed record LedgerTotalResponse(
+    LedgerEntryType EntryType,
+    int Count,
+    decimal Amount,
+    decimal SignedAmount);
 
 /// <summary>A settlement period, as an API caller sees it.</summary>
 /// <param name="Id">The cycle.</param>
@@ -96,7 +100,7 @@ internal sealed record SettlementCycleResponse(
     string? VendorName,
     DateTimeOffset PeriodStart,
     DateTimeOffset PeriodEnd,
-    string Status,
+    SettlementCycleStatus Status,
     decimal OpeningBalance,
     decimal GrossSales,
     decimal TaxableSales,
@@ -140,7 +144,7 @@ internal sealed record SettlementCycleResponse(
 internal sealed record PayoutBatchResponse(
     Guid Id,
     string Reference,
-    string Status,
+    PayoutBatchStatus Status,
     decimal TotalAmount,
     decimal SettledAmount,
     int VendorCount,
@@ -180,7 +184,7 @@ internal sealed record PayoutItemResponse(
     Guid? SettlementCycleId,
     decimal Amount,
     string CurrencyCode,
-    string Status,
+    PayoutItemStatus Status,
     string? DestinationLast4,
     string? ProviderPayoutId,
     string? Utr,
@@ -319,8 +323,8 @@ internal static class SettlementProjection
         return new LedgerEntryResponse(
             entry.Id,
             entry.VendorId ?? Guid.Empty,
-            entry.EntryType,
-            entry.Direction.ToString(),
+            LedgerEntryTypes.ToEntryType(entry.EntryType),
+            entry.Direction,
             entry.Amount,
             entry.SignedAmount,
             entry.TaxableValue,
@@ -351,7 +355,7 @@ internal static class SettlementProjection
             vendorName,
             cycle.PeriodStart,
             cycle.PeriodEnd,
-            cycle.Status.ToString(),
+            cycle.Status,
             cycle.OpeningBalance,
             cycle.GrossSales,
             cycle.TaxableSales,
@@ -380,7 +384,7 @@ internal static class SettlementProjection
         return new PayoutBatchResponse(
             batch.Id,
             batch.Reference,
-            batch.Status.ToString(),
+            batch.Status,
             batch.TotalAmount,
             batch.SettledAmount,
             batch.VendorCount,
@@ -412,7 +416,7 @@ internal static class SettlementProjection
             item.SettlementCycleId,
             item.Amount,
             item.CurrencyCode,
-            item.Status.ToString(),
+            item.Status,
             item.DestinationLast4,
             item.ProviderPayoutId,
             item.Utr,

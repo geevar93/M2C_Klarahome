@@ -5,6 +5,7 @@ using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.Modules.Settlements.Application;
 using KlaraHome.Modules.Settlements.Application.Cycles;
+using KlaraHome.Modules.Settlements.Application.Invoices;
 using KlaraHome.Modules.Settlements.Application.Ledger;
 using KlaraHome.Modules.Settlements.Application.Payouts;
 using KlaraHome.Modules.Settlements.Application.Reports;
@@ -70,6 +71,7 @@ internal static class AdminSettlementEndpoints
         ArgumentNullException.ThrowIfNull(admin);
 
         MapCycles(admin);
+        MapCommissionInvoices(admin);
         MapLedger(admin);
         MapPayouts(admin);
         MapReports(admin);
@@ -159,6 +161,63 @@ internal static class AdminSettlementEndpoints
     }
 
     /// <summary>The ledger itself: movements, statements, balances and corrections.</summary>
+    /// <summary>
+    /// The platform's own tax invoices (docs/02-domain-model.md §7.2).
+    /// </summary>
+    /// <remarks>
+    /// Read-only, and there is no route that raises one. An invoice is raised by a cycle closing,
+    /// which is the only event that decides what was charged; a button that raised one on demand
+    /// would be a second answer to that question and would consume a number in a statutory series.
+    /// </remarks>
+    private static void MapCommissionInvoices(IEndpointRouteBuilder admin)
+    {
+        var group = admin.MapGroup("/settlements/commission-invoices").WithTags("Settlements");
+
+        group.MapGet("/", async (
+                Guid? vendorId,
+                string? cursor,
+                int? size,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var query = new ListCommissionInvoicesQuery(vendorId, cursor, size);
+                var result = await dispatcher.QueryAsync(query, context.RequestAborted).ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminListCommissionInvoices")
+            .WithSummary("The invoices the platform raised on sellers for commission and fees, newest first. "
+                         + "A seller sees only their own.")
+            .RequirePermission(SettlementsPermissions.SettlementRead)
+            .Produces<PagedResult<CommissionInvoiceResponse>>();
+
+        group.MapGet("/{id:guid}", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetCommissionInvoiceQuery(id), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminGetCommissionInvoice")
+            .WithSummary("One of the platform's own invoices, with its tax split by head.")
+            .RequirePermission(SettlementsPermissions.SettlementRead)
+            .Produces<CommissionInvoiceResponse>();
+
+        group.MapGet("/{id:guid}/download", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetCommissionInvoiceDownloadQuery(id), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminDownloadCommissionInvoice")
+            .WithSummary("A short-lived link to the invoice PDF. Minting the link is the grant.")
+            .RequirePermission(SettlementsPermissions.SettlementRead)
+            .Produces<CommissionInvoiceDownloadResponse>();
+    }
+
     private static void MapLedger(IEndpointRouteBuilder admin)
     {
         var group = admin.MapGroup("/settlements").WithTags("Settlements");

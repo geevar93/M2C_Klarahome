@@ -1,4 +1,5 @@
 using System.Text.Json;
+using KlaraHome.Modules.Content.Domain;
 
 namespace KlaraHome.Modules.Content.Application;
 
@@ -126,9 +127,9 @@ internal sealed record BlockResponse(
 internal sealed record PageSummaryResponse(
     Guid Id,
     string Slug,
-    string Type,
+    PageType Type,
     string Title,
-    string Status,
+    PageStatus Status,
     DateTimeOffset? PublishedAt,
     DateTimeOffset? ScheduledAt,
     DateTimeOffset? ContentChangedAt,
@@ -161,10 +162,10 @@ internal sealed record PageSummaryResponse(
 internal sealed record PageResponse(
     Guid Id,
     string Slug,
-    string Type,
+    PageType Type,
     string Title,
     string? Summary,
-    string Status,
+    PageStatus Status,
     DateTimeOffset? PublishedAt,
     DateTimeOffset? ScheduledAt,
     DateTimeOffset? ContentChangedAt,
@@ -174,7 +175,7 @@ internal sealed record PageResponse(
     string? Author,
     IReadOnlyList<string> Tags,
     IReadOnlyList<BlockResponse> Blocks,
-    IReadOnlyList<string> AllowedTransitions,
+    IReadOnlyList<PageStatus> AllowedTransitions,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt);
 
@@ -231,7 +232,7 @@ internal sealed record MenuItemResponse(
     Guid Id,
     Guid? ParentId,
     string Label,
-    string LinkType,
+    MenuLinkType LinkType,
     Guid? TargetId,
     string? Url,
     int Position,
@@ -297,7 +298,7 @@ internal sealed record MenuResponse(
 internal sealed record BannerResponse(
     Guid Id,
     string Name,
-    string Placement,
+    BannerPlacement Placement,
     ContentImageResponse? Image,
     ContentImageResponse? MobileImage,
     string? Message,
@@ -307,7 +308,7 @@ internal sealed record BannerResponse(
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt,
-    string Audience,
+    BannerAudience Audience,
     bool IsActive,
     bool IsLive,
     DateTimeOffset? UpdatedAt);
@@ -318,9 +319,9 @@ internal sealed record BannerResponse(
 /// <param name="Operator">How it compares.</param>
 /// <param name="Values">What it compares against.</param>
 internal sealed record RuleConditionResponse(
-    string Field,
+    RuleField Field,
     string? Key,
-    string Operator,
+    RuleOperator Operator,
     IReadOnlyList<string> Values);
 
 /// <summary>A collection's rule.</summary>
@@ -332,7 +333,7 @@ internal sealed record RuleConditionResponse(
 internal sealed record CollectionRuleResponse(
     bool MatchAll,
     IReadOnlyList<RuleConditionResponse> Conditions,
-    string Sort,
+    CollectionSort Sort,
     int Limit,
     bool IncludeOutOfStock);
 
@@ -350,7 +351,7 @@ internal sealed record CollectionSummaryResponse(
     Guid Id,
     string Slug,
     string Name,
-    string Kind,
+    CollectionKind Kind,
     bool IsActive,
     bool IsListed,
     int ItemCount,
@@ -377,7 +378,7 @@ internal sealed record CollectionResponse(
     string Slug,
     string Name,
     string? Description,
-    string Kind,
+    CollectionKind Kind,
     CollectionRuleResponse? Rule,
     SeoResponse Seo,
     ContentImageResponse? HeroImage,
@@ -479,7 +480,7 @@ internal sealed record StoreBlockResponse(
 internal sealed record StorePageResponse(
     Guid Id,
     string Slug,
-    string Type,
+    PageType Type,
     string Title,
     string? Summary,
     SeoResponse Seo,
@@ -548,7 +549,7 @@ internal sealed record StoreMenuResponse(
 /// <param name="Priority">Which banner wins the placement, highest first.</param>
 internal sealed record StoreBannerResponse(
     Guid Id,
-    string Placement,
+    BannerPlacement Placement,
     ContentImageResponse? Image,
     ContentImageResponse? MobileImage,
     string? Message,

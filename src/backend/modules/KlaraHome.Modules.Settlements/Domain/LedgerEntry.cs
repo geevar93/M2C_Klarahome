@@ -34,6 +34,62 @@ internal enum LedgerDirection
 /// the one entry a human writes and therefore the one that can go either way.
 /// </para>
 /// </remarks>
+/// <summary>
+/// The kinds of movement a seller's account can carry, as the API states them.
+/// </summary>
+/// <remarks>
+/// <para>
+/// An enum beside <see cref="LedgerEntryTypes"/> rather than instead of it. The stored column holds
+/// the snake_case strings a check constraint enumerates, and converting the table would be a data
+/// migration for no gain; this is what crosses the wire, so a client reading a statement gets a
+/// value its compiler checks rather than a word it hopes it spelled right
+/// (Step 28B, deliverable 11).
+/// </para>
+/// <para>
+/// The two are in one file, next to each other, because they have to agree. A member added to
+/// either without the other fails <see cref="LedgerEntryTypes.ToEntryType"/> at the first row of
+/// that kind, which is the loudest place this can go wrong.
+/// </para>
+/// </remarks>
+internal enum LedgerEntryType
+{
+    /// <summary>The seller's supply, inclusive of tax.</summary>
+    Sale = 0,
+
+    /// <summary>What the platform charged for the sale, exclusive of tax on it.</summary>
+    Commission = 1,
+
+    /// <summary>The GST on everything the platform charged.</summary>
+    PlatformTax = 2,
+
+    /// <summary>The flat marketplace fee.</summary>
+    PlatformFee = 3,
+
+    /// <summary>The payment gateway's cut, where the seller bears it.</summary>
+    PaymentFee = 4,
+
+    /// <summary>The freight the platform paid, where the seller bears it.</summary>
+    ShippingFee = 5,
+
+    /// <summary>A supply reversed by a cancellation or a credit note.</summary>
+    Refund = 6,
+
+    /// <summary>The commission and fees given back with that reversal.</summary>
+    RefundCommissionReversal = 7,
+
+    /// <summary>Tax collected at source under section 52 of the CGST Act.</summary>
+    Tcs = 8,
+
+    /// <summary>Tax deducted at source under section 194-O of the Income-tax Act.</summary>
+    Tds = 9,
+
+    /// <summary>A correction somebody made deliberately.</summary>
+    Adjustment = 10,
+
+    /// <summary>Money actually sent to the seller.</summary>
+    Payout = 11,
+}
+
 internal static class LedgerEntryTypes
 {
     /// <summary>The seller's supply, inclusive of tax. Credit.</summary>
@@ -114,6 +170,51 @@ internal static class LedgerEntryTypes
     /// <param name="type">The candidate.</param>
     public static bool Contains(string? type)
         => type is not null && All.Contains(type, StringComparer.Ordinal);
+
+    /// <summary>The stored value for an entry type, as the API states it.</summary>
+    /// <param name="type">The type.</param>
+    public static string ToStored(LedgerEntryType type) => type switch
+    {
+        LedgerEntryType.Sale => Sale,
+        LedgerEntryType.Commission => Commission,
+        LedgerEntryType.PlatformTax => PlatformTax,
+        LedgerEntryType.PlatformFee => PlatformFee,
+        LedgerEntryType.PaymentFee => PaymentFee,
+        LedgerEntryType.ShippingFee => ShippingFee,
+        LedgerEntryType.Refund => Refund,
+        LedgerEntryType.RefundCommissionReversal => RefundCommissionReversal,
+        LedgerEntryType.Tcs => Tcs,
+        LedgerEntryType.Tds => Tds,
+        LedgerEntryType.Adjustment => Adjustment,
+        LedgerEntryType.Payout => Payout,
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+
+    /// <summary>
+    /// The API's name for a stored entry type.
+    /// </summary>
+    /// <remarks>
+    /// Throws on an unknown value rather than defaulting to one. A row whose type this module does
+    /// not recognise is a schema that has moved underneath it, and quietly reporting it as a sale
+    /// would put money in the wrong column of a statement somebody files a return from.
+    /// </remarks>
+    /// <param name="type">The stored value.</param>
+    public static LedgerEntryType ToEntryType(string type) => type switch
+    {
+        Sale => LedgerEntryType.Sale,
+        Commission => LedgerEntryType.Commission,
+        PlatformTax => LedgerEntryType.PlatformTax,
+        PlatformFee => LedgerEntryType.PlatformFee,
+        PaymentFee => LedgerEntryType.PaymentFee,
+        ShippingFee => LedgerEntryType.ShippingFee,
+        Refund => LedgerEntryType.Refund,
+        RefundCommissionReversal => LedgerEntryType.RefundCommissionReversal,
+        Tcs => LedgerEntryType.Tcs,
+        Tds => LedgerEntryType.Tds,
+        Adjustment => LedgerEntryType.Adjustment,
+        Payout => LedgerEntryType.Payout,
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown ledger entry type."),
+    };
 
     /// <summary>
     /// Where a type sits in the order a statement reads, for sorting a summary.

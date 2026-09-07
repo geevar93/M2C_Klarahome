@@ -134,4 +134,17 @@ internal static class SettlementsErrors
         => Error.Validation(
             "SETTLEMENT_EXPORT_TOO_LARGE",
             $"That range has more than {maximum} rows. Narrow the dates and export again.");
+
+    /// <summary>
+    /// The invoice exists but its PDF does not, because rendering it failed when it was raised.
+    /// </summary>
+    /// <remarks>
+    /// A distinct refusal from "no such invoice" on purpose: the numbered record is real and the
+    /// figures on it stand, so the operator needs to know the document can be produced again rather
+    /// than that the invoice is missing.
+    /// </remarks>
+    public static Error InvoiceDocumentMissing { get; } =
+        Error.NotFound(
+            "SETTLEMENT_INVOICE_DOCUMENT_MISSING",
+            "That invoice has no document yet. It was raised but its PDF could not be rendered.");
 }

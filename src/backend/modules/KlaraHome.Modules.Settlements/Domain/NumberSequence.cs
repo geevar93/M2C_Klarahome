@@ -72,8 +72,14 @@ internal static class NumberSequenceKinds
     /// <summary>Payout batch references. Scoped to a calendar month.</summary>
     public const string Payout = "payout";
 
+    /// <summary>
+    /// The platform's own tax-invoice numbers. Scoped to the financial year, because that is what a
+    /// GST return is filed against.
+    /// </summary>
+    public const string CommissionInvoice = "commission-invoice";
+
     /// <summary>Every kind this module allocates.</summary>
-    public static readonly IReadOnlyList<string> All = [Payout];
+    public static readonly IReadOnlyList<string> All = [Payout, CommissionInvoice];
 }
 
 /// <summary>

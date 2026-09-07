@@ -70,6 +70,10 @@ public sealed class InventoryModule : IModule
         // without a query that crosses a schema.
         services.AddScoped<IStockAvailability, StockAvailabilityService>();
 
+        // Step 28B. Where the units behind a hold actually are, for the two callers that must know:
+        // the order that records it and the pick list that sends somebody to a shelf.
+        services.AddScoped<IStockAllocation, StockAllocationService>();
+
         // The seam goods come back through, added at Step 17. It is one direction only: taking stock
         // out is what a sale does and already has its own path, and a returns queue must not be able
         // to reach it.

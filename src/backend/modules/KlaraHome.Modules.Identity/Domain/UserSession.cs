@@ -15,7 +15,15 @@ namespace KlaraHome.Modules.Identity.Domain;
 /// </remarks>
 internal sealed class UserSession : AggregateRoot<Guid>, ITenantScoped
 {
-    private UserSession(Guid id, Guid userId, string? device, string? ipAddress, DateTimeOffset startedAt)
+    private UserSession(
+        Guid id,
+        Guid userId,
+        string? device,
+        string? ipAddress,
+        DateTimeOffset startedAt,
+        Guid? impersonatedByUserId,
+        string? impersonationReason,
+        DateTimeOffset? impersonationExpiresAt)
         : base(id)
     {
         UserId = userId;
@@ -23,6 +31,9 @@ internal sealed class UserSession : AggregateRoot<Guid>, ITenantScoped
         IpAddress = ipAddress;
         StartedAt = startedAt;
         LastSeenAt = startedAt;
+        ImpersonatedByUserId = impersonatedByUserId;
+        ImpersonationReason = impersonationReason;
+        ImpersonationExpiresAt = impersonationExpiresAt;
     }
 
     /// <summary>Required by EF Core's materialiser.</summary>
@@ -54,6 +65,29 @@ internal sealed class UserSession : AggregateRoot<Guid>, ITenantScoped
     /// <summary>Why the session ended, for the security timeline.</summary>
     public SessionEndReason? RevokedReason { get; private set; }
 
+    /// <summary>
+    /// The support user acting as this session's owner, or null for an ordinary sign-in
+    /// (docs/07-security-compliance.md §2).
+    /// </summary>
+    /// <remarks>
+    /// The marker lives on the session rather than only in the token because "visibly flagged in
+    /// the session" has to survive the token: the audit trail, the device list and the exit control
+    /// all ask the same question, and a claim that expires in thirty minutes cannot answer it.
+    /// </remarks>
+    public Guid? ImpersonatedByUserId { get; private set; }
+
+    /// <summary>Why support needed to act as this user. Required, and recorded verbatim.</summary>
+    public string? ImpersonationReason { get; private set; }
+
+    /// <summary>
+    /// When an impersonated session stops being honoured whatever else happens. Null for an
+    /// ordinary session, which ends when its refresh token does.
+    /// </summary>
+    public DateTimeOffset? ImpersonationExpiresAt { get; private set; }
+
+    /// <summary>Whether somebody is acting as this session's owner rather than being them.</summary>
+    public bool IsImpersonated => ImpersonatedByUserId is not null;
+
     /// <inheritdoc />
     public Guid TenantId { get; private set; }
 
@@ -66,7 +100,37 @@ internal sealed class UserSession : AggregateRoot<Guid>, ITenantScoped
     /// <param name="ipAddress">The originating address.</param>
     /// <param name="startedAt">When the sign-in happened.</param>
     public static UserSession Start(Guid userId, string? device, string? ipAddress, DateTimeOffset startedAt)
-        => new(UuidV7.New(), userId, device, ipAddress, startedAt);
+        => new(UuidV7.New(), userId, device, ipAddress, startedAt, null, null, null);
+
+    /// <summary>Starts a support session that acts as a user rather than being them.</summary>
+    /// <remarks>
+    /// A session of its own, not a flag on the operator's: the impersonated session has to be
+    /// endable, listable and expirable without touching the sign-in the operator will return to.
+    /// </remarks>
+    /// <param name="userId">The user being acted as.</param>
+    /// <param name="impersonatedByUserId">The support user doing the acting.</param>
+    /// <param name="reason">Why, recorded verbatim for the audit trail.</param>
+    /// <param name="device">A readable device description.</param>
+    /// <param name="ipAddress">The originating address.</param>
+    /// <param name="startedAt">When it began.</param>
+    /// <param name="expiresAt">When it stops being honoured, whatever else happens.</param>
+    public static UserSession StartImpersonation(
+        Guid userId,
+        Guid impersonatedByUserId,
+        string reason,
+        string? device,
+        string? ipAddress,
+        DateTimeOffset startedAt,
+        DateTimeOffset expiresAt)
+        => new(
+            UuidV7.New(),
+            userId,
+            device,
+            ipAddress,
+            startedAt,
+            impersonatedByUserId,
+            Guard.NotNullOrWhiteSpace(reason),
+            expiresAt);
 
     /// <summary>Records that the session was used, so the user can see which device is active.</summary>
     /// <param name="at">The current instant.</param>
@@ -104,6 +168,9 @@ internal enum SessionEndReason
 
     /// <summary>The account was suspended or retired.</summary>
     AccountClosed = 4,
+
+    /// <summary>A support impersonation was ended, by its operator or by its own clock.</summary>
+    ImpersonationEnded = 5,
 }
 
 /// <summary>

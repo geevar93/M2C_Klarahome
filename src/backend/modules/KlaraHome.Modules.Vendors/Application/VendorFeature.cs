@@ -86,6 +86,10 @@ internal sealed record VendorListItem(
 /// <param name="GatewayAccountId">Their payout account at the gateway, once one exists.</param>
 /// <param name="OnboardedAt">When they first started trading.</param>
 /// <param name="CreatedAt">When they applied.</param>
+/// <param name="NextStatuses">
+/// The life-cycle states this seller may move to from here, as the server's own transition table
+/// declares them. The back office draws its buttons from this rather than from a copy of the table.
+/// </param>
 internal sealed record VendorResponse(
     Guid Id,
     string Code,
@@ -110,7 +114,8 @@ internal sealed record VendorResponse(
     decimal? Rating,
     string? GatewayAccountId,
     DateTimeOffset? OnboardedAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<string> NextStatuses);
 
 /// <summary>A seller's public storefront profile.</summary>
 /// <param name="Id">The seller.</param>
@@ -1270,8 +1275,26 @@ internal static class VendorProjection
             vendor.Rating,
             vendor.GatewayAccountId,
             vendor.OnboardedAt,
-            vendor.CreatedAt);
+            vendor.CreatedAt,
+            NextStatusesOf(vendor.Status));
     }
+
+    /// <summary>
+    /// Where this seller may go next, read off <see cref="Vendor.IsTransitionAllowed"/>.
+    /// </summary>
+    /// <remarks>
+    /// Onboarding is six named endpoints rather than one transition endpoint, which is the right
+    /// shape — "approve" and "suspend" are different acts with different permissions and different
+    /// required reasons — but it left the back office with nowhere to read the life cycle from, so
+    /// it kept its own copy of the table and the copy was the last client-side duplicate of a server
+    /// rule in the admin app. This is the same answer an order, a return and a payout batch already
+    /// give (Step 28B, deliverable 5).
+    /// </remarks>
+    /// <param name="status">The seller's current status.</param>
+    public static IReadOnlyList<string> NextStatusesOf(VendorStatus status)
+        => [.. Enum.GetValues<VendorStatus>()
+            .Where(candidate => Vendor.IsTransitionAllowed(status, candidate))
+            .Select(candidate => candidate.ToString())];
 
     /// <summary>Maps a stored return policy onto its API shape.</summary>
     /// <param name="policy">The stored policy.</param>

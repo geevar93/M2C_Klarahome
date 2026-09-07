@@ -63,15 +63,25 @@ export class VendorsAdminService {
       (current, cursor, size) =>
         this.api
           .adminVendorsList({
-            Status: current.status,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<VendorListItem> => result)),
       filters,
       pageSize,
     );
+  }
+
+  /**
+   * A short list of sellers matching a search, for a picker.
+   *
+   * The same shape and the same reasoning as the catalogue's: a typeahead shows a handful and is
+   * re-run on the next keystroke (Step 28B, deliverable 15).
+   */
+  searchVendors(term: string, take = 10): Observable<VendorListItem[]> {
+    return this.api.adminVendorsList({ search: term, size: take }).pipe(map((page) => page.items));
   }
 
   vendor(id: string): Observable<VendorResponse> {
@@ -265,9 +275,9 @@ export class VendorsAdminService {
    */
   previewCommission(vendorId: string, unitPrice: number, categoryId?: string): Observable<CommissionQuote> {
     return this.api.adminCommissionPreview({
-      VendorId: vendorId,
-      UnitPrice: unitPrice,
-      CategoryId: categoryId,
+      vendorId: vendorId,
+      unitPrice: unitPrice,
+      categoryId: categoryId,
     });
   }
 }

@@ -6,6 +6,7 @@ using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.Modules.Pricing.Application.Promotions;
 using KlaraHome.Modules.Pricing.Application.Quotes;
+using KlaraHome.Modules.Pricing.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -20,7 +21,7 @@ namespace KlaraHome.Modules.Pricing.Endpoints;
 /// <param name="Cursor">Opaque token from the previous page.</param>
 /// <param name="Size">Page size.</param>
 internal sealed record PromotionFilter(
-    string? Type,
+    PromotionType? Type,
     string? Code,
     bool? ActiveOnly,
     string? Search,
@@ -48,12 +49,12 @@ internal sealed record PromotionBody(
     string? Code,
     string Name,
     string? Description,
-    string Type,
-    string AppliesTo,
+    PromotionType Type,
+    PromotionApplication AppliesTo,
     decimal Value,
     PromotionScopePayload? Scope,
     PromotionConditionsPayload? Conditions,
-    string Stacking,
+    StackingMode Stacking,
     int Priority,
     DateTimeOffset StartsAt,
     DateTimeOffset? EndsAt,
@@ -67,7 +68,7 @@ internal sealed record PromotionBody(
 /// <param name="CustomerId">The shopper to price it for, for a segment or first-order campaign.</param>
 /// <param name="StateId">The shipping address's state, which decides the GST split.</param>
 /// <param name="CouponCode">A code to try.</param>
-/// <param name="PaymentMethod">How it would be paid for.</param>
+/// <param name="PaymentMethod">How it would be paid for. Defaults to prepaid.</param>
 /// <param name="IsFirstOrder">Whether to treat it as the shopper's first order.</param>
 /// <param name="ShippingAmount">What shipping would cost.</param>
 internal sealed record SimulatePromotionBody(
@@ -75,7 +76,7 @@ internal sealed record SimulatePromotionBody(
     Guid? CustomerId,
     Guid? StateId,
     string? CouponCode,
-    string? PaymentMethod,
+    QuotePaymentMethod? PaymentMethod,
     bool IsFirstOrder,
     decimal ShippingAmount);
 

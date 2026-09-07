@@ -31,7 +31,6 @@ export interface AdminRunReportQuery {
   to?: string;
   groupBy?: string;
   vendorId?: string;
-  format?: string;
 }
 
 /** `Reporting` endpoints, generated from the API's OpenAPI document. */
@@ -65,6 +64,14 @@ export class ReportingApiClient {
   }
 
   /**
+   * Produces a CSV of the same report and answers with the run, whose download link is fetched from /admin/report-runs/{id}/download.
+   * `POST /api/v1/admin/reports/{reportKey}/export`
+   */
+  adminExportReport(reportKey: string, body?: null | Models.ExportReportBody, options?: ApiRequestOptions): Observable<Models.ReportRunResponse> {
+    return this.http.request<Models.ReportRunResponse>('POST', `${this.baseUrl}/api/v1/admin/reports/${encodeURIComponent(String(reportKey))}/export`, body, undefined, options);
+  }
+
+  /**
    * Every report produced, newest first, failures included.
    * `GET /api/v1/admin/report-runs`
    */
@@ -89,11 +96,11 @@ export class ReportingApiClient {
   }
 
   /**
-   * Runs a report. format=csv produces a file and answers with the run instead.
+   * Runs a report and answers with the table.
    * `GET /api/v1/admin/reports/{reportKey}`
    */
-  adminRunReport(reportKey: string, query?: AdminRunReportQuery, options?: ApiRequestOptions): Observable<Models.ReportRunResponse> {
-    return this.http.request<Models.ReportRunResponse>('GET', `${this.baseUrl}/api/v1/admin/reports/${encodeURIComponent(String(reportKey))}`, undefined, query, options);
+  adminRunReport(reportKey: string, query?: AdminRunReportQuery, options?: ApiRequestOptions): Observable<Models.ReportResult> {
+    return this.http.request<Models.ReportResult>('GET', `${this.baseUrl}/api/v1/admin/reports/${encodeURIComponent(String(reportKey))}`, undefined, query, options);
   }
 
   /**

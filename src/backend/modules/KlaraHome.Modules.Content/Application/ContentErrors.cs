@@ -212,4 +212,21 @@ internal static class ContentErrors
         Error.Validation(
             "CONTENT_CANONICAL_URL_NOT_CONFIGURED",
             "Set the canonical base URL in the SEO settings before generating a sitemap.");
+
+    /// <summary>The collection already holds as many products as it may.</summary>
+    /// <param name="maximum">The cap.</param>
+    public static Error CollectionFull(int maximum)
+        => Error.Validation(
+            "CONTENT_COLLECTION_FULL",
+            $"A collection may hold at most {maximum} products. Remove one before adding another.");
+
+    /// <summary>
+    /// The row asked about was put there by the collection's rule, so removing it by hand would
+    /// only last until the next evaluation.
+    /// </summary>
+    public static Error CollectionItemFromRule { get; } =
+        Error.Validation(
+            "CONTENT_COLLECTION_ITEM_FROM_RULE",
+            "That product is in this collection because the rule matches it. Change the rule to "
+            + "take it out; removing it by hand would put it back on the next refresh.");
 }

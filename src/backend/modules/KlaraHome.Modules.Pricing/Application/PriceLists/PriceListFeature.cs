@@ -33,7 +33,7 @@ internal sealed record PriceListResponse(
     Guid? VendorId,
     string Code,
     string Name,
-    string Type,
+    PriceListType Type,
     string CurrencyCode,
     int Priority,
     DateTimeOffset? StartsAt,
@@ -70,7 +70,7 @@ internal sealed record PriceListItemPayload(Guid ListingId, decimal Price, int M
 /// <param name="Size">Page size.</param>
 internal sealed record ListPriceListsQuery(
     Guid? VendorId,
-    string? Type,
+    PriceListType? Type,
     bool? ActiveOnly,
     string? Search,
     string? Cursor,
@@ -100,7 +100,7 @@ internal sealed record CreatePriceListCommand(
     Guid? VendorId,
     string Code,
     string Name,
-    string Type,
+    PriceListType Type,
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt) : ICommand<PriceListResponse>;
@@ -115,7 +115,7 @@ internal sealed record CreatePriceListCommand(
 internal sealed record UpdatePriceListCommand(
     Guid PriceListId,
     string Name,
-    string Type,
+    PriceListType Type,
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt) : ICommand<PriceListResponse>;
@@ -152,7 +152,7 @@ internal sealed class CreatePriceListValidator : AbstractValidator<CreatePriceLi
     {
         RuleFor(command => command.Code).NotEmpty().MaximumLength(48).Matches("^[A-Za-z0-9][A-Za-z0-9-]*$");
         RuleFor(command => command.Name).NotEmpty().MaximumLength(160);
-        RuleFor(command => command.Type).NotEmpty().Must(PriceListTypes.IsKnown).WithMessage(PriceListTypes.Message);
+        RuleFor(command => command.Type).IsInEnum();
         RuleFor(command => command.Priority).InclusiveBetween(0, PriceList.MaxPriority);
 
         RuleFor(command => command.EndsAt)
@@ -169,7 +169,7 @@ internal sealed class UpdatePriceListValidator : AbstractValidator<UpdatePriceLi
     {
         RuleFor(command => command.PriceListId).NotEmpty();
         RuleFor(command => command.Name).NotEmpty().MaximumLength(160);
-        RuleFor(command => command.Type).NotEmpty().Must(PriceListTypes.IsKnown).WithMessage(PriceListTypes.Message);
+        RuleFor(command => command.Type).IsInEnum();
         RuleFor(command => command.Priority).InclusiveBetween(0, PriceList.MaxPriority);
 
         RuleFor(command => command.EndsAt)
@@ -196,23 +196,6 @@ internal sealed class UpsertPriceListItemsValidator : AbstractValidator<UpsertPr
     }
 }
 
-/// <summary>The price-list types the API accepts, and the message when a caller sends another.</summary>
-internal static class PriceListTypes
-{
-    /// <summary>Whether a name is one this platform understands.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static bool IsKnown(string? value) => Enum.TryParse<PriceListType>(value, ignoreCase: true, out _);
-
-    /// <summary>Parses a name, defaulting to a base list.</summary>
-    /// <param name="value">What the caller sent.</param>
-    public static PriceListType Parse(string? value)
-        => Enum.TryParse<PriceListType>(value, ignoreCase: true, out var parsed) ? parsed : PriceListType.Base;
-
-    /// <summary>The validation message, listing what is accepted.</summary>
-    public static string Message { get; } =
-        "Type must be one of: " + string.Join(", ", Enum.GetNames<PriceListType>());
-}
-
 /// <summary>Lists price lists.</summary>
 /// <param name="context">The Pricing data context.</param>
 internal sealed class ListPriceListsQueryHandler(PricingDbContext context)
@@ -232,9 +215,8 @@ internal sealed class ListPriceListsQueryHandler(PricingDbContext context)
             rows = rows.Where(list => list.VendorId == vendorId);
         }
 
-        if (PriceListTypes.IsKnown(query.Type))
+        if (query.Type is { } type)
         {
-            var type = PriceListTypes.Parse(query.Type);
             rows = rows.Where(list => list.Type == type);
         }
 
@@ -265,7 +247,7 @@ internal sealed class ListPriceListsQueryHandler(PricingDbContext context)
                 list.VendorId,
                 list.Code,
                 list.Name,
-                list.Type.ToString(),
+                list.Type,
                 list.CurrencyCode,
                 list.Priority,
                 list.StartsAt,
@@ -411,12 +393,12 @@ internal sealed class CreatePriceListCommandHandler(
             scope.OwnerFor(command.VendorId),
             code,
             command.Name,
-            PriceListTypes.Parse(command.Type),
+            command.Type,
             string.IsNullOrWhiteSpace(localization.CurrencyCode) ? Money.Inr : localization.CurrencyCode);
 
         list.Update(
             command.Name,
-            PriceListTypes.Parse(command.Type),
+            command.Type,
             command.Priority,
             command.StartsAt,
             command.EndsAt);
@@ -475,7 +457,7 @@ internal sealed class UpdatePriceListCommandHandler(
 
         list.Update(
             command.Name,
-            PriceListTypes.Parse(command.Type),
+            command.Type,
             command.Priority,
             command.StartsAt,
             command.EndsAt);
@@ -864,7 +846,7 @@ internal static class PriceListProjection
             list.VendorId,
             list.Code,
             list.Name,
-            list.Type.ToString(),
+            list.Type,
             list.CurrencyCode,
             list.Priority,
             list.StartsAt,

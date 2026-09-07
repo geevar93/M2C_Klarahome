@@ -22,6 +22,14 @@ import { RatingBreakdownView, ReviewView } from './catalog.model';
   selector: 'kh-review-list',
   imports: [Badge, Button, EmptyState, KhDatePipe, KhNumberPipe, ProductImage, Rating],
   template: `
+    @if (canWrite()) {
+      <div class="write">
+        <button khButton variant="secondary" size="sm" type="button" (click)="writeRequested.emit()">
+          Write a review
+        </button>
+      </div>
+    }
+
     @if (breakdown(); as summary) {
       <div class="summary">
         <div class="average">
@@ -111,6 +119,12 @@ import { RatingBreakdownView, ReviewView } from './catalog.model';
     }
   `,
   styles: `
+    .write {
+      display: flex;
+      justify-content: flex-end;
+      margin-block-end: var(--space-3);
+    }
+
     :host {
       display: block;
     }
@@ -249,6 +263,16 @@ export class ReviewList {
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
 
+  /**
+   * Whether this shopper may write one.
+   *
+   * The API decides, from whether they received the item (Step 21); this is only whether to offer
+   * the control. Hidden rather than disabled, because "you cannot review this" is true of every
+   * product a visitor has not bought and a greyed-out button on all of them would be noise.
+   */
+  readonly canWrite = input(false);
+
   readonly voted = output<ReviewView>();
+  readonly writeRequested = output<void>();
   readonly moreRequested = output<void>();
 }

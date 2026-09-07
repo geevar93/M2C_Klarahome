@@ -14,13 +14,13 @@ import type * as Models from '../models';
 
 /** Query string for `adminNotificationsList`. */
 export interface AdminNotificationsListQuery {
-  Status?: string;
-  Channel?: string;
-  EventKey?: string;
-  From?: string;
-  To?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  channel?: string;
+  eventKey?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminNotificationTemplatesList`. */

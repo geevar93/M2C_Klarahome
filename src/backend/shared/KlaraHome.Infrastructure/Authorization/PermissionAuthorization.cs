@@ -159,6 +159,13 @@ public interface ICallerContext
     /// <summary>A named cohort this caller belongs to, for feature-flag segment rollout.</summary>
     string? Segment { get; }
 
+    /// <summary>
+    /// The support user acting as <see cref="UserId"/>, or null for an ordinary session
+    /// (docs/07-security-compliance.md §2). Non-null means every action this request takes was
+    /// really taken by somebody else, which is what the audit trail has to say.
+    /// </summary>
+    Guid? ImpersonatorId { get; }
+
     /// <summary>Whether the caller holds a permission, for checks that are not endpoint-shaped.</summary>
     /// <param name="permission">The granular permission.</param>
     bool HasPermission(string permission);
@@ -177,6 +184,8 @@ internal sealed class ClaimsCallerContext(IHttpContextAccessor accessor) : ICall
     public Guid? VendorId => ClaimGuid(KlaraHomeClaims.VendorId);
 
     public string? UserType => Claim(KlaraHomeClaims.UserType);
+
+    public Guid? ImpersonatorId => ClaimGuid(KlaraHomeClaims.ImpersonatorId);
 
     public string? Segment => Claim(KlaraHomeClaims.Segment);
 
@@ -207,6 +216,8 @@ internal sealed class SystemCallerContext : ICallerContext
     public string? UserType => null;
 
     public string? Segment => null;
+
+    public Guid? ImpersonatorId => null;
 
     public bool HasPermission(string permission) => false;
 }

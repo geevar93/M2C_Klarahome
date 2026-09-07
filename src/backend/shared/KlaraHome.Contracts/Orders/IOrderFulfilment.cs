@@ -36,13 +36,19 @@ public sealed record FulfilmentAddress(
 /// carried here rather than looked up because the catalogue may have been edited since.
 /// </param>
 /// <param name="LineTotal">What the shopper pays for them, inclusive of tax.</param>
+/// <param name="WarehouseId">
+/// The stock location the units were allocated from at placement, or null when the offer was not
+/// stocked. It is what turns a pick list into a route somebody can actually walk: with two
+/// warehouses and no location on the line, both pickers are given every parcel.
+/// </param>
 public sealed record FulfilmentLine(
     Guid OrderLineId,
     string Sku,
     string Name,
     int Quantity,
     int UnitWeightGrams,
-    decimal LineTotal);
+    decimal LineTotal,
+    Guid? WarehouseId);
 
 /// <summary>
 /// One seller's part of an order, as the module that moves parcels needs it.

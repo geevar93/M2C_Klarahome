@@ -92,4 +92,15 @@ internal static class CatalogErrors
         Error.Unavailable(
             "CATALOG_STORAGE_UNAVAILABLE",
             "File storage is not configured, so bulk import and export are unavailable.");
+
+    /// <summary>A bulk status change named no products.</summary>
+    public static Error BulkStatusEmpty { get; } =
+        Error.Validation("CATALOG_BULK_STATUS_EMPTY", "Select at least one product.");
+
+    /// <summary>A bulk status change named more products than one request may move.</summary>
+    /// <param name="maximum">The cap.</param>
+    public static Error BulkStatusTooLarge(int maximum)
+        => Error.Validation(
+            "CATALOG_BULK_STATUS_TOO_LARGE",
+            $"One request may move at most {maximum} products. Use the bulk import for more.");
 }

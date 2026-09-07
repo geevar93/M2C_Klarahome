@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
+  CatalogAdminService,
   EffectivePrice,
   PriceListItemPayload,
   PriceListItemResponse,
@@ -8,8 +9,17 @@ import {
   PricingAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { CellTemplate, DataTable, DataTableColumn, PageHeader } from '@klarahome/ui-admin';
+import {
+  CellTemplate,
+  DataTable,
+  DataTableColumn,
+  EntityOption,
+  EntityPicker,
+  PageHeader,
+} from '@klarahome/ui-admin';
 import { Alert, Button, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Observable, map } from 'rxjs';
+
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -48,6 +58,7 @@ interface DraftItem {
     CellTemplate,
     Control,
     DataTable,
+    EntityPicker,
     Field,
     HasPermission,
     Icon,
@@ -116,15 +127,12 @@ interface DraftItem {
 
             @for (draft of drafts(); track $index) {
               <div class="row">
-                <kh-field [label]="'Listing id'" [for]="'draft-listing-' + $index">
-                  <input
-                    khControl
-                    [id]="'draft-listing-' + $index"
-                    type="text"
-                    [value]="draft.listingId"
-                    (input)="setDraft($index, 'listingId', $any($event.target).value)"
-                  />
-                </kh-field>
+                <kh-entity-picker
+                  [label]="'Listing'"
+                  [inputId]="'draft-listing-' + $index"
+                  [search]="listingSearch"
+                  (chose)="setDraft($index, 'listingId', $event?.id ?? '')"
+                />
                 <kh-field [label]="'Price'" [for]="'draft-price-' + $index">
                   <input
                     khControl
@@ -171,15 +179,13 @@ interface DraftItem {
             </p>
 
             <div class="row">
-              <kh-field label="Listing id" for="resolve-listing">
-                <input
-                  khControl
-                  id="resolve-listing"
-                  type="text"
-                  [value]="resolveListingId()"
-                  (input)="resolveListingId.set($any($event.target).value)"
-                />
-              </kh-field>
+              <kh-entity-picker
+                label="Listing"
+                inputId="resolve-listing"
+                hint="Search by SKU or product name."
+                [search]="listingSearch"
+                (chose)="resolveListingId.set($event?.id ?? '')"
+              />
               <kh-field label="Units" for="resolve-qty">
                 <input
                   khControl
@@ -304,6 +310,19 @@ interface DraftItem {
 })
 export class PriceListDetailPage {
   private readonly pricing = inject(PricingAdminService);
+  private readonly catalog = inject(CatalogAdminService);
+
+  /** Finds listings for the resolver's picker (Step 28B, deliverable 15). */
+  protected readonly listingSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.catalog.searchListings(term).pipe(
+      map((listings) =>
+        listings.map((listing) => ({
+          id: listing.id,
+          label: listing.productName,
+          hint: `${listing.sku} · ${listing.status}`,
+        })),
+      ),
+    );
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);
 

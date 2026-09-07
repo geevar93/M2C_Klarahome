@@ -1,4 +1,5 @@
 using FluentValidation;
+using KlaraHome.Contracts.Inventory;
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
@@ -56,8 +57,9 @@ internal sealed record GetShipmentQuery(Guid ShipmentId) : IQuery<ShipmentRespon
 /// it can be walked as a picking route rather than read as a list of orders.
 /// </remarks>
 /// <param name="VendorId">Filter to one seller. Ignored for a seller, who sees only their own.</param>
+/// <param name="WarehouseId">Filter to one stock location, so a picker walks their own shelves.</param>
 /// <param name="Size">How many lines to return.</param>
-internal sealed record GetPickListQuery(Guid? VendorId, int? Size)
+internal sealed record GetPickListQuery(Guid? VendorId, Guid? WarehouseId, int? Size)
     : IQuery<IReadOnlyList<PickListLineResponse>>;
 
 /// <summary>Puts units into a parcel, replacing whatever was in it.</summary>
@@ -291,11 +293,13 @@ internal sealed class GetShipmentQueryHandler(ShippingDbContext context)
 /// <param name="context">The Shipping data context.</param>
 /// <param name="orders">Supplies the dispatch deadline, which is what the list is sorted by.</param>
 /// <param name="scope">Confines a seller to their own parcels.</param>
+/// <param name="allocations">Names the stock locations the rows point at.</param>
 /// <param name="options">Supplies the page ceiling.</param>
 internal sealed class GetPickListQueryHandler(
     ShippingDbContext context,
     IOrderFulfilment orders,
     ShippingScope scope,
+    IStockAllocation allocations,
     IOptions<ShippingOptions> options)
     : IQueryHandler<GetPickListQuery, IReadOnlyList<PickListLineResponse>>
 {
@@ -335,12 +339,30 @@ internal sealed class GetPickListQueryHandler(
 
         var deadlines = due.ToDictionary(view => view.SubOrderId, view => view.DispatchDueAt);
 
-        return Result.Success<IReadOnlyList<PickListLineResponse>>(
-        [
-            .. drafts
-                .SelectMany(
-                    shipment => shipment.Lines,
-                    (shipment, line) => new PickListLineResponse(
+        // Which shelf each item is on, carried down from the order line the ordering module froze it
+        // on at placement. Without it a second warehouse makes this list wrong for both pickers:
+        // each is handed every parcel and neither can tell which are theirs.
+        var locations = due
+            .SelectMany(view => view.Lines)
+            .Where(line => line.WarehouseId is not null)
+            .GroupBy(line => line.OrderLineId)
+            .ToDictionary(group => group.Key, group => group.First().WarehouseId!.Value);
+
+        var names = (await allocations
+                .GetWarehousesAsync([.. locations.Values.Distinct()], cancellationToken)
+                .ConfigureAwait(false))
+            .ToDictionary(warehouse => warehouse.Id, warehouse => warehouse.Name);
+
+        var lines = drafts
+            .SelectMany(
+                shipment => shipment.Lines,
+                (shipment, line) =>
+                {
+                    var warehouseId = locations.TryGetValue(line.OrderLineId, out var located)
+                        ? located
+                        : (Guid?)null;
+
+                    return new PickListLineResponse(
                         shipment.Id,
                         shipment.OrderNumber,
                         shipment.SubOrderNumber,
@@ -348,10 +370,24 @@ internal sealed class GetPickListQueryHandler(
                         line.Name,
                         line.Quantity,
                         shipment.DestinationPincode,
-                        deadlines.GetValueOrDefault(shipment.SubOrderId)))
+                        deadlines.GetValueOrDefault(shipment.SubOrderId),
+                        warehouseId,
+                        warehouseId is { } id ? names.GetValueOrDefault(id) : null);
+                });
 
-                // Soonest deadline first, then by item, which is what turns a list into a route: a
-                // picker walks the shelves once rather than once per order.
+        // Filtered here rather than in the query, because the location is the ordering module's fact
+        // and this module cannot join to it. The page ceiling is applied before the filter, so a
+        // narrow warehouse returns a short page rather than a slow scan of every draft parcel.
+        if (query.WarehouseId is { } wanted)
+        {
+            lines = lines.Where(line => line.WarehouseId == wanted);
+        }
+
+        return Result.Success<IReadOnlyList<PickListLineResponse>>(
+        [
+            // Soonest deadline first, then by item, which is what turns a list into a route: a
+            // picker walks the shelves once rather than once per order.
+            .. lines
                 .OrderBy(line => line.DispatchDueAt ?? DateTimeOffset.MaxValue)
                 .ThenBy(line => line.Sku),
         ]);

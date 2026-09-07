@@ -36,14 +36,14 @@ export class AuditLogService {
       (current, cursor, size) =>
         this.platform
           .adminAuditLogsGet({
-            EntityType: current.entityType,
-            EntityId: current.entityId,
-            ActorId: current.actorId,
-            Action: current.action,
-            From: current.from,
-            To: current.to,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            entityType: current.entityType,
+            entityId: current.entityId,
+            actorId: current.actorId,
+            action: current.action,
+            from: current.from,
+            to: current.to,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<AuditLogResponse> => result)),
       filters,

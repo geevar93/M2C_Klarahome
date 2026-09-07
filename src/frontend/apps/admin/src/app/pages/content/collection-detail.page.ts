@@ -3,17 +3,28 @@ import { ActivatedRoute, Router } from '@angular/router';
 import {
   CatalogAdminService,
   CategoryNode,
-  CollectionItemBody,
   CollectionResponse,
+  CollectionSort,
   ContentAdminService,
   MediaFileResponse,
   ProductCardResponse,
   RuleConditionBody,
+  RuleField,
+  RuleOperator,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { CellTemplate, ConfirmDialog, DataTable, DataTableColumn, PageHeader } from '@klarahome/ui-admin';
+import {
+  CellTemplate,
+  ConfirmDialog,
+  DataTable,
+  DataTableColumn,
+  EntityOption,
+  EntityPicker,
+  PageHeader,
+} from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
+import { Observable, map } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
@@ -22,9 +33,9 @@ import { COLLECTION_SORTS, RULE_FIELDS, RULE_OPERATORS } from './content-vocabul
 
 /** One condition being edited. `values` is a comma-separated string until it is sent. */
 interface ConditionDraft {
-  field: string;
+  field: RuleField;
   key: string;
-  operator: string;
+  operator: RuleOperator;
   values: string;
 }
 
@@ -57,6 +68,7 @@ interface ConditionDraft {
     ConfirmDialog,
     Control,
     DataTable,
+    EntityPicker,
     Field,
     HasPermission,
     Icon,
@@ -155,20 +167,18 @@ interface ConditionDraft {
 
           <section class="panel" *khHasPermission="'content.content.manage'">
             <h3>Pin a product</h3>
-            <p class="hint">
-              A pinned product stays whatever the rule decides. Products are identified by their product id.
-            </p>
+            <p class="hint">A pinned product stays whatever the rule decides.</p>
             <div class="row">
-              <kh-field label="Product id" for="pin-product">
-                <input
-                  khControl
-                  id="pin-product"
-                  type="text"
-                  [value]="pinProductId()"
-                  (input)="pinProductId.set($any($event.target).value)"
-                />
-              </kh-field>
-              <button khButton type="button" [disabled]="busy()" (click)="pin()">Pin it</button>
+              <kh-entity-picker
+                label="Product"
+                inputId="pin-product"
+                hint="Search by name or SKU, or paste a product id."
+                [search]="productSearch"
+                (chose)="pinProductId.set($event?.id ?? '')"
+              />
+              <button khButton type="button" [disabled]="busy() || !pinProductId()" (click)="pin()">
+                Pin it
+              </button>
             </div>
           </section>
         </section>
@@ -590,7 +600,7 @@ export class CollectionDetailPage {
 
   protected readonly matchAll = signal(true);
   protected readonly conditions = signal<readonly ConditionDraft[]>([]);
-  protected readonly sort = signal('Newest');
+  protected readonly sort = signal<CollectionSort>('Newest');
   protected readonly limit = signal('48');
   protected readonly includeOutOfStock = signal(false);
 
@@ -608,6 +618,18 @@ export class CollectionDetailPage {
     if (!current) return null;
     return `/${current.slug} · ${current.itemCount} product${current.itemCount === 1 ? '' : 's'} · created ${tableDateTime(current.createdAt)}`;
   });
+
+  /** Finds products for the picker (Step 28B, deliverable 15). */
+  protected readonly productSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.catalog.searchProducts(term).pipe(
+      map((products) =>
+        products.map((product) => ({
+          id: product.id,
+          label: product.name,
+          hint: `${product.status} · /${product.slug}`,
+        })),
+      ),
+    );
 
   protected readonly rowKey = (row: ProductCardResponse) => row.productId;
   protected readonly rowLabel = (row: ProductCardResponse) => row.name;
@@ -746,38 +768,34 @@ export class CollectionDetailPage {
 
   // ---- Items ------------------------------------------------------------------------------------
 
+  /**
+   * Pins one product.
+   *
+   * One request that adds one row. It used to send the rows on screen back with the new one,
+   * because the only route was the whole-list replace — which was correct for the fifty rows in
+   * view and silently deleted every row beyond them. The add and remove routes landed at Step 28B
+   * (deliverable 9), and this screen is why.
+   */
   protected pin(): void {
     const productId = this.pinProductId().trim();
     if (!productId || this.busy()) return;
 
-    this.setItems([
-      ...this.items.rows().map((row) => ({ productId: row.productId, isPinned: true })),
-      { productId, isPinned: true },
-    ]);
+    this.apply(this.content.addCollectionItem(this.id, { productId, isPinned: true }));
   }
 
+  /** Takes one product out, leaving the rest alone. */
   protected unpin(row: ProductCardResponse): void {
-    this.setItems(
-      this.items
-        .rows()
-        .filter((item) => item.productId !== row.productId)
-        .map((item) => ({ productId: item.productId, isPinned: true })),
-    );
+    if (this.busy()) return;
+
+    this.apply(this.content.removeCollectionItem(this.id, row.productId));
   }
 
-  /**
-   * Replaces the pinned set.
-   *
-   * The endpoint takes the whole list, so pinning one product means sending the ones already on
-   * screen back with it. That is only correct for the page in view — a collection with more items
-   * than one page holds cannot be edited this way without dropping the rest, which is why the
-   * screen asks for 50 at a time and why a bulk editor for large collections is not built here.
-   */
-  private setItems(items: readonly CollectionItemBody[]): void {
+  /** Runs a membership change and folds its answer back into the screen. */
+  private apply(change: Observable<CollectionResponse>): void {
     this.busy.set(true);
     this.summary.set([]);
 
-    this.content.setCollectionItems(this.id, { items: [...items] }).subscribe({
+    change.subscribe({
       next: (saved) => {
         this.busy.set(false);
         this.pinProductId.set('');

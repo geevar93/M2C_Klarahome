@@ -25,6 +25,8 @@ export interface OrderFilters {
 export interface SubOrderFilters {
   readonly status?: string;
   readonly vendorId?: string;
+  /** One stock location. The queue is wrong for both pickers without it once there are two. */
+  readonly warehouseId?: string;
   /** Past the seller's dispatch cut-off. The fulfilment queue's own definition of urgent. */
   readonly overdueOnly?: boolean;
 }
@@ -69,6 +71,19 @@ export class OrdersAdminService {
     );
   }
 
+  /**
+   * Finds a customer's orders by number, for a picker.
+   *
+   * A plain observable rather than a `CursorList`: a typeahead shows the first handful and is
+   * re-run on the next keystroke. Scoped to one customer because the only caller is "which of this
+   * shopper's orders is the replacement" (Step 28B, deliverable 18).
+   */
+  searchCustomerOrders(customerId: string, number: string, take = 10): Observable<OrderSummaryResponse[]> {
+    return this.api
+      .adminListOrders({ customerId, number: number || undefined, size: take })
+      .pipe(map((page) => page.items));
+  }
+
   subOrders(filters: SubOrderFilters = {}, pageSize = 25): CursorList<SubOrderResponse, SubOrderFilters> {
     return new CursorList<SubOrderResponse, SubOrderFilters>(
       (current, cursor, size) =>
@@ -76,6 +91,7 @@ export class OrdersAdminService {
           .adminListSubOrders({
             status: current.status,
             vendorId: current.vendorId,
+            warehouseId: current.warehouseId,
             overdueOnly: current.overdueOnly,
             cursor: cursor ?? undefined,
             size,

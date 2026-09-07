@@ -3,11 +3,12 @@ import { CartSummaryStore } from '@klarahome/data-access-cart';
 import { ProductSearchService } from '@klarahome/data-access-catalog';
 import { StoreConfigService, StoreContentService } from '@klarahome/data-access-content';
 import { SessionStore } from '@klarahome/data-access-auth';
-import { MiniCartLine, NavItem, SuggestionView } from '@klarahome/ui-patterns';
+import { BannerView, MiniCartLine, NavItem, SuggestionView } from '@klarahome/ui-patterns';
 import { SeoService } from '@klarahome/util';
 import { money } from '@klarahome/domain';
 import { Subject, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 
+import { toBannerViews } from './banner.mapper';
 import { CatalogMapper } from './catalog.mapper';
 import { MENU_CODES, toNavItems } from './menu.mapper';
 import { RecentSearchesStore } from './recent-searches.store';
@@ -45,6 +46,7 @@ export class ShellStore {
   private readonly mapper = inject(CatalogMapper);
   private readonly recentSearches = inject(RecentSearchesStore);
 
+  private readonly announcements = signal<readonly BannerView[]>([]);
   private readonly header = signal<readonly NavItem[]>([]);
   private readonly footer = signal<readonly NavItem[]>([]);
   private readonly navDrawerOpen = signal(false);
@@ -56,6 +58,14 @@ export class ShellStore {
 
   readonly storeName = computed(() => this.config.branding().storeName);
   readonly tagline = computed(() => this.config.branding().tagline);
+  /**
+   * The announcement bar's banners.
+   *
+   * On the shell rather than on a page, because the strip is above the header and therefore on
+   * every page. Fetched once with the menus (Step 28B, deliverable 19).
+   */
+  readonly announcementBanners: Signal<readonly BannerView[]> = this.announcements.asReadonly();
+
   readonly headerMenu: Signal<readonly NavItem[]> = this.header.asReadonly();
   readonly footerMenu: Signal<readonly NavItem[]> = this.footer.asReadonly();
 
@@ -115,6 +125,9 @@ export class ShellStore {
       this.seo.configure({ storeName: this.storeName() });
       this.publishSiteStructuredData();
     });
+    this.content
+      .banners('AnnouncementBar')
+      .subscribe((banners) => this.announcements.set(toBannerViews(banners)));
     this.content.menu(MENU_CODES.header).subscribe((menu) => this.header.set(toNavItems(menu.items)));
     this.content.menu(MENU_CODES.footer).subscribe((menu) => this.footer.set(toNavItems(menu.items)));
     this.content.seoConfig().subscribe((seoConfig) => {

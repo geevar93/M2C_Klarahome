@@ -1,5 +1,10 @@
 import { Injectable, inject } from '@angular/core';
-import { ProductSearchResponse, SearchApiClient, SuggestionResponse } from '@klarahome/data-access-api';
+import {
+  ProductSearchResponse,
+  SearchApiClient,
+  StoreSearchProductsQuery,
+  SuggestionResponse,
+} from '@klarahome/data-access-api';
 import { Observable, catchError, of } from 'rxjs';
 
 /**
@@ -45,7 +50,7 @@ const NO_RESULTS: ProductSearchResponse = {
 };
 
 /**
- * Turns the parameters into the query string the endpoint reads.
+ * The declared half of the query string, as the generated client takes it.
  *
  * Exported and pure, because it is the one piece of this service worth testing on its own and
  * because the page needs the same mapping to write the URL it is about to navigate to.
@@ -53,23 +58,35 @@ const NO_RESULTS: ProductSearchResponse = {
  * Empty values are dropped rather than sent blank: `?q=` is a search for the empty string as far
  * as the API's model binder is concerned, which is not the same as browsing a category.
  */
-export function toSearchQuery(
-  params: ProductSearchParams,
-): Record<string, string | number | boolean | readonly string[]> {
-  const query: Record<string, string | number | boolean | readonly string[]> = {};
+export function toSearchQuery(params: ProductSearchParams): StoreSearchProductsQuery {
+  const query: StoreSearchProductsQuery = {};
 
-  if (params.q?.trim()) query['q'] = params.q.trim();
-  if (params.category) query['category'] = params.category;
-  if (params.brand?.length) query['brand'] = [...params.brand];
-  if (params.vendor?.length) query['vendor'] = [...params.vendor];
-  if (params.minPrice !== null && params.minPrice !== undefined) query['minPrice'] = params.minPrice;
-  if (params.maxPrice !== null && params.maxPrice !== undefined) query['maxPrice'] = params.maxPrice;
-  if (params.rating) query['rating'] = params.rating;
-  if (params.discount) query['discount'] = params.discount;
-  if (params.inStock) query['inStock'] = true;
-  if (params.sort) query['sort'] = params.sort;
-  if (params.cursor) query['cursor'] = params.cursor;
-  if (params.size) query['size'] = params.size;
+  if (params.q?.trim()) query.q = params.q.trim();
+  if (params.category) query.category = params.category;
+  if (params.brand?.length) query.brand = [...params.brand];
+  if (params.vendor?.length) query.vendor = [...params.vendor];
+  if (params.minPrice !== null && params.minPrice !== undefined) query.minPrice = params.minPrice;
+  if (params.maxPrice !== null && params.maxPrice !== undefined) query.maxPrice = params.maxPrice;
+  if (params.rating) query.rating = params.rating;
+  if (params.discount) query.discount = params.discount;
+  if (params.inStock) query.inStock = true;
+  if (params.sort) query.sort = params.sort;
+  if (params.cursor) query.cursor = params.cursor;
+  if (params.size) query.size = params.size;
+
+  return query;
+}
+
+/**
+ * The undeclared half: the attribute facets.
+ *
+ * `{ colour: ['beige'], size: ['l', 'xl'] }` becomes `?attr.colour=beige&attr.size=l&attr.size=xl`.
+ * These cannot be declared in the contract at any price — which attributes exist is a merchandising
+ * decision, and no OpenAPI operation can name a parameter a merchandiser invents — so they go
+ * through the transport's documented escape hatch and nothing else does.
+ */
+export function toAttributeParams(params: ProductSearchParams): Record<string, readonly string[]> {
+  const query: Record<string, readonly string[]> = {};
 
   for (const [code, values] of Object.entries(params.attributes ?? {})) {
     if (values.length > 0) query[`attr.${code}`] = [...values];
@@ -81,12 +98,12 @@ export function toSearchQuery(
 /**
  * The listing page's one read, and the autocomplete beside it.
  *
- * **The query is passed through `options.params`, not through a generated query interface**, and
- * that is not a shortcut: `GET /store/products` reads its filters off the request by prefix,
- * because attribute filter names are data (see `StoreSearchEndpoints.ReadQuery` and
- * `ApiRequestOptions.params`). The operation therefore declares no query parameters and the
- * generator has nothing to emit. Recorded in `PARKING_LOT.md` — the closed half of the query
- * string *could* be declared in the contract, and should be, but the open half never can.
+ * **The closed half of the query goes through the generated interface; the open half does not.**
+ * `GET /store/products` declares `q`, the identifier filters, the price and rating bounds, the
+ * sort and the page (Step 28B, deliverable 6) — so those are typed and CI's drift check can see
+ * them. The attribute facets stay on `options.params`, because their names are data: which
+ * attributes exist is a merchandising decision, and no OpenAPI operation can declare a parameter
+ * a merchandiser invents (see `StoreSearchEndpoints.ReadQuery` and `ApiRequestOptions.params`).
  *
  * A failed search answers an empty result set rather than throwing. A listing page that renders
  * "no products matched" with its filters intact is recoverable; one that throws to the error page
@@ -98,7 +115,10 @@ export class ProductSearchService {
 
   search(params: ProductSearchParams): Observable<ProductSearchResponse> {
     return this.api
-      .storeSearchProducts({ params: toSearchQuery(params), silentErrors: true })
+      .storeSearchProducts(toSearchQuery(params), {
+        params: toAttributeParams(params),
+        silentErrors: true,
+      })
       .pipe(catchError(() => of(NO_RESULTS)));
   }
 

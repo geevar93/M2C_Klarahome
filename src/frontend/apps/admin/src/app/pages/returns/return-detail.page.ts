@@ -2,14 +2,25 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { ActivatedRoute } from '@angular/router';
 import {
   CreditNoteResponse,
+  OrdersAdminService,
   QcLineRequest,
+  ReturnDisposition,
   ReturnReasonResponse,
   ReturnResponse,
   ReturnsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { ConfirmDialog, Modal, PageHeader, StatusBadge } from '@klarahome/ui-admin';
+import {
+  ConfirmDialog,
+  EntityOption,
+  EntityPicker,
+  Modal,
+  PageHeader,
+  StatusBadge,
+} from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
+import { Observable, map, of } from 'rxjs';
+
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -22,15 +33,24 @@ interface QcDraft {
   readonly name: string;
   readonly quantity: number;
   accepted: string;
-  disposition: string;
+  disposition: ReturnDisposition;
 }
 
-/** Where an accepted unit goes. Rejected units are recorded but do not return to stock. */
-const DISPOSITIONS = [
+/**
+ * Where an accepted unit goes. Rejected units are recorded but do not return to stock.
+ *
+ * Typed against `ReturnDisposition` since Step 28B, and typing it found a value that never existed:
+ * this screen offered `Damaged`, and the enum's third member is `Quarantine`. Every inspection that
+ * chose it was refused (deliverable 11).
+ *
+ * `Pending` is deliberately not offered: it is what a line says before anybody has graded it, and
+ * the API refuses it as a verdict.
+ */
+const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label: string }[] = [
   { value: 'Restock', label: 'Back on the shelf — saleable' },
-  { value: 'Damaged', label: 'Damaged — not saleable' },
-  { value: 'Scrap', label: 'Scrapped' },
-] as const;
+  { value: 'Quarantine', label: 'Held for a decision — moves no stock' },
+  { value: 'Scrap', label: 'Scrapped — written off supply' },
+];
 
 /**
  * One return, from the decision to the money going back.
@@ -62,6 +82,7 @@ const DISPOSITIONS = [
     Button,
     ConfirmDialog,
     Control,
+    EntityPicker,
     Field,
     HasPermission,
     Modal,
@@ -211,7 +232,7 @@ const DISPOSITIONS = [
                   khButton
                   type="button"
                   [disabled]="busy()"
-                  (click)="replace()"
+                  (click)="startReplace()"
                 >
                   Send a replacement
                 </button>
@@ -498,7 +519,7 @@ const DISPOSITIONS = [
                   min="0"
                   [attr.max]="line.quantity"
                   [value]="line.accepted"
-                  (input)="setQc(index, 'accepted', $any($event.target).value)"
+                  (input)="setQcAccepted(index, $any($event.target).value)"
                 />
               </td>
               <td>
@@ -507,7 +528,7 @@ const DISPOSITIONS = [
                   [id]="'qc-disposition-' + index"
                   [attr.aria-label]="'Disposition for ' + line.name"
                   [value]="line.disposition"
-                  (change)="setQc(index, 'disposition', $any($event.target).value)"
+                  (change)="setQcDisposition(index, $any($event.target).value)"
                 >
                   @for (option of dispositions; track option.value) {
                     <option [value]="option.value">{{ option.label }}</option>
@@ -611,6 +632,37 @@ const DISPOSITIONS = [
       (confirmed)="reject($event.reason)"
       (cancelled)="rejecting.set(false)"
     />
+
+    <kh-modal
+      [open]="replacing()"
+      heading="Send a replacement"
+      width="30rem"
+      [dismissible]="!busy()"
+      (closed)="replacing.set(false)"
+    >
+      <p class="hint">
+        Naming the order the replacement went out on is what makes it traceable afterwards. Leave it blank if
+        the goods were sent outside this platform, and say so in the timeline.
+      </p>
+
+      <kh-entity-picker
+        label="Replacement order"
+        inputId="replacement-order"
+        [optional]="true"
+        hint="This shopper's orders, by number."
+        [search]="orderSearch"
+        (chose)="replacementOrder.set($event?.id ?? null)"
+      />
+
+      <div slot="footer">
+        <button khButton type="button" variant="tertiary" [disabled]="busy()" (click)="replacing.set(false)">
+          Cancel
+        </button>
+        <button khButton type="button" variant="primary" [disabled]="busy()" (click)="replace()">
+          Record the replacement
+        </button>
+      </div>
+    </kh-modal>
   `,
   styles: `
     kh-alert {
@@ -721,6 +773,34 @@ export class ReturnDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);
 
+  // ---- Attaching the replacement order (Step 28B, deliverable 18) --------------------------------
+
+  private readonly orders = inject(OrdersAdminService);
+
+  protected readonly replacing = signal(false);
+  protected readonly replacementOrder = signal<string | null>(null);
+
+  /**
+   * Finds this shopper's orders for the picker.
+   *
+   * Scoped to the customer on the return, so an operator cannot attach somebody else's order by
+   * mistyping a number.
+   */
+  protected readonly orderSearch = (term: string): Observable<readonly EntityOption[]> => {
+    const customerId = this.rma()?.customerId;
+    if (!customerId) return of([]);
+
+    return this.orders.searchCustomerOrders(customerId, term).pipe(
+      map((orders) =>
+        orders.map((order) => ({
+          id: order.id,
+          label: order.orderNumber,
+          hint: `${order.status} · ${tableDateTime(order.placedAt)}`,
+        })),
+      ),
+    );
+  };
+
   protected readonly dispositions = DISPOSITIONS;
 
   private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
@@ -828,9 +908,15 @@ export class ReturnDetailPage {
     this.inspecting.set(true);
   }
 
-  protected setQc(index: number, field: 'accepted' | 'disposition', value: string): void {
+  protected setQcAccepted(index: number, value: string): void {
     this.qcDraft.update((current) =>
-      current.map((line, at) => (at === index ? { ...line, [field]: value } : line)),
+      current.map((line, at) => (at === index ? { ...line, accepted: value } : line)),
+    );
+  }
+
+  protected setQcDisposition(index: number, value: string): void {
+    this.qcDraft.update((current) =>
+      current.map((line, at) => (at === index ? { ...line, disposition: value as ReturnDisposition } : line)),
     );
   }
 
@@ -874,11 +960,24 @@ export class ReturnDetailPage {
     );
   }
 
+  protected startReplace(): void {
+    this.replacementOrder.set(null);
+    this.replacing.set(true);
+  }
+
+  /**
+   * Records the replacement, naming the order it went out on where there is one.
+   *
+   * Until Step 28B this always sent null, because nothing on this screen could find an order —
+   * so a replacement was closed with no trace of what was actually sent (deliverable 18). The
+   * order is still *placed* elsewhere: creating one from a return is an order type the domain
+   * model does not yet describe, and inventing its tax and settlement treatment here would be
+   * inventing a policy rather than building a screen.
+   */
   protected replace(): void {
-    // No replacement order is named: creating one is a checkout the back office does not have, so
-    // this records the decision and the note explains what was sent.
+    this.replacing.set(false);
     this.act(
-      this.returns.replace(this.id, null, 'Replacement agreed with the customer.'),
+      this.returns.replace(this.id, this.replacementOrder(), 'Replacement agreed with the customer.'),
       'Replacement recorded.',
     );
   }

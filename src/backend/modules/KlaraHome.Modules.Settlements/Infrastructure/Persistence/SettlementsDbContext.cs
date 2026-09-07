@@ -52,7 +52,10 @@ internal sealed class SettlementsDbContext(
     /// <summary>One seller's transfer within a run.</summary>
     public DbSet<PayoutItem> PayoutItems => Set<PayoutItem>();
 
-    /// <summary>The gapless counter behind a payout reference.</summary>
+    /// <summary>The platform's own tax invoices, one per closed cycle.</summary>
+    public DbSet<CommissionInvoice> CommissionInvoices => Set<CommissionInvoice>();
+
+    /// <summary>The gapless counter behind a payout reference and an invoice number.</summary>
     public DbSet<NumberSequence> NumberSequences => Set<NumberSequence>();
 
     /// <inheritdoc />
@@ -64,6 +67,7 @@ internal sealed class SettlementsDbContext(
         modelBuilder.ApplyConfiguration(new SettlementCycleConfiguration());
         modelBuilder.ApplyConfiguration(new PayoutBatchConfiguration());
         modelBuilder.ApplyConfiguration(new PayoutItemConfiguration());
+        modelBuilder.ApplyConfiguration(new CommissionInvoiceConfiguration());
         modelBuilder.ApplyConfiguration(new NumberSequenceConfiguration());
     }
 }

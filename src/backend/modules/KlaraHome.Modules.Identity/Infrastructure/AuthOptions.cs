@@ -40,12 +40,38 @@ internal sealed class AuthOptions
     /// <summary>External identity providers (ADR-014). Customers only.</summary>
     public ExternalAuthOptions External { get; set; } = new();
 
+    /// <summary>Support impersonation (docs/07-security-compliance.md §2).</summary>
+    public ImpersonationOptions Impersonation { get; set; } = new();
+
     /// <summary>
     /// Roles for which a second factor is not optional (docs/07-security-compliance.md §1). A user
     /// holding any of these cannot complete a sign-in until they have enrolled one.
     /// </summary>
     public IList<string> MandatoryTwoFactorRoles { get; set; } =
         ["platform-admin", "vendor-owner"];
+}
+
+/// <summary>
+/// Support impersonation: how long an operator may act as a customer, and how much they have to
+/// say about why (docs/07-security-compliance.md §2).
+/// </summary>
+/// <remarks>
+/// The window is absolute rather than a session lifetime, and the impersonated token cannot be
+/// refreshed at all. "Time-boxed" that could be extended by refreshing is not time-boxed; it is a
+/// second sign-in with extra steps.
+/// </remarks>
+internal sealed class ImpersonationOptions
+{
+    /// <summary>How long one impersonation lasts before it stops being honoured.</summary>
+    [Range(1, 120)]
+    public int WindowMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// The shortest reason accepted. Long enough that "test" and "x" are refused, because an audit
+    /// trail of unreadable reasons is the same as no reason at all.
+    /// </summary>
+    [Range(3, 200)]
+    public int MinimumReasonLength { get; set; } = 10;
 }
 
 /// <summary>

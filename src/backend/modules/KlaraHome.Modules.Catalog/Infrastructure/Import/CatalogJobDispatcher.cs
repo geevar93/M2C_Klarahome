@@ -1,4 +1,5 @@
 using System.Text;
+using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Storage;
 using KlaraHome.Modules.Catalog.Domain;
 using KlaraHome.Modules.Catalog.Infrastructure.Persistence;
@@ -110,17 +111,8 @@ internal sealed partial class CatalogJobDispatcher : BackgroundService
             // FOR UPDATE SKIP LOCKED: a second worker polling at the same instant takes the next
             // job rather than blocking on this one, which is what makes horizontal scaling safe
             // without a distributed lock.
-            var claimed = await context.Jobs
-                // xmin is named explicitly because it is a system column: SELECT * omits it, and the
-                // model maps it as this entity's concurrency token.
-                .FromSqlRaw(
-                    $"""
-                     SELECT *, xmin FROM "{CatalogModule.SchemaName}"."catalog_jobs"
-                     WHERE status = 'Queued'
-                     ORDER BY created_at
-                     LIMIT 1
-                     FOR UPDATE SKIP LOCKED
-                     """)
+            var claimed = await context
+                .Claim<CatalogJob>($"{CatalogModule.SchemaName}.catalog_jobs", $"status = 'Queued'", "created_at", 1)
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
 

@@ -174,17 +174,12 @@ public sealed partial class OutboxDispatcher : BackgroundService
         OutboxOptions options,
         CancellationToken cancellationToken)
     {
-        var pending = await context.OutboxMessages
-            // xmin is named explicitly: it is a system column, so SELECT * omits it, and the model
-            // maps it as the concurrency token. Claiming rows with FOR UPDATE SKIP LOCKED is what
-            // makes more than one worker safe — each dispatcher steps over rows another holds.
-            .FromSql($"""
-                SELECT *, xmin FROM platform.outbox_messages
-                WHERE processed_at IS NULL AND attempts < {options.MaxAttempts}
-                ORDER BY occurred_at
-                LIMIT {options.BatchSize}
-                FOR UPDATE SKIP LOCKED
-                """)
+        var pending = await context
+            .Claim<OutboxMessage>(
+                "platform.outbox_messages",
+                $"processed_at IS NULL AND attempts < {options.MaxAttempts}",
+                "occurred_at",
+                options.BatchSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

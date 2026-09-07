@@ -117,7 +117,7 @@ internal sealed class SetPaymentMethodValidator : AbstractValidator<SetPaymentMe
 /// <param name="resolver">Finds the caller's basket.</param>
 /// <param name="workflow">The shared checkout steps.</param>
 /// <param name="scope">Who is asking.</param>
-/// <param name="options">Supplies the session lifetime and the sign-in rule.</param>
+/// <param name="options">Supplies the session lifetime.</param>
 /// <param name="clock">The sanctioned clock.</param>
 internal sealed class StartCheckoutCommandHandler(
     CartsDbContext context,
@@ -131,7 +131,13 @@ internal sealed class StartCheckoutCommandHandler(
         StartCheckoutCommand command,
         CancellationToken cancellationToken)
     {
-        if (scope.CustomerId is not { } customerId || (options.Value.RequireSignInToCheckout && !scope.IsSignedIn))
+        // Unconditional, and it used to be a configuration switch. It was not a real one: a
+        // checkout session is opened against a customer id, the address step chooses from that
+        // customer's address book and the order that comes out belongs to them, so turning the
+        // switch off produced a failure rather than a guest checkout. Guest checkout is a feature —
+        // a guest identity, an address collected onto the session, an order that belongs to an
+        // email address — and it is Phase 2's, not a flag's (PARKING_LOT.md, Step 28B).
+        if (scope.CustomerId is not { } customerId || !scope.IsSignedIn)
         {
             return CartsErrors.SignInRequired;
         }

@@ -94,6 +94,30 @@ internal static class PromotionEvaluator
     public const string CodMethod = "cod";
 
     /// <summary>
+    /// The stored condition value for a payment method.
+    /// </summary>
+    /// <remarks>
+    /// The API speaks in <see cref="QuotePaymentMethod"/> and the stored condition holds the two
+    /// literals this evaluator compares against. The mapping is here, beside the comparison, because
+    /// the two have to agree and a second copy of it is exactly how they stop agreeing.
+    /// </remarks>
+    /// <param name="method">The method, as the API states it.</param>
+    public static string ToConditionValue(QuotePaymentMethod method)
+        => method == QuotePaymentMethod.CashOnDelivery ? CodMethod : PrepaidMethod;
+
+    /// <summary>The payment method a stored condition value names.</summary>
+    /// <remarks>
+    /// Anything that is not <c>cod</c> reads as prepaid, which is what the comparison below already
+    /// does: a condition written with an unknown spelling excludes cash on delivery rather than
+    /// matching everything.
+    /// </remarks>
+    /// <param name="value">The stored value.</param>
+    public static QuotePaymentMethod ToPaymentMethod(string value)
+        => string.Equals(value, CodMethod, StringComparison.OrdinalIgnoreCase)
+            ? QuotePaymentMethod.CashOnDelivery
+            : QuotePaymentMethod.Prepaid;
+
+    /// <summary>
     /// Walks the candidate promotions in priority order and applies the ones that qualify.
     /// </summary>
     /// <remarks>
@@ -289,7 +313,7 @@ internal static class PromotionEvaluator
 
         if (promotion.Conditions.PaymentMethods.Count > 0)
         {
-            var method = context.PaymentMethod == QuotePaymentMethod.CashOnDelivery ? CodMethod : PrepaidMethod;
+            var method = ToConditionValue(context.PaymentMethod);
 
             if (!promotion.Conditions.PaymentMethods.Contains(method, StringComparer.OrdinalIgnoreCase))
             {

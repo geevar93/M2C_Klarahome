@@ -21,6 +21,7 @@ public static class OpenApiExtensions
         {
             options.AddDocumentTransformer(new ApiDocumentTransformer(api));
             options.AddOperationTransformer(new ProblemResponsesOperationTransformer());
+            options.AddOperationTransformer(new QueryParameterCasingTransformer());
         });
 
         return services;

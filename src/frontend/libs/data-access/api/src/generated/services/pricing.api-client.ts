@@ -21,12 +21,12 @@ export interface AdminPriceListItemsQuery {
 
 /** Query string for `adminPriceListsList`. */
 export interface AdminPriceListsListQuery {
-  VendorId?: string;
-  Type?: string;
-  ActiveOnly?: boolean;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  vendorId?: string;
+  type?: Models.PriceListType;
+  activeOnly?: boolean;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminPriceResolve`. */
@@ -44,12 +44,12 @@ export interface AdminPromotionRedemptionsQuery {
 
 /** Query string for `adminPromotionsList`. */
 export interface AdminPromotionsListQuery {
-  Type?: string;
-  Code?: string;
-  ActiveOnly?: boolean;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  type?: Models.PromotionType;
+  code?: string;
+  activeOnly?: boolean;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminTaxRateResolve`. */
@@ -60,10 +60,10 @@ export interface AdminTaxRateResolveQuery {
 
 /** Query string for `adminTaxRatesList`. */
 export interface AdminTaxRatesListQuery {
-  HsnCode?: string;
-  ActiveOnly?: boolean;
-  Cursor?: string;
-  Size?: number;
+  hsnCode?: string;
+  activeOnly?: boolean;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminWalletsList`. */

@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { PricingAdminService, PromotionFilters, PromotionResponse } from '@klarahome/data-access-admin';
+import {
+  PricingAdminService,
+  PromotionFilters,
+  PromotionResponse,
+  PromotionType,
+} from '@klarahome/data-access-admin';
 import {
   CellTemplate,
   DataTable,
@@ -218,7 +223,7 @@ export class PromotionsPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: PromotionFilters = {
-      type: values['type'],
+      type: (values['type'] as PromotionType) || undefined,
       search: values['q'],
       activeOnly: values['activeOnly'] === 'true' ? true : undefined,
     };

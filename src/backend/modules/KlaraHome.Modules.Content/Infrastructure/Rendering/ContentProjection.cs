@@ -109,9 +109,9 @@ internal static class ContentProjection
         return new PageSummaryResponse(
             page.Id,
             page.Slug,
-            page.Type.ToString(),
+            page.Type,
             page.Title,
-            page.Status.ToString(),
+            page.Status,
             page.PublishedAt,
             page.ScheduledAt,
             page.ContentChangedAt,
@@ -136,10 +136,10 @@ internal static class ContentProjection
         return new PageResponse(
             page.Id,
             page.Slug,
-            page.Type.ToString(),
+            page.Type,
             page.Title,
             page.Summary,
-            page.Status.ToString(),
+            page.Status,
             page.PublishedAt,
             page.ScheduledAt,
             page.ContentChangedAt,
@@ -149,7 +149,7 @@ internal static class ContentProjection
             page.Author,
             page.Tags,
             [.. page.Blocks.OrderBy(block => block.Position).Select(ToBlock)],
-            [.. PageLifecycle.NextFrom(page.Status, actor).Select(status => status.ToString())],
+            [.. PageLifecycle.NextFrom(page.Status, actor)],
             page.CreatedAt,
             page.UpdatedAt);
     }
@@ -205,7 +205,7 @@ internal static class ContentProjection
             item.Id,
             item.ParentId,
             item.Label,
-            item.LinkType.ToString(),
+            item.LinkType,
             item.TargetId,
             item.Url,
             item.Position,
@@ -269,7 +269,7 @@ internal static class ContentProjection
         return new BannerResponse(
             banner.Id,
             banner.Name,
-            banner.Placement.ToString(),
+            banner.Placement,
             image,
             mobileImage,
             banner.Message,
@@ -279,7 +279,7 @@ internal static class ContentProjection
             banner.Priority,
             banner.StartsAt,
             banner.EndsAt,
-            banner.Audience.ToString(),
+            banner.Audience,
             banner.IsActive,
             banner.IsLiveFor(now, BannerAudience.Everyone),
             banner.UpdatedAt);
@@ -298,7 +298,7 @@ internal static class ContentProjection
 
         return new StoreBannerResponse(
             banner.Id,
-            banner.Placement.ToString(),
+            banner.Placement,
             image,
             mobileImage,
             banner.Message,
@@ -318,7 +318,7 @@ internal static class ContentProjection
             collection.Id,
             collection.Slug,
             collection.Name,
-            collection.Kind.ToString(),
+            collection.Kind,
             collection.IsActive,
             collection.IsListed,
             collection.ItemCount,
@@ -346,7 +346,7 @@ internal static class ContentProjection
             collection.Slug,
             collection.Name,
             collection.Description,
-            collection.Kind.ToString(),
+            collection.Kind,
             rule,
             seo,
             heroImage,
@@ -367,11 +367,11 @@ internal static class ContentProjection
         return new CollectionRuleResponse(
             rule.MatchAll,
             [.. rule.Conditions.Select(condition => new RuleConditionResponse(
-                condition.Field.ToString(),
+                condition.Field,
                 condition.Key,
-                condition.Operator.ToString(),
+                condition.Operator,
                 condition.Values))],
-            rule.Sort.ToString(),
+            rule.Sort,
             rule.Limit,
             rule.IncludeOutOfStock);
     }

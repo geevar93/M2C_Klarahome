@@ -4,6 +4,7 @@ import {
   CreatePriceListBody,
   PriceListFilters,
   PriceListResponse,
+  PriceListType,
   PricingAdminService,
   UpdatePriceListBody,
 } from '@klarahome/data-access-admin';
@@ -302,7 +303,7 @@ export class PriceListsPage {
   protected readonly drawerOpen = signal(false);
   protected readonly deleting = signal(false);
   protected readonly editing = signal<PriceListResponse | null>(null);
-  protected readonly type = signal('Base');
+  protected readonly type = signal<PriceListType>('Base');
   protected readonly vendorId = signal('');
   protected readonly startsAt = signal('');
   protected readonly endsAt = signal('');
@@ -379,7 +380,7 @@ export class PriceListsPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: PriceListFilters = {
-      type: values['type'],
+      type: (values['type'] as PriceListType) || undefined,
       search: values['q'],
       activeOnly: values['activeOnly'] === 'true' ? true : undefined,
     };

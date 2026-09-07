@@ -39,6 +39,9 @@ internal static class PermissionCatalog
     /// <summary>Create accounts, change their details, lock and unlock them.</summary>
     public const string IdentityUserManage = "identity.user.manage";
 
+    /// <summary>Act as a customer for support, time-boxed and audited.</summary>
+    public const string IdentityUserImpersonate = "identity.user.impersonate";
+
     /// <summary>Grant and revoke roles.</summary>
     public const string IdentityRoleAssign = "identity.role.assign";
 
@@ -444,6 +447,10 @@ internal static class PermissionCatalog
         new(IdentityRoleRead, "Users & access", "List roles and the permissions they grant."),
         new(IdentityRoleManage, "Users & access", "Create roles and change what they grant."),
         new(IdentityRoleAssign, "Users & access", "Grant and revoke a user's roles."),
+        new(
+            IdentityUserImpersonate,
+            "Users & access",
+            "Act as a customer for support. Time-boxed, reason-carrying and audited."),
         new(MediaFileRead, "Media", "Browse the media library."),
         new(MediaFileManage, "Media", "Upload files and delete them."),
         new(NotificationTemplateManage, "Notifications", "Edit the wording of transactional messages."),
@@ -596,6 +603,12 @@ internal static class SystemRoles
             "Reads customer and order data to answer queries; acts only where explicitly permitted.",
             [
                 PermissionCatalog.IdentityUserRead,
+
+                // Step 28B. The role's own description has said "with audited impersonation" since
+                // Step 7; this is the permission that finally makes that true. Reproducing what a
+                // customer sees is the last resort of every support call the reads above cannot
+                // settle, and it is time-boxed, reason-carrying and audited at both ends.
+                PermissionCatalog.IdentityUserImpersonate,
 
                 // "Did they get the email" is the second question of nearly every support
                 // conversation, and it is a read of masked data.

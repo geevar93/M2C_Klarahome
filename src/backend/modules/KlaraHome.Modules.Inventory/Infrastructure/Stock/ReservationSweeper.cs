@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Inventory.Domain;
 using KlaraHome.Modules.Inventory.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Time;
@@ -120,17 +121,12 @@ internal sealed partial class ReservationSweeper : BackgroundService
             // The query filters are bypassed on purpose. This loop has no tenant and no caller —
             // it is the platform tidying up after itself — and a filtered query would sweep only
             // whichever tenant the ambient context happened to name.
-            var lapsed = await context.Reservations
-                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
-                // maps it as this entity's concurrency token.
-                .FromSql(
-                    $"""
-                     SELECT *, xmin FROM inventory.stock_reservations
-                     WHERE status = 'Held' AND expires_at <= {now}
-                     ORDER BY expires_at
-                     LIMIT {options.SweepBatchSize}
-                     FOR UPDATE SKIP LOCKED
-                     """)
+            var lapsed = await context
+                .Claim<StockReservation>(
+                    "inventory.stock_reservations",
+                    $"status = 'Held' AND expires_at <= {now}",
+                    "expires_at",
+                    options.SweepBatchSize)
                 .IgnoreQueryFilters()
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);

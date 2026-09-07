@@ -283,6 +283,21 @@ internal sealed class RazorpayWebhookPayload
 
     /// <summary>The order, on <c>order.paid</c>.</summary>
     public RazorpayEntity<RazorpayOrder>? Order { get; set; }
+
+    /// <summary>The Route transfer, on <c>transfer.processed</c> and <c>transfer.failed</c>.</summary>
+    public RazorpayEntity<RazorpayWebhookTransfer>? Transfer { get; set; }
+}
+
+/// <summary>A Route transfer as a webhook names it. Only the id, which is all that is trusted.</summary>
+/// <remarks>
+/// Deliberately just the identifier. The transfer's status is re-fetched from the gateway before
+/// anything is concluded from it, on the same rule the payment events follow: a webhook body is an
+/// unauthenticated claim that happens to be signed.
+/// </remarks>
+internal sealed class RazorpayWebhookTransfer
+{
+    /// <summary>The gateway's id for the transfer, as <c>trf_…</c>.</summary>
+    public string? Id { get; set; }
 }
 
 /// <summary>The gateway's one-key wrapper around every entity in a webhook payload.</summary>

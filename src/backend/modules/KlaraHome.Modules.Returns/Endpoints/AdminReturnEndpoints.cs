@@ -7,6 +7,7 @@ using KlaraHome.Modules.Returns.Application;
 using KlaraHome.Modules.Returns.Application.CreditNotes;
 using KlaraHome.Modules.Returns.Application.Reasons;
 using KlaraHome.Modules.Returns.Application.Returns;
+using KlaraHome.Modules.Returns.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -43,7 +44,7 @@ internal sealed record ReceiveReturnBody(string? Note);
 /// <param name="Lines">What they concluded per line, or empty to accept everything.</param>
 internal sealed record QcBody(
     string Result,
-    string? Disposition,
+    ReturnDisposition? Disposition,
     string? Notes,
     IReadOnlyList<QcLineRequest>? Lines);
 

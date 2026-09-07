@@ -1,25 +1,37 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { DOCUMENT } from '@angular/common';
 import { Injectable, inject } from '@angular/core';
-import { API_BASE_URL } from '@klarahome/data-access-api';
+import {
+  API_BASE_URL,
+  CatalogApiClient,
+  ProductImportTemplateResponse,
+  ShipmentLabelResponse,
+  ShippingApiClient,
+} from '@klarahome/data-access-api';
 import { Observable } from 'rxjs';
 
 /**
- * The documents the back office prints.
+ * The documents the back office prints and saves.
  *
- * A shipping label is the one thing on this platform that is neither JSON nor a signed URL: the
- * API streams the PDF from the endpoint itself, behind the same bearer token as everything else.
- * That combination is what makes it awkward, and worth ten lines of its own rather than a
- * workaround in each screen that prints:
+ * **Two of the four now come back as links rather than bytes** (Step 28B, deliverable 7). A
+ * shipment label answers a short-lived signed URL, as every other document on this platform does,
+ * and the import template answers the column list it is a template *of* — so both go through the
+ * generated client and neither needs anything from this file except a way to open or save what it
+ * produces.
  *
- *  - **A plain link or `window.open` cannot fetch it.** The access token lives in memory only
+ * **The two CSV exports still stream.** A seller's ledger statement and the statutory extract are
+ * generated per request rather than stored, so there is nothing to sign a URL for, and they are
+ * fetched here as blobs. That is awkward for a reason worth stating rather than working around
+ * silently:
+ *
+ *  - **A plain link or `window.open` cannot fetch them.** The access token lives in memory only
  *    (docs/07-security-compliance.md §3) — deliberately, so an XSS cannot read it out of storage —
  *    and a browser-initiated navigation carries no `Authorization` header. It would 401.
- *  - **`ApiTransport` cannot fetch it either.** It fixes `responseType: 'json'` for every generated
- *    call, which is right: 489 of the 490 operations answer JSON, and a transport that guessed
- *    from the response would guess wrong on an empty 204.
+ *  - **`ApiTransport` cannot fetch them either.** It fixes `responseType: 'json'` for every
+ *    generated call, which is right: all but a handful of the operations answer JSON, and a
+ *    transport that guessed from the response would guess wrong on an empty 204.
  *
- * So this goes to `HttpClient` directly, for a blob. It is still the whole interceptor chain —
+ * So those two go to `HttpClient` directly, for a blob. It is still the whole interceptor chain —
  * the same auth, the same correlation id, the same retry — because that is where interceptors
  * live; what is bypassed is only the generated client's response-type policy.
  *
@@ -33,16 +45,58 @@ import { Observable } from 'rxjs';
 export class DocumentPrintService {
   private readonly http = inject(HttpClient);
   private readonly document = inject(DOCUMENT);
+  private readonly shipping = inject(ShippingApiClient);
+  private readonly catalog = inject(CatalogApiClient);
   private readonly baseUrl = inject(API_BASE_URL).replace(/\/+$/, '');
 
-  /** The label for one shipment: the courier's own where there is one, ours where there is not. */
-  shipmentLabel(shipmentId: string): Observable<Blob> {
-    return this.fetch(`/api/v1/admin/shipments/${encodeURIComponent(shipmentId)}/label`);
+  /**
+   * A short-lived link to one shipment's label: the courier's own where there is one, ours where
+   * there is not. Minting the link is the grant, so it is opened rather than fetched.
+   */
+  shipmentLabel(shipmentId: string): Observable<ShipmentLabelResponse> {
+    return this.shipping.adminGetShipmentLabel(shipmentId);
   }
 
-  /** The CSV a product import must be shaped like. Behind the same permission as the import. */
-  productImportTemplate(): Observable<Blob> {
-    return this.fetch('/api/v1/admin/products/import/template');
+  /** The columns a product import must be shaped like. Behind the same permission as the import. */
+  productImportTemplate(): Observable<ProductImportTemplateResponse> {
+    return this.catalog.adminProductImportTemplate();
+  }
+
+  /**
+   * Opens a signed document link in a new tab.
+   *
+   * Answers false when the browser refused — a pop-up blocker, or a call that did not come from a
+   * user gesture — so the caller can say so rather than letting the click do nothing.
+   */
+  openUrl(url: string): boolean {
+    return this.document.defaultView?.open(url, '_blank') != null;
+  }
+
+  /**
+   * Writes a CSV from a header row and saves it.
+   *
+   * For the import template, which is a *shape* rather than a document: the API answers the column
+   * list, and a file with those columns and no rows is what a merchandiser opens in a spreadsheet.
+   * Building it here rather than on the server is what let the endpoint stop streaming bytes behind
+   * a bearer token (Step 28B, deliverable 7).
+   */
+  saveCsvHeader(columns: readonly string[], fileName: string): void {
+    // RFC 4180 quoting: a column containing a quote, a comma or a newline is wrapped and its quotes
+    // doubled. None of ours do today, and a template that broke the first time one did would be
+    // found by a merchandiser rather than by a test.
+    const header = columns.map((column) => `"${column.replace(/"/g, '""')}"`).join(',');
+
+    this.download(
+      new Blob(
+        [
+          `${header}
+
+`,
+        ],
+        { type: 'text/csv;charset=utf-8' },
+      ),
+      fileName,
+    );
   }
 
   /**

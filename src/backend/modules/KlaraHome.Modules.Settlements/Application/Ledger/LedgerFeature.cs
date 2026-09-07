@@ -192,13 +192,13 @@ internal sealed class GetVendorStatementQueryHandler(
         }
 
         var totals = entries
-            .GroupBy(entry => entry.EntryType, StringComparer.Ordinal)
+            .GroupBy(entry => LedgerEntryTypes.ToEntryType(entry.EntryType))
             .Select(group => new LedgerTotalResponse(
                 group.Key,
                 group.Count(),
                 group.Sum(entry => entry.Amount),
                 group.Sum(entry => entry.SignedAmount)))
-            .OrderBy(total => LedgerEntryTypes.Rank(total.EntryType))
+            .OrderBy(total => LedgerEntryTypes.Rank(LedgerEntryTypes.ToStored(total.EntryType)))
             .ToArray();
 
         var movement = entries.Sum(entry => entry.SignedAmount);

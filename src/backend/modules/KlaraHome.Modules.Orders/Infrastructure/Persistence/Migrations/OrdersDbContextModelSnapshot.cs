@@ -736,6 +736,10 @@ namespace KlaraHome.Modules.Orders.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("vendor_id");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -753,6 +757,10 @@ namespace KlaraHome.Modules.Orders.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("VendorId")
                         .HasDatabaseName("ix_order_lines_vendor_id");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("ix_order_lines_warehouse_id")
+                        .HasFilter("warehouse_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "ListingId")
                         .HasDatabaseName("ix_order_lines_tenant_id_listing_id");

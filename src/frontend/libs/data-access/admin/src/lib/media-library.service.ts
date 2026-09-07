@@ -36,10 +36,10 @@ export class MediaLibraryService {
       (current, cursor, size) =>
         this.api
           .adminMediaList({
-            Visibility: current.visibility,
-            ContentType: current.contentType,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            visibility: current.visibility,
+            contentType: current.contentType,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<MediaFileResponse> => result)),
       filters,

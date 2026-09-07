@@ -9,12 +9,15 @@ import {
   SettlementsAdminService,
   StatutoryExtractResponse,
   VendorBalanceResponse,
+  VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   DataTable,
   DataTableColumn,
+  EntityOption,
+  EntityPicker,
   FilterBar,
   FilterDefinition,
   FilterValues,
@@ -24,6 +27,7 @@ import {
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
+import { Observable, map } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
 import { tableDate, tableDateTime, tableMoney } from '../../core/format';
@@ -73,6 +77,7 @@ const ENTRY_TYPES = [
     CellTemplate,
     Control,
     DataTable,
+    EntityPicker,
     Field,
     FilterBar,
     HasPermission,
@@ -106,15 +111,17 @@ const ENTRY_TYPES = [
 
     <div class="statement">
       <div class="row">
-        <kh-field label="Seller id" for="ledger-vendor" [optional]="isVendor()">
-          <input
-            khControl
-            id="ledger-vendor"
-            type="text"
-            [value]="vendorId()"
-            (input)="vendorId.set($any($event.target).value)"
+        @if (isVendor()) {
+          <p class="hint">Your own account. A seller's statement is always their own.</p>
+        } @else {
+          <kh-entity-picker
+            label="Seller"
+            inputId="ledger-vendor"
+            hint="Search by name or code, or paste a seller id."
+            [search]="vendorSearch"
+            (chose)="vendorId.set($event?.id ?? '')"
           />
-        </kh-field>
+        }
         <kh-field label="From" for="ledger-from" [optional]="true">
           <input
             khControl
@@ -311,15 +318,13 @@ const ENTRY_TYPES = [
         and the reason is what somebody reads a year from now.
       </p>
 
-      <kh-field label="Seller id" for="adjust-vendor">
-        <input
-          khControl
-          id="adjust-vendor"
-          type="text"
-          [value]="adjustVendorId()"
-          (input)="adjustVendorId.set($any($event.target).value)"
-        />
-      </kh-field>
+      <kh-entity-picker
+        label="Seller"
+        inputId="adjust-vendor"
+        hint="Whose balance this moves. Search by name or code."
+        [search]="vendorSearch"
+        (chose)="adjustVendorId.set($event?.id ?? '')"
+      />
 
       <kh-field label="Direction" for="adjust-direction">
         <select
@@ -482,6 +487,7 @@ const ENTRY_TYPES = [
 export class LedgerPage {
   private readonly settlements = inject(SettlementsAdminService);
   private readonly documents = inject(DocumentPrintService);
+  private readonly vendors = inject(VendorsAdminService);
   private readonly session = inject(SessionStore);
   private readonly toasts = inject(ToastService);
 
@@ -494,6 +500,16 @@ export class LedgerPage {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly vendorId = signal(this.session.session()?.vendorId ?? '');
+
+  /** Finds sellers for the two pickers on this screen (Step 28B, deliverable 15). */
+  protected readonly vendorSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.vendors
+      .searchVendors(term)
+      .pipe(
+        map((sellers) =>
+          sellers.map((seller) => ({ id: seller.id, label: seller.displayName, hint: seller.code })),
+        ),
+      );
   protected readonly from = signal('');
   protected readonly to = signal('');
   protected readonly statement = signal<LedgerStatementResponse | null>(null);

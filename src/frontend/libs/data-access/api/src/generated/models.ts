@@ -32,6 +32,11 @@ export interface AddCartItemBody {
   quantity: number | null;
 }
 
+export interface AddCollectionItemBody {
+  productId: string;
+  isPinned: boolean;
+}
+
 export interface AddressInput {
   label: string | null;
   recipientName: string;
@@ -297,9 +302,11 @@ export type BankVerificationStatus =
   | "Verified"
   | "Failed";
 
+export type BannerAudience = string;
+
 export interface BannerBody {
   name: string | null;
-  placement: string | null;
+  placement: BannerPlacement;
   mediaFileId: string | null;
   mobileMediaFileId: string | null;
   message: string | null;
@@ -309,14 +316,23 @@ export interface BannerBody {
   priority: number;
   startsAt: string | null;
   endsAt: string | null;
-  audience: string | null;
+  audience: null | BannerAudience;
   isActive: boolean;
 }
+
+export type BannerPlacement =
+  | "AnnouncementBar"
+  | "HomeHero"
+  | "HomeStrip"
+  | "CategoryHeader"
+  | "ListingSidebar"
+  | "ProductStrip"
+  | "CartStrip";
 
 export interface BannerResponse {
   id: string;
   name: string;
-  placement: string;
+  placement: BannerPlacement;
   image: null | ContentImageResponse;
   mobileImage: null | ContentImageResponse;
   message: string | null;
@@ -326,7 +342,7 @@ export interface BannerResponse {
   priority: number;
   startsAt: string | null;
   endsAt: string | null;
-  audience: string;
+  audience: BannerAudience;
   isActive: boolean;
   isLive: boolean;
   updatedAt: string | null;
@@ -404,6 +420,24 @@ export interface BrandResponse {
   logoFileId: string | null;
   isActive: boolean;
   seo: SeoPayload;
+}
+
+export interface BulkProductStatusBody {
+  productIds: string[] | null;
+  status: ProductStatus;
+}
+
+export interface BulkProductStatusOutcome {
+  productId: string;
+  changed: boolean;
+  errorCode: string | null;
+  message: string | null;
+}
+
+export interface BulkProductStatusResponse {
+  changed: number;
+  failed: number;
+  results: BulkProductStatusOutcome[];
 }
 
 export interface CancelLineBody {
@@ -649,12 +683,16 @@ export interface CollectionItemBody {
   isPinned: boolean;
 }
 
+export type CollectionKind =
+  | "Manual"
+  | "Rule";
+
 export interface CollectionResponse {
   id: string;
   slug: string;
   name: string;
   description: string | null;
-  kind: string;
+  kind: CollectionKind;
   rule: null | CollectionRuleResponse;
   seo: SeoResponse;
   heroImage: null | ContentImageResponse;
@@ -669,7 +707,7 @@ export interface CollectionResponse {
 export interface CollectionRuleBody {
   matchAll: boolean;
   conditions: RuleConditionBody[] | null;
-  sort: string | null;
+  sort: null | CollectionSort;
   limit: number;
   includeOutOfStock: boolean;
 }
@@ -677,21 +715,59 @@ export interface CollectionRuleBody {
 export interface CollectionRuleResponse {
   matchAll: boolean;
   conditions: RuleConditionResponse[];
-  sort: string;
+  sort: CollectionSort;
   limit: number;
   includeOutOfStock: boolean;
 }
+
+export type CollectionSort =
+  | "Newest"
+  | "PriceAscending"
+  | "PriceDescending"
+  | "Discount"
+  | "Rating";
 
 export interface CollectionSummaryResponse {
   id: string;
   slug: string;
   name: string;
-  kind: string;
+  kind: CollectionKind;
   isActive: boolean;
   isListed: boolean;
   itemCount: number;
   refreshedAt: string | null;
   updatedAt: string | null;
+}
+
+export interface CommissionInvoiceDownloadResponse {
+  invoiceId: string;
+  invoiceNumber: string;
+  url: string;
+}
+
+export interface CommissionInvoiceResponse {
+  id: string;
+  settlementCycleId: string;
+  vendorId: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  commission: number;
+  platformFee: number;
+  paymentFee: number;
+  taxableValue: number;
+  gstRate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  taxTotal: number;
+  total: number;
+  currencyCode: string;
+  supplierGstin: string | null;
+  recipientGstin: string | null;
+  placeOfSupplyStateCode: string | null;
+  hasDocument: boolean;
 }
 
 export interface CommissionPlanResponse {
@@ -821,7 +897,7 @@ export interface CreateMenuBody {
 
 export interface CreatePageBody {
   slug: string | null;
-  type: string | null;
+  type: PageType;
   title: string | null;
   summary: string | null;
 }
@@ -834,7 +910,7 @@ export interface CreatePriceListBody {
   vendorId: string | null;
   code: string;
   name: string;
-  type: string;
+  type: PriceListType;
   priority: number;
   startsAt: string | null;
   endsAt: string | null;
@@ -1024,6 +1100,13 @@ export interface EnableTwoFactorBody {
   code: string;
 }
 
+export interface ExportReportBody {
+  from: string | null;
+  to: string | null;
+  groupBy: string | null;
+  vendorId: string | null;
+}
+
 export interface ExternalLoginResponse {
   id: string;
   provider: string;
@@ -1119,6 +1202,18 @@ export type GoodsReceiptStatus =
   | "Draft"
   | "Posted";
 
+export interface ImpersonateBody {
+  reason: string;
+}
+
+export interface ImpersonationResponse {
+  accessToken: string;
+  expiresAt: string;
+  sessionId: string;
+  reason: string;
+  user: AuthenticatedUserResponse;
+}
+
 export interface ImportErrorResponse {
   rowNumber: number;
   column: string | null;
@@ -1187,11 +1282,15 @@ export type KycVerificationStatus =
   | "Verified"
   | "Rejected";
 
+export type LedgerDirection =
+  | "Credit"
+  | "Debit";
+
 export interface LedgerEntryResponse {
   id: string;
   vendorId: string;
-  entryType: string;
-  direction: string;
+  entryType: LedgerEntryType;
+  direction: LedgerDirection;
   amount: number;
   signedAmount: number;
   taxableValue: number;
@@ -1203,6 +1302,20 @@ export interface LedgerEntryResponse {
   note: string | null;
   occurredAt: string;
 }
+
+export type LedgerEntryType =
+  | "Sale"
+  | "Commission"
+  | "PlatformTax"
+  | "PlatformFee"
+  | "PaymentFee"
+  | "ShippingFee"
+  | "Refund"
+  | "RefundCommissionReversal"
+  | "Tcs"
+  | "Tds"
+  | "Adjustment"
+  | "Payout";
 
 export interface LedgerStatementResponse {
   vendorId: string;
@@ -1217,7 +1330,7 @@ export interface LedgerStatementResponse {
 }
 
 export interface LedgerTotalResponse {
-  entryType: string;
+  entryType: LedgerEntryType;
   count: number;
   amount: number;
   signedAmount: number;
@@ -1329,7 +1442,7 @@ export interface MenuItemBody {
   id: string | null;
   parentId: string | null;
   label: string | null;
-  linkType: string | null;
+  linkType: MenuLinkType;
   targetId: string | null;
   url: string | null;
   isVisible: boolean;
@@ -1342,7 +1455,7 @@ export interface MenuItemResponse {
   id: string;
   parentId: string | null;
   label: string;
-  linkType: string;
+  linkType: MenuLinkType;
   targetId: string | null;
   url: string | null;
   position: number;
@@ -1352,6 +1465,13 @@ export interface MenuItemResponse {
   iconFileId: string | null;
   badge: string | null;
 }
+
+export type MenuLinkType =
+  | "None"
+  | "Page"
+  | "Category"
+  | "Collection"
+  | "Url";
 
 export interface MenuResponse {
   id: string;
@@ -1465,8 +1585,16 @@ export interface MyPaymentResponse {
   failureReason: string | null;
 }
 
+export type NdrAction =
+  | "Pending"
+  | "Reattempt"
+  | "Rescheduled"
+  | "AddressUpdated"
+  | "ReturnToOrigin"
+  | "Resolved";
+
 export interface NdrActionBody {
-  action: string;
+  action: NdrAction;
   remark: string | null;
   rescheduledFor: string | null;
 }
@@ -1482,7 +1610,7 @@ export interface NdrResponse {
   attemptNumber: number;
   reasonCode: string;
   reason: string | null;
-  action: string;
+  action: NdrAction;
   actionRemark: string | null;
   rescheduledFor: string | null;
   raisedAt: string;
@@ -1696,10 +1824,10 @@ export interface PageInfo {
 export interface PageResponse {
   id: string;
   slug: string;
-  type: string;
+  type: PageType;
   title: string;
   summary: string | null;
-  status: string;
+  status: PageStatus;
   publishedAt: string | null;
   scheduledAt: string | null;
   contentChangedAt: string | null;
@@ -1709,17 +1837,25 @@ export interface PageResponse {
   author: string | null;
   tags: string[];
   blocks: BlockResponse[];
-  allowedTransitions: string[];
+  allowedTransitions: PageStatus[];
   createdAt: string;
   updatedAt: string | null;
 }
 
+export type PageStatus =
+  | "Draft"
+  | "InReview"
+  | "Scheduled"
+  | "Published"
+  | "Unpublished"
+  | "Archived";
+
 export interface PageSummaryResponse {
   id: string;
   slug: string;
-  type: string;
+  type: PageType;
   title: string;
-  status: string;
+  status: PageStatus;
   publishedAt: string | null;
   scheduledAt: string | null;
   contentChangedAt: string | null;
@@ -1727,6 +1863,13 @@ export interface PageSummaryResponse {
   blockCount: number;
   updatedAt: string | null;
 }
+
+export type PageType =
+  | "Home"
+  | "Landing"
+  | "Static"
+  | "Legal"
+  | "Blog";
 
 export interface PageVersionResponse {
   version: number;
@@ -1855,6 +1998,17 @@ export interface PagedResultOfCodCollectionResponse {
 export interface PagedResultOfCollectionSummaryResponse {
   /** The page of results, in the endpoint's declared order. */
   items: CollectionSummaryResponse[];
+  /** Where this page sits and how to ask for the next one. */
+  page: PageInfo;
+}
+
+/**
+ * The collection envelope every list endpoint returns (docs/04-api-specification.md §1.1).
+ * Defined once so no two endpoints invent their own shape and no client has to special-case one.
+ */
+export interface PagedResultOfCommissionInvoiceResponse {
+  /** The page of results, in the endpoint's declared order. */
+  items: CommissionInvoiceResponse[];
   /** Where this page sits and how to ask for the next one. */
   page: PageInfo;
 }
@@ -2437,7 +2591,7 @@ export interface PaymentSummaryResponse {
 export interface PayoutBatchResponse {
   id: string;
   reference: string;
-  status: string;
+  status: PayoutBatchStatus;
   totalAmount: number;
   settledAmount: number;
   vendorCount: number;
@@ -2455,6 +2609,15 @@ export interface PayoutBatchResponse {
   items: PayoutItemResponse[];
 }
 
+export type PayoutBatchStatus =
+  | "Draft"
+  | "Approved"
+  | "Processing"
+  | "Completed"
+  | "PartiallyFailed"
+  | "Failed"
+  | "Cancelled";
+
 export interface PayoutItemResponse {
   id: string;
   vendorId: string;
@@ -2463,7 +2626,7 @@ export interface PayoutItemResponse {
   settlementCycleId: string | null;
   amount: number;
   currencyCode: string;
-  status: string;
+  status: PayoutItemStatus;
   destinationLast4: string | null;
   providerPayoutId: string | null;
   utr: string | null;
@@ -2471,6 +2634,13 @@ export interface PayoutItemResponse {
   sentAt: string | null;
   settledAt: string | null;
 }
+
+export type PayoutItemStatus =
+  | "Pending"
+  | "Processing"
+  | "Completed"
+  | "Failed"
+  | "Skipped";
 
 export interface PermissionGroupResponse {
   group: string;
@@ -2491,6 +2661,8 @@ export interface PickListLineResponse {
   quantity: number;
   destinationPincode: string;
   dispatchDueAt: string | null;
+  warehouseId: string | null;
+  warehouseName: string | null;
 }
 
 export interface PickupLocationBody {
@@ -2596,7 +2768,7 @@ export interface PriceListResponse {
   vendorId: string | null;
   code: string;
   name: string;
-  type: string;
+  type: PriceListType;
   currencyCode: string;
   priority: number;
   startsAt: string | null;
@@ -2605,6 +2777,11 @@ export interface PriceListResponse {
   itemCount: number;
   createdAt: string;
 }
+
+export type PriceListType =
+  | "Base"
+  | "Sale"
+  | "Scheduled";
 
 export interface ProductBody {
   name: string;
@@ -2643,6 +2820,11 @@ export interface ProductCardResponse {
   ratingCount: number;
   image: null | ContentImageResponse;
   isPurchasable: boolean;
+}
+
+export interface ProductImportTemplateResponse {
+  fileName: string;
+  columns: string[];
 }
 
 export interface ProductListItem {
@@ -2736,16 +2918,21 @@ export type ProductStatus =
   | "Inactive"
   | "Archived";
 
+export type PromotionApplication =
+  | "Line"
+  | "Order"
+  | "Shipping";
+
 export interface PromotionBody {
   code: string | null;
   name: string;
   description: string | null;
-  type: string;
-  appliesTo: string;
+  type: PromotionType;
+  appliesTo: PromotionApplication;
   value: number;
   scope: null | PromotionScopePayload;
   conditions: null | PromotionConditionsPayload;
-  stacking: string;
+  stacking: StackingMode;
   priority: number;
   startsAt: string;
   endsAt: string | null;
@@ -2758,7 +2945,7 @@ export interface PromotionBody {
 export interface PromotionConditionsPayload {
   minQuantity: number | null;
   firstOrderOnly: boolean | null;
-  paymentMethods: string[] | null;
+  paymentMethods: QuotePaymentMethod[] | null;
   maxQuantityPerOrder: number | null;
   buyQuantity: number | null;
   getQuantity: number | null;
@@ -2786,12 +2973,12 @@ export interface PromotionResponse {
   code: string | null;
   name: string;
   description: string | null;
-  type: string;
-  appliesTo: string;
+  type: PromotionType;
+  appliesTo: PromotionApplication;
   value: number;
   scope: PromotionScopePayload;
   conditions: PromotionConditionsPayload;
-  stacking: string;
+  stacking: StackingMode;
   priority: number;
   startsAt: string;
   endsAt: string | null;
@@ -2817,6 +3004,14 @@ export interface PromotionTierPayload {
   minAmount: number;
   value: number;
 }
+
+export type PromotionType =
+  | "Percentage"
+  | "Fixed"
+  | "FreeShipping"
+  | "Bogo"
+  | "Bundle"
+  | "Tiered";
 
 export interface PurchaseOrderLinePayload {
   listingId: string;
@@ -2864,7 +3059,7 @@ export type PurchaseOrderStatus =
 
 export interface QcBody {
   result: string;
-  disposition: string | null;
+  disposition: null | ReturnDisposition;
   notes: string | null;
   lines: QcLineRequest[] | null;
 }
@@ -2872,7 +3067,7 @@ export interface QcBody {
 export interface QcLineRequest {
   returnLineId: string;
   quantityAccepted: number;
-  disposition: string | null;
+  disposition: null | ReturnDisposition;
   note: string | null;
 }
 
@@ -2956,6 +3151,11 @@ export interface QuoteLinePayload {
   listingId: string;
   quantity: number;
 }
+
+/** How a basket is being paid for, because some promotions and fees depend on it. */
+export type QuotePaymentMethod =
+  | "Prepaid"
+  | "CashOnDelivery";
 
 /** A promotion the engine considered, and what it decided. */
 export interface QuotePromotion {
@@ -3264,6 +3464,19 @@ export interface ReportDownloadResponse {
   fileName: string;
 }
 
+export interface ReportResult {
+  key: string;
+  name: string;
+  columns: ReportColumn[];
+  from: string;
+  to: string;
+  groupBy: string | null;
+  currencyCode: string;
+  rows: Record<string, unknown>[];
+  totals: Record<string, unknown> | null;
+  truncated: boolean;
+}
+
 export interface ReportRunResponse {
   id: string;
   scheduleId: string | null;
@@ -3312,6 +3525,12 @@ export interface ResolveReportBody {
   resolution: string | null;
 }
 
+export type ReturnDisposition =
+  | "Pending"
+  | "Restock"
+  | "Scrap"
+  | "Quarantine";
+
 export interface ReturnEligibilityResponse {
   subOrderId: string;
   subOrderNumber: string;
@@ -3341,7 +3560,7 @@ export interface ReturnLineResponse {
   quantityAccepted: number;
   refundAmount: number;
   acceptedRefund: number;
-  disposition: string;
+  disposition: ReturnDisposition;
   qcNote: string | null;
 }
 
@@ -3419,7 +3638,9 @@ export interface ReturnResponse {
   qcPassed: boolean | null;
   qcNotes: string | null;
   rejectedReason: string | null;
+  customerId: string;
   creditNoteId: string | null;
+  replacementOrderId: string | null;
   requestedAt: string;
   approvedAt: string | null;
   receivedAt: string | null;
@@ -3524,18 +3745,36 @@ export interface RolloutModel {
 }
 
 export interface RuleConditionBody {
-  field: string | null;
+  field: RuleField;
   key: string | null;
-  operator: string | null;
+  operator: RuleOperator;
   values: string[] | null;
 }
 
 export interface RuleConditionResponse {
-  field: string;
+  field: RuleField;
   key: string | null;
-  operator: string;
+  operator: RuleOperator;
   values: string[];
 }
+
+export type RuleField =
+  | "Category"
+  | "Brand"
+  | "Vendor"
+  | "Price"
+  | "DiscountPercent"
+  | "Rating"
+  | "PublishedWithinDays"
+  | "Attribute";
+
+export type RuleOperator =
+  | "In"
+  | "NotIn"
+  | "GreaterThan"
+  | "AtLeast"
+  | "LessThan"
+  | "AtMost";
 
 export interface SaveItemBody {
   variantId: string;
@@ -3737,10 +3976,32 @@ export interface SetUserStatusBody {
   status: UserStatus;
 }
 
+export interface SettingsFieldSchema {
+  name: string;
+  kind: string;
+  isRequired: boolean;
+  isList: boolean;
+  minimum: number | null;
+  maximum: number | null;
+  maxLength: number | null;
+  pattern: string | null;
+  choices: string[] | null;
+}
+
+export interface SettingsSchemaResponse {
+  sections: SettingsSectionSchema[];
+}
+
 export interface SettingsSectionResponse {
   key: string;
   isPublic: boolean;
   value: unknown;
+}
+
+export interface SettingsSectionSchema {
+  key: string;
+  isPublic: boolean;
+  fields: SettingsFieldSchema[];
 }
 
 export interface SettlementCycleResponse {
@@ -3750,7 +4011,7 @@ export interface SettlementCycleResponse {
   vendorName: string | null;
   periodStart: string;
   periodEnd: string;
-  status: string;
+  status: SettlementCycleStatus;
   openingBalance: number;
   grossSales: number;
   taxableSales: number;
@@ -3768,6 +4029,11 @@ export interface SettlementCycleResponse {
   paidAt: string | null;
   payoutBatchId: string | null;
 }
+
+export type SettlementCycleStatus =
+  | "Open"
+  | "Closed"
+  | "Paid";
 
 export interface SettlementEntryResponse {
   id: string;
@@ -3817,6 +4083,13 @@ export interface SharedWishlistResponse {
   name: string;
   itemCount: number;
   items: WishlistItemResponse[];
+}
+
+export interface ShipmentLabelResponse {
+  shipmentId: string;
+  url: string;
+  expiresAt: string;
+  fileName: string;
 }
 
 export interface ShipmentLineResponse {
@@ -3936,7 +4209,7 @@ export interface SimulatePromotionBody {
   customerId: string | null;
   stateId: string | null;
   couponCode: string | null;
-  paymentMethod: string | null;
+  paymentMethod: null | QuotePaymentMethod;
   isFirstOrder: boolean;
   shippingAmount: number;
 }
@@ -3971,6 +4244,10 @@ export interface SpecificationPayload {
   value: string;
   group: string | null;
 }
+
+export type StackingMode =
+  | "Exclusive"
+  | "Stackable";
 
 export type StateKind =
   | "State"
@@ -4191,7 +4468,7 @@ export interface StopWordResponse {
 
 export interface StoreBannerResponse {
   id: string;
-  placement: string;
+  placement: BannerPlacement;
   image: null | ContentImageResponse;
   mobileImage: null | ContentImageResponse;
   message: string | null;
@@ -4247,7 +4524,7 @@ export interface StoreMenuResponse {
 export interface StorePageResponse {
   id: string;
   slug: string;
-  type: string;
+  type: PageType;
   title: string;
   summary: string | null;
   seo: SeoResponse;
@@ -4263,7 +4540,7 @@ export interface StoreQuoteBody {
   lines: QuoteLinePayload[];
   stateId: string | null;
   couponCode: string | null;
-  paymentMethod: string | null;
+  paymentMethod: null | QuotePaymentMethod;
   shippingAmount: number;
   walletRedeemRequested: number;
 }
@@ -4472,7 +4749,7 @@ export interface TransitionBody {
 }
 
 export interface TransitionPageBody {
-  status: string | null;
+  status: PageStatus;
   scheduledAt: string | null;
   note: string | null;
 }
@@ -4574,7 +4851,7 @@ export interface UpdatePreferenceRequest {
 
 export interface UpdatePriceListBody {
   name: string;
-  type: string;
+  type: PriceListType;
   priority: number;
   startsAt: string | null;
   endsAt: string | null;
@@ -4791,6 +5068,7 @@ export interface VendorResponse {
   gatewayAccountId: string | null;
   onboardedAt: string | null;
   createdAt: string;
+  nextStatuses: string[];
 }
 
 export interface VendorShippingChoiceBody {

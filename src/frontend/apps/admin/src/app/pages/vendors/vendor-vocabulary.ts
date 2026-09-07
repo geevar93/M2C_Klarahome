@@ -3,11 +3,10 @@ import { KycDocumentType, VendorBusinessType, VendorStatus } from '@klarahome/da
 /**
  * The seller vocabulary.
  *
- * Unusually for this application, most of these **are** typed in the contract:
- * `VendorStatus`, `VendorBusinessType`, `KycDocumentType` and `CommissionPlanType` are real enums
- * in the generated client, so the arrays below are checked by the compiler and a value renamed on
- * the server breaks the build rather than a request. That is what the Step 24/26/27 parking-lot
- * rows are asking for everywhere else, and it is worth naming where it already exists.
+ * Every value here **is** typed in the contract: `VendorStatus`, `VendorBusinessType`,
+ * `KycDocumentType` and `CommissionPlanType` are real enums in the generated client, so the arrays
+ * below are checked by the compiler and a value renamed on the server breaks the build rather than
+ * a request. Step 28B made that true of the rest of the back office too.
  *
  * The labels are what an operator reads, and several of them are deliberately not the enum's own
  * word: `Applied` is a state, "waiting for us" is a job.
@@ -49,45 +48,46 @@ export const KYC_DOCUMENT_TYPES: readonly Choice<KycDocumentType>[] = [
 ];
 
 /**
- * The onboarding edges, in the order they are normally taken.
+ * The onboarding edges: which endpoint takes a seller to which state, and what to call it.
  *
- * Unlike an order or a return, a seller's record carries **no `nextStatuses`** — the transitions
- * are separate endpoints rather than one transition table, so this list is a client-side statement
- * about which button to offer from which state. It is therefore a second copy of a rule the server
- * owns, and it is recorded in `PARKING_LOT.md` as such: **the API refuses an edge that is not
- * allowed, and the screen shows the refusal**, so the copy can be wrong without being unsafe.
+ * **It no longer says when an edge is available.** Onboarding is six named endpoints rather than
+ * one transition endpoint — "approve" and "suspend" are different acts with different permissions
+ * and different required reasons — but `VendorResponse.nextStatuses` now carries the server's own
+ * transition table, as an order, a return and a payout batch already did. The screen offers the
+ * edges whose `to` is in that list, so what remains here is naming and wording: the last
+ * client-side copy of a server rule in this application is gone (Step 28B, deliverable 5).
  */
 export interface VendorTransition {
   readonly key: 'submit' | 'approve' | 'activate' | 'return' | 'suspend' | 'offboard';
   readonly label: string;
-  /** The statuses this edge is normally taken from. */
-  readonly from: readonly VendorStatus[];
+  /** Where this edge takes the seller. Matched against the server's `nextStatuses`. */
+  readonly to: VendorStatus;
   readonly destructive?: boolean;
   /** Whether a reason is required rather than optional. */
   readonly requiresReason?: boolean;
 }
 
 export const VENDOR_TRANSITIONS: readonly VendorTransition[] = [
-  { key: 'submit', label: 'Send for review', from: ['Applied'] },
-  { key: 'approve', label: 'Approve', from: ['UnderReview'] },
-  { key: 'activate', label: 'Activate', from: ['Approved', 'Suspended'] },
+  { key: 'submit', label: 'Send for review', to: 'UnderReview' },
+  { key: 'approve', label: 'Approve', to: 'Approved' },
+  { key: 'activate', label: 'Activate', to: 'Active' },
   {
     key: 'return',
     label: 'Send back for more information',
-    from: ['UnderReview'],
+    to: 'Applied',
     requiresReason: true,
   },
   {
     key: 'suspend',
     label: 'Suspend',
-    from: ['Active'],
+    to: 'Suspended',
     destructive: true,
     requiresReason: true,
   },
   {
     key: 'offboard',
     label: 'Offboard',
-    from: ['Active', 'Suspended', 'Approved'],
+    to: 'Offboarded',
     destructive: true,
     requiresReason: true,
   },

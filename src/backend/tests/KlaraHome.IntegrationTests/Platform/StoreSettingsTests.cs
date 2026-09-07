@@ -6,6 +6,7 @@ using KlaraHome.Modules.Platform.Application.FeatureFlags;
 using KlaraHome.Modules.Platform.Application.Settings;
 using KlaraHome.Modules.Platform.Infrastructure.FeatureFlags;
 using KlaraHome.Modules.Platform.Infrastructure.Persistence;
+using KlaraHome.Modules.Platform.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -152,7 +153,9 @@ public sealed class StoreSettingsTests(KlaraHomeSchemaFixture fixture)
             TestContext.Current.CancellationToken);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(5, result.Value.Sections.Count);
+        Assert.Equal(
+            SettingsCatalog.Sections.Select(section => section.Key),
+            result.Value.Sections.Select(section => section.Key));
         Assert.All(result.Value.Sections, section => Assert.Equal(JsonValueKind.Object, section.Value.ValueKind));
     }
 

@@ -16,7 +16,11 @@ namespace KlaraHome.Modules.Content.Application.Banners;
 /// <param name="ActiveOnly">Only the ones switched on.</param>
 /// <param name="Cursor">Keyset cursor from a previous page.</param>
 /// <param name="Size">How many to return.</param>
-internal sealed record ListBannersQuery(string? Placement, bool? ActiveOnly, string? Cursor, int? Size)
+internal sealed record ListBannersQuery(
+    BannerPlacement? Placement,
+    bool? ActiveOnly,
+    string? Cursor,
+    int? Size)
     : IQuery<PagedResult<BannerResponse>>;
 
 /// <summary>Reads one banner.</summary>
@@ -39,7 +43,7 @@ internal sealed record GetBannerQuery(Guid Id) : IQuery<BannerResponse>;
 /// <param name="IsActive">Whether it is switched on.</param>
 internal sealed record CreateBannerCommand(
     string? Name,
-    string? Placement,
+    BannerPlacement Placement,
     Guid? MediaFileId,
     Guid? MobileMediaFileId,
     string? Message,
@@ -49,7 +53,7 @@ internal sealed record CreateBannerCommand(
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt,
-    string? Audience,
+    BannerAudience? Audience,
     bool IsActive) : ICommand<BannerResponse>;
 
 /// <summary>Rewrites a banner. Its placement is not editable.</summary>
@@ -78,7 +82,7 @@ internal sealed record UpdateBannerCommand(
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt,
-    string? Audience,
+    BannerAudience? Audience,
     bool IsActive) : ICommand<BannerResponse>;
 
 /// <summary>Switches a banner on or off without touching its schedule.</summary>
@@ -101,10 +105,8 @@ internal sealed class CreateBannerCommandValidator : AbstractValidator<CreateBan
         RuleFor(command => command.CtaLabel).MaximumLength(64);
         RuleFor(command => command.Priority).InclusiveBetween(0, 1_000);
 
-        RuleFor(command => command.Placement)
-            .NotEmpty()
-            .Must(placement => Enum.TryParse<BannerPlacement>(placement, ignoreCase: true, out _))
-            .WithMessage($"A placement must be one of: {string.Join(", ", Enum.GetNames<BannerPlacement>())}.");
+        // A real enum in the contract, so an unknown placement never reaches a validator.
+        RuleFor(command => command.Placement).IsInEnum();
     }
 }
 
@@ -138,7 +140,7 @@ internal sealed class ListBannersQueryHandler(ContentDbContext context, ContentR
         var size = Cursor.NormalizeSize(query.Size);
         var rows = context.Banners.AsNoTracking().AsQueryable();
 
-        if (Enum.TryParse<BannerPlacement>(query.Placement, ignoreCase: true, out var placement))
+        if (query.Placement is { } placement)
         {
             rows = rows.Where(banner => banner.Placement == placement);
         }
@@ -224,7 +226,7 @@ internal sealed class CreateBannerCommandHandler(ContentDbContext context, Conte
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var placement = Enum.Parse<BannerPlacement>(command.Placement!, ignoreCase: true);
+        var placement = command.Placement;
         var banner = Banner.Create(command.Name!.Trim(), placement);
 
         var applied = BannerImages.Apply(
@@ -395,7 +397,7 @@ internal static class BannerImages
         int priority,
         DateTimeOffset? startsAt,
         DateTimeOffset? endsAt,
-        string? audience,
+        BannerAudience? audience,
         bool isActive)
     {
         ArgumentNullException.ThrowIfNull(banner);
@@ -421,10 +423,9 @@ internal static class BannerImages
             return ContentErrors.BannerIncomplete(placement.ToString());
         }
 
-        var resolved = Enum.TryParse<BannerAudience>(audience, ignoreCase: true, out var parsed)
-                       && parsed != BannerAudience.None
-            ? parsed
-            : BannerAudience.Everyone;
+        // Omitted and "None" both mean everybody: an editor who has not chosen an audience has not
+        // narrowed one, and the enum's own zero value is the absence rather than a cohort.
+        var resolved = audience is { } chosen && chosen != BannerAudience.None ? chosen : BannerAudience.Everyone;
 
         banner.Describe(
             name!.Trim(),

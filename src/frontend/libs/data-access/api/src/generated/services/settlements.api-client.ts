@@ -44,6 +44,13 @@ export interface AdminGetVendorStatementQuery {
   to?: string;
 }
 
+/** Query string for `adminListCommissionInvoices`. */
+export interface AdminListCommissionInvoicesQuery {
+  vendorId?: string;
+  cursor?: string;
+  size?: number;
+}
+
 /** Query string for `adminListLedgerEntries`. */
 export interface AdminListLedgerEntriesQuery {
   vendorId?: string;
@@ -121,6 +128,14 @@ export class SettlementsApiClient {
   }
 
   /**
+   * A short-lived link to the invoice PDF. Minting the link is the grant.
+   * `GET /api/v1/admin/settlements/commission-invoices/{id}/download`
+   */
+  adminDownloadCommissionInvoice(id: string, options?: ApiRequestOptions): Observable<Models.CommissionInvoiceDownloadResponse> {
+    return this.http.request<Models.CommissionInvoiceDownloadResponse>('GET', `${this.baseUrl}/api/v1/admin/settlements/commission-invoices/${encodeURIComponent(String(id))}/download`, undefined, undefined, options);
+  }
+
+  /**
    * The same extract as a spreadsheet, for the GST and income-tax filings.
    * `GET /api/v1/admin/reports/tcs-tds/export`
    */
@@ -134,6 +149,14 @@ export class SettlementsApiClient {
    */
   adminExportVendorStatement(vendorId: string, query?: AdminExportVendorStatementQuery, options?: ApiRequestOptions): Observable<void> {
     return this.http.request<void>('GET', `${this.baseUrl}/api/v1/admin/vendors/${encodeURIComponent(String(vendorId))}/ledger/export`, undefined, query, options);
+  }
+
+  /**
+   * One of the platform's own invoices, with its tax split by head.
+   * `GET /api/v1/admin/settlements/commission-invoices/{id}`
+   */
+  adminGetCommissionInvoice(id: string, options?: ApiRequestOptions): Observable<Models.CommissionInvoiceResponse> {
+    return this.http.request<Models.CommissionInvoiceResponse>('GET', `${this.baseUrl}/api/v1/admin/settlements/commission-invoices/${encodeURIComponent(String(id))}`, undefined, undefined, options);
   }
 
   /**
@@ -182,6 +205,14 @@ export class SettlementsApiClient {
    */
   adminGetVendorStatement(vendorId: string, query?: AdminGetVendorStatementQuery, options?: ApiRequestOptions): Observable<Models.LedgerStatementResponse> {
     return this.http.request<Models.LedgerStatementResponse>('GET', `${this.baseUrl}/api/v1/admin/vendors/${encodeURIComponent(String(vendorId))}/ledger`, undefined, query, options);
+  }
+
+  /**
+   * The invoices the platform raised on sellers for commission and fees, newest first. A seller sees only their own.
+   * `GET /api/v1/admin/settlements/commission-invoices`
+   */
+  adminListCommissionInvoices(query?: AdminListCommissionInvoicesQuery, options?: ApiRequestOptions): Observable<Models.PagedResultOfCommissionInvoiceResponse> {
+    return this.http.request<Models.PagedResultOfCommissionInvoiceResponse>('GET', `${this.baseUrl}/api/v1/admin/settlements/commission-invoices`, undefined, query, options);
   }
 
   /**

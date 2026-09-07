@@ -29,7 +29,7 @@ export interface AdminListManifestsQuery {
 
 /** Query string for `adminListNdr`. */
 export interface AdminListNdrQuery {
-  action?: string;
+  action?: Models.NdrAction;
   vendorId?: string;
   reasonCode?: string;
   cursor?: string;
@@ -64,6 +64,7 @@ export interface AdminListShippingZonesQuery {
 /** Query string for `adminShipmentPickList`. */
 export interface AdminShipmentPickListQuery {
   vendorId?: string;
+  warehouseId?: string;
   size?: number;
 }
 
@@ -170,11 +171,11 @@ export class ShippingApiClient {
   }
 
   /**
-   * The label to print: the courier's own where there is one, ours where there is not.
+   * A short-lived link to the label to print: the courier's own where there is one, ours where there is not. Minting the link is the grant.
    * `GET /api/v1/admin/shipments/{id}/label`
    */
-  adminGetShipmentLabel(id: string, options?: ApiRequestOptions): Observable<void> {
-    return this.http.request<void>('GET', `${this.baseUrl}/api/v1/admin/shipments/${encodeURIComponent(String(id))}/label`, undefined, undefined, options);
+  adminGetShipmentLabel(id: string, options?: ApiRequestOptions): Observable<Models.ShipmentLabelResponse> {
+    return this.http.request<Models.ShipmentLabelResponse>('GET', `${this.baseUrl}/api/v1/admin/shipments/${encodeURIComponent(String(id))}/label`, undefined, undefined, options);
   }
 
   /**
@@ -274,7 +275,7 @@ export class ShippingApiClient {
   }
 
   /**
-   * Everything waiting to be packed, one row per item, soonest deadline first.
+   * Everything waiting to be packed, one row per item, soonest deadline first. Each row names the stock location it is on, and warehouseId narrows the list to one.
    * `GET /api/v1/admin/shipments/pick-list`
    */
   adminShipmentPickList(query?: AdminShipmentPickListQuery, options?: ApiRequestOptions): Observable<Models.PickListLineResponse[]> {

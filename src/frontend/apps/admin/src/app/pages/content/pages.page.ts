@@ -1,6 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { ContentAdminService, PageFilters, PageSummaryResponse } from '@klarahome/data-access-admin';
+import {
+  ContentAdminService,
+  PageFilters,
+  PageStatus,
+  PageSummaryResponse,
+  PageType,
+} from '@klarahome/data-access-admin';
 import {
   CellTemplate,
   DataTable,
@@ -193,7 +199,7 @@ export class ContentPagesPage {
   protected readonly creating = signal(false);
   protected readonly saving = signal(false);
   protected readonly createError = signal<string | null>(null);
-  protected readonly type = signal('Landing');
+  protected readonly type = signal<PageType>('Landing');
 
   private readonly submitted = signal(false);
 
@@ -266,8 +272,8 @@ export class ContentPagesPage {
     this.values.set(values);
     const filters: PageFilters = {
       search: values['q'],
-      status: values['status'],
-      type: values['type'],
+      status: (values['status'] as PageStatus) || undefined,
+      type: (values['type'] as PageType) || undefined,
     };
     this.list.setFilters(filters);
   }

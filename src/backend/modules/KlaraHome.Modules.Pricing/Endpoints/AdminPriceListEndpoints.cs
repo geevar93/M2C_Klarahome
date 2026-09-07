@@ -5,6 +5,7 @@ using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
 using KlaraHome.Modules.Pricing.Application.PriceLists;
+using KlaraHome.Modules.Pricing.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -20,7 +21,7 @@ namespace KlaraHome.Modules.Pricing.Endpoints;
 /// <param name="Size">Page size.</param>
 internal sealed record PriceListFilter(
     Guid? VendorId,
-    string? Type,
+    PriceListType? Type,
     bool? ActiveOnly,
     string? Search,
     string? Cursor,
@@ -38,7 +39,7 @@ internal sealed record CreatePriceListBody(
     Guid? VendorId,
     string Code,
     string Name,
-    string Type,
+    PriceListType Type,
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt);
@@ -51,7 +52,7 @@ internal sealed record CreatePriceListBody(
 /// <param name="EndsAt">When it stops.</param>
 internal sealed record UpdatePriceListBody(
     string Name,
-    string Type,
+    PriceListType Type,
     int Priority,
     DateTimeOffset? StartsAt,
     DateTimeOffset? EndsAt);

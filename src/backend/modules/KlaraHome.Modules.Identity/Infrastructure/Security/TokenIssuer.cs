@@ -91,6 +91,11 @@ internal sealed partial class SigningKeyRing
     private static partial void EphemeralSigningKey(ILogger logger);
 }
 
+/// <summary>Who is acting as somebody else, and until when.</summary>
+/// <param name="OperatorId">The support user doing the acting.</param>
+/// <param name="ExpiresAt">When the impersonation stops being honoured.</param>
+internal sealed record ImpersonationStamp(Guid OperatorId, DateTimeOffset ExpiresAt);
+
 /// <summary>What a completed sign-in hands back.</summary>
 /// <param name="AccessToken">The signed JWT. Held in memory by the client, never in storage.</param>
 /// <param name="ExpiresAt">When the access token stops being accepted.</param>
@@ -142,18 +147,27 @@ internal sealed class TokenIssuer(
     /// <param name="sessionId">The session the tokens belong to.</param>
     /// <param name="permissions">The permissions the user holds right now.</param>
     /// <param name="vendorId">The vendor the user acts for, or null.</param>
+    /// <param name="impersonation">
+    /// Who is acting as <paramref name="user"/> and until when, for a support session
+    /// (docs/07-security-compliance.md §2). Null for an ordinary sign-in.
+    /// </param>
     public IssuedTokens Issue(
         User user,
         Guid sessionId,
         IReadOnlyCollection<string> permissions,
-        Guid? vendorId)
+        Guid? vendorId,
+        ImpersonationStamp? impersonation = null)
     {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(permissions);
 
         var tokens = options.Value.Tokens;
         var now = clock.UtcNow;
-        var expiresAt = now.AddMinutes(tokens.AccessTokenMinutes);
+
+        // An impersonated token lives exactly as long as the window it was granted for, because
+        // there is no refresh token behind it to renew it with. Making it expire earlier would
+        // strand the operator mid-investigation with nothing to exchange.
+        var expiresAt = impersonation?.ExpiresAt ?? now.AddMinutes(tokens.AccessTokenMinutes);
 
         var claims = new Dictionary<string, object>(StringComparer.Ordinal)
         {
@@ -168,6 +182,11 @@ internal sealed class TokenIssuer(
         if (vendorId is not null)
         {
             claims[KlaraHomeClaims.VendorId] = vendorId.Value.ToString();
+        }
+
+        if (impersonation is not null)
+        {
+            claims[KlaraHomeClaims.ImpersonatorId] = impersonation.OperatorId.ToString();
         }
 
         var descriptor = new SecurityTokenDescriptor

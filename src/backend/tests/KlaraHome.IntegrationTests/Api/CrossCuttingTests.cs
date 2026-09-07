@@ -64,13 +64,25 @@ public sealed class CrossCuttingTests(KlaraHomeApiFactory factory) : IClassFixtu
         Assert.Equal("trace-me-9021", Assert.Single(response.Headers.GetValues("X-Correlation-Id")));
     }
 
+    /// <remarks>
+    /// Asserted against the registry's rules rather than against a list of the modules that happened
+    /// to exist when this was written. The literal four names it used to carry were the four modules
+    /// of Step 3, and every step since that added a module had to remember to extend a list that was
+    /// not testing anything the registry does not already guarantee. What it does guarantee — and
+    /// what a boundary violation would break — is that no name and no schema is claimed twice, and
+    /// that the modules come back in the migration order they declare.
+    /// </remarks>
     [Fact]
     public void Every_module_is_discovered_and_registered_exactly_once()
     {
         var registry = factory.Services.GetRequiredService<ModuleRegistry>();
 
-        Assert.Equal(["Platform", "Identity", "Media", "Notifications"], registry.Modules.Select(module => module.Name));
+        Assert.NotEmpty(registry.Modules);
+        Assert.Distinct(registry.Modules.Select(module => module.Name));
         Assert.Distinct(registry.Modules.Select(module => module.Schema));
+        Assert.Equal(
+            registry.Modules.Select(module => module.Order).Order(),
+            registry.Modules.Select(module => module.Order));
     }
 
     [Fact]

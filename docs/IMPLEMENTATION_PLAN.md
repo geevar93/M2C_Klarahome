@@ -1,32 +1,34 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (next: Step 28B)
-> **Last updated:** 2026-09-07 (**Step 28A closed: it compiles, it migrates, it boots, and the MVP
-> journey runs end to end.** Twenty steps of independently-compiled modules were assembled for the
-> first time and the system did not start — which is the outcome §3.4 predicted and budgeted for.
-> Eighteen repairs later it does. The pattern in almost all of them is **a second copy of something
-> the system already declares, kept by hand, drifting**: three Dockerfiles listed four of eighteen
-> module projects, so no image had built since Step 8; ten worker loops claimed rows with
-> `SELECT *`, which omits the `xmin` their concurrency token is mapped to, while the outbox
-> dispatcher written before them says `SELECT *, xmin` and explains why; a reconciliation query
-> aliased its columns in PascalCase against a model that names them in snake_case; `CatalogModule`
-> declared four collaborators in its handlers and none in its registrations; `AddKlaraHomeStorage`
-> carried a comment calling itself idempotent that the second `AddCheck("storage")` disproved by
-> killing the worker; and `SeoService` substituted `{title}` where the settings contract says
-> `{title}` **and** `{store}`. Each is now either impossible to repeat (the Dockerfiles enumerate
-> nothing) or carries the reason beside it. **26 migrations apply to an empty database and re-run as
-> a no-op; eight containers up with every health check green; the walk completes by hand** — TOTP
-> sign-in, a seller onboarded through its own refusals to Active, a product published, COD order
-> `KH-2609-000001` at ₹1798 including ₹85.62 of GST back-calculated from an inclusive price, the
-> order in admin offering the transitions the server allows, and stock 25 → 23 with the ledger and
-> the cache agreeing. The storefront server-renders real data with its full SEO surface; the admin
-> boots, routes and guards. **The module-boundary gate is green for the first time since Step 21.**
-> CI floors restored to 941 / 14 / 180. **Coverage is 15.84% line against a 70% gate, and 510 open
-> `TEST_DEBT.md` rows are Step 29's worklist — that is the whole remaining cost of the sprint's
-> speed-for-rework trade.** 9 newly parked gaps, the sharpest being no worker health check, neither
-> Angular app in the dev stack, and impersonation, a supplier screen and a rate-card editor now past
-> the last build step with no owner)
+> **Status:** APPROVED — in execution (next: Step 29)
+> **Last updated:** 2026-09-07 (**Step 28B closed: the parked features are built, and the ledger
+> that held them now has an owner on every row.** Twenty-three of twenty-four deliverables landed —
+> impersonation, parked since Step 7 and a named deliverable of Step 26, is time-boxed, carries the
+> reason an operator typed, is audited at both ends and does not scroll off the screen; the
+> platform's own commission invoice, Razorpay Route linked accounts and the `transfer.*` webhooks
+> close what Step 18 named; a supplier screen, a rate-card editor, an entity picker, a real CMS
+> repeater and a settings form drawn from a served schema close the back office's; banners, reviews
+> and questions close the storefront's. **Two were resolved by deletion rather than construction,
+> and both times because the card's premise was wrong** — the duplicate `/admin/reference/*`
+> endpoints were refused by an architecture test that turned out to be right (the generated client
+> is grouped by tag, not by surface, so the back office could always call the store's two queries),
+> and `CartsOptions.RequireSignInToCheckout` was never a switch at all. **The compiler earned its
+> keep**: typing nineteen hand-copied client vocabularies against the generated enums found three
+> values the server would have refused, wrong for two steps in screens that had been reviewed. Two
+> further fixes were not asked for and were made because they were wrong rather than missing — the
+> newly declared query parameters would have put `?Q=chair&MinPrice=2000` on the storefront's
+> most-shared URL against §1 of the API specification, and two integration tests had been asserting
+> Step 3's four modules and five settings sections against today's eighteen and thirteen for the
+> whole sprint. **`build`, `format`, `lint`, `codegen` and `frontend` all pass and 1148 backend
+> tests pass with no failures. Coverage is 46.27% line against the 70% gate** — it tripled only
+> because the integration suite now runs, not because more was written, and it is Step 29's whole
+> remaining worklist along with 540 open `TEST_DEBT.md` rows. **The Parking Lot was swept a second
+> time**: 443 rows, every open one owned, a `Backlog (post-MVP)` class for the 35 that no remaining
+> step schedules and none should be invented for, and exactly one row deliberately left unowned and
+> marked `⛔ NEEDS A STEP` — Inventory still has no consumer for `Orders.SubOrderCancelled`, so
+> units committed out of stock by an order cancelled after confirmation are never put back. It is
+> the only correctness defect left on the list, and it needs a decision rather than a schedule)
 
 ---
 
@@ -175,7 +177,7 @@ Open the **Detail** file for the step you are working on. Do not open the others
 | 27 | Admin — catalog, inventory, orders, fulfilment, returns | G | ✅ DONE | 2026-09-06 | [card](steps/step-27-admin-catalog-inventory-orders-fulfilment-returns.md) | The daily-operations screens: nineteen of them, landed into Step 26's declaration by turning eighteen `step:` markers into `load:`. Every state-changing control **reads the API's own transition table** — `nextStatuses` on a sub-order and on a return — rather than holding a second copy of it; no inventory screen sets a quantity, because the ledger is append-only and every write is a movement with a reason; packing is pack → weigh → book → dispatch in the only order that prices a parcel correctly, with the manual waybill behind a booking that fails; receiving and QC count accepted and rejected separately, per line. Six new services in `data-access-admin`, plus `DocumentPrintService` for the two endpoints that answer bytes rather than JSON. 114.5 kB gzipped against 300 kB; lint and tests green across 23 and 21 projects. **Suppliers have no screen and a replacement return cannot create its replacement order (both parked); nothing is proved against an API, a database, a courier or a browser: 35 `TEST_DEBT.md` rows, both halves of the headline criterion included** |
 | 28 | Admin — promotions, CMS, reports + Vendor portal | G | ✅ DONE | 2026-09-07 | [card](steps/step-28-admin-promotions-cms-reports-vendor-portal.md) | **The declaration is empty: 52 destinations, 52 real screens, no placeholder left.** Thirty-one screens over eight new services — the promotion builder whose simulator runs the *checkout* quote engine so a rule is tried rather than guessed at; a page composer whose every form is a schema the server sent, so there is no `switch (block.type)` in it and a new block type needs no client change; report screens built from the API's own catalogue; payout runs whose maker–checker the screen only offers and never enforces, because three layers of the server already do; a ledger with no control that sets a balance, because the balance is a sum; and a vendor portal that is the same four panels as the platform's seller record with `canVerify` taken away. TCS and TDS are shown apart everywhere, on their two different bases. 131.9 kB gzipped against 300 kB; 23 projects lint and test green. **One Step 26 row closed (a seller's own name in the top bar); nine gaps parked, the sharpest being a read-only rate card and a report endpoint that declares two response bodies. Nothing proved against an API, a database or a browser: 33 `TEST_DEBT.md` rows, both halves of the headline criterion included** |
 | 28A | **Build repair & boot verification** | H | ✅ DONE | 2026-09-07 | [card](steps/step-28A-build-repair-and-boot-verification.md) | **The build sprint is over and the thing runs.** Assembled for the first time it did not start, and eighteen repairs later it does: eight analyzer errors in Payments; three Dockerfiles whose hand-kept restore list had fallen fourteen modules behind, so **no image had built since Step 8**; one broken comment line that made compose refuse `.env.example` outright; four Catalog collaborators never registered, which failed DI validation; a storage registration that called itself idempotent and was not, which killed the worker on a duplicate health check; **ten sweepers that claimed rows with `SELECT *` and so never returned the `xmin` their concurrency token is mapped to**; a reconciliation query aliased in PascalCase against a snake-case model; a directory that filtered *after* projecting into a record, which EF cannot translate; and a `SeoService` that substituted `{title}` but not `{store}`. **26 migrations apply to an empty database and re-run as a no-op; eight containers up with every health check green; the MVP walk completes by hand** — admin sign-in with TOTP, seller onboarded to Active, product published, COD order `KH-2609-000001` placed at ₹1798 incl. ₹85.62 GST, seen in admin, stock 25 → 23. Both apps build and the storefront server-renders real data. **The module-boundary gate, red across seven step boundaries, is green.** CI floors restored to 941/14/180; coverage 15.84% line is the number Step 29 must return to 70%. 9 parked rows, 11 `TEST_DEBT.md` rows |
-| 28B | **Deferred functional gaps from the build sprint** | H | ⬜ NOT STARTED | | [card](steps/step-28B-deferred-functional-gaps.md) | **The parked features, given one owner.** Twenty-four gaps the sprint recorded and had no step to build in — every remaining step is a hardening step, so a parked *feature* had nowhere to land and several were declined by omission twice. Impersonation (parked since Step 7), guest checkout, a supplier screen, a shipping rate-card editor, an admin entity picker, reference data on the admin surface, `IVendorPayoutAccounts`, the platform's own commission invoice, banners, reviews and questions, and nineteen client-side vocabularies to delete. **Three block a real first-run path.** Sits before Step 29 so hardening does not have to be done twice |
+| 28B | **Deferred functional gaps from the build sprint** | H | ✅ DONE | 2026-09-07 | [card](steps/step-28B-deferred-functional-gaps.md) | **Twenty-three of twenty-four built; the twenty-fourth split and half of it re-parked by the User.** Impersonation (parked since Step 7, a named deliverable of Step 26) is time-boxed, reason-carrying, audited at both ends and stated on screen with a countdown; the platform's own commission invoice, Razorpay Route linked accounts and the `transfer.*` webhooks close the money gaps Step 18 named; a supplier screen, a rate-card editor, an entity picker, a schema-driven CMS repeater and a settings form drawn from `GET /admin/settings/schema` close the back-office ones; banners, reviews and questions close the storefront's. **Two resolved by deletion rather than construction, both because the card's premise was wrong**: the duplicate `/admin/reference/*` endpoints were refused by `AdminSurfaceTests` — the generated client is grouped by tag, not by surface, so the back office could always call the store's — and `RequireSignInToCheckout` was never a switch. **Typing nineteen client vocabularies against the generated enums found three values the server would have refused**, wrong for two steps in reviewed screens. Two unasked fixes: query parameters were declared PascalCase against §1's `camelCase` (one transformer, 122 call sites re-keyed), and two integration tests had asserted Step 3's four modules and five settings sections against today's eighteen and thirteen since the sprint began. `build`, `format`, `lint`, `codegen`, `frontend` green; 1148 backend tests pass; coverage 46.27% is Step 29's. **The Parking Lot now carries an owner on every open row** — 443 rows, a `Backlog (post-MVP)` class for the 35 that no remaining step schedules, and exactly one `⛔ NEEDS A STEP`: Inventory still never restocks a sub-order cancelled after confirmation. 26 `TEST_DEBT.md` rows |
 | 29 | Test hardening & performance baseline | H | ⬜ NOT STARTED | | [card](steps/step-29-test-hardening-and-performance-baseline.md) | **Pays down every row of `TEST_DEBT.md`**, then the NFR/load/security/a11y work |
 | 30 | **Design system, theming & visual identity** | H | ⬜ NOT STARTED | | [card](steps/step-30-design-system-theming-and-visual-identity.md) | Aesthetics unlocked here |
 | 31 | Observability, backups & operational runbook | H | ⬜ NOT STARTED | | [card](steps/step-31-observability-backups-and-operational-runbook.md) | |

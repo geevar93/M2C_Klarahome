@@ -15,6 +15,7 @@ export * from './lib/store-content.service';
  * Types only — no client, no transport.
  */
 export type {
+  BannerPlacement,
   CategoryTileResponse,
   ContentImageResponse,
   PincodeResponse,

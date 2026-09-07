@@ -28,6 +28,7 @@ export interface AdminListOrdersQuery {
 export interface AdminListSubOrdersQuery {
   status?: string;
   vendorId?: string;
+  warehouseId?: string;
   overdueOnly?: boolean;
   cursor?: string;
   size?: number;
@@ -103,7 +104,7 @@ export class OrdersApiClient {
   }
 
   /**
-   * The fulfilment worklist. A vendor caller sees only their own.
+   * The fulfilment worklist. A vendor caller sees only their own, and warehouseId narrows it to the parcels a given location is packing.
    * `GET /api/v1/admin/sub-orders`
    */
   adminListSubOrders(query?: AdminListSubOrdersQuery, options?: ApiRequestOptions): Observable<Models.PagedResultOfSubOrderResponse> {

@@ -4,6 +4,7 @@ import {
   CreateRoleBody,
   CreateUserBody,
   IdentityApiClient,
+  ImpersonationResponse,
   PermissionGroupResponse,
   RoleResponse,
   UpdateRoleBody,
@@ -50,15 +51,28 @@ export class IdentityAdminService {
       (current, cursor, size) =>
         this.api
           .adminUsersGet({
-            Search: current.search,
-            UserType: current.userType,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            search: current.search,
+            userType: current.userType,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<AdminUserResponse> => result)),
       filters,
       pageSize,
     );
+  }
+
+  /**
+   * A short list of accounts matching a search, for a picker.
+   *
+   * `userType` narrows it, which is what the seller-staff picker needs: adding a customer as a
+   * seller's staff member is a mistake the API refuses and the picker should not offer
+   * (Step 28B, deliverable 15).
+   */
+  searchUsers(term: string, userType?: UserType, take = 10): Observable<AdminUserResponse[]> {
+    return this.api
+      .adminUsersGet({ search: term, userType: userType, size: take })
+      .pipe(map((page) => page.items));
   }
 
   user(id: string): Observable<AdminUserResponse> {
@@ -102,5 +116,28 @@ export class IdentityAdminService {
   /** The whole permission catalogue, grouped as the role editor renders it. */
   permissions(): Observable<PermissionGroupResponse[]> {
     return this.api.adminPermissionsGet();
+  }
+
+  // ---- Support impersonation (Step 28B, deliverable 1) -------------------------------------------
+
+  /**
+   * Starts acting as a customer.
+   *
+   * The reason is not optional and not decoration: it goes on the session and into the audit trail
+   * at both ends, and the API refuses one too short to read. It is the whole control — the thing
+   * that makes an impersonation something an operator can be asked about afterwards.
+   */
+  impersonate(userId: string, reason: string): Observable<ImpersonationResponse> {
+    return this.api.adminUserImpersonate(userId, { reason }, { silentErrors: true });
+  }
+
+  /**
+   * Ends one.
+   *
+   * Called with the operator's own token, which is the only one that can: the customer whose
+   * session this is holds no permission that could end it.
+   */
+  endImpersonation(sessionId: string): Observable<void> {
+    return this.api.adminImpersonationEnd(sessionId);
   }
 }

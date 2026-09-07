@@ -192,6 +192,14 @@ export const DESTINATIONS: readonly AdminDestination[] = [
     permissions: ['inventory.warehouse.manage'],
     load: () => import('../pages/inventory/warehouses.page').then((m) => m.WarehousesPage),
   },
+  {
+    path: 'inventory/suppliers',
+    label: 'Suppliers',
+    section: 'Inventory',
+    icon: 'truck',
+    permissions: ['inventory.purchasing.manage'],
+    load: () => import('../pages/inventory/suppliers.page').then((m) => m.SuppliersPage),
+  },
 
   // ---- Orders ---------------------------------------------------------------------------------
   {

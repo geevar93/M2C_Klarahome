@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Payments.Domain;
 using KlaraHome.Modules.Payments.Infrastructure.Persistence;
 using KlaraHome.Modules.Payments.Infrastructure.Processing;
@@ -106,19 +107,16 @@ internal sealed partial class GatewayEventWorker : BackgroundService
         // The query filters are bypassed on purpose. This loop has no tenant and no caller — it is
         // the platform draining its own inbox — and a filtered query would drain only whichever
         // tenant the ambient context happened to name.
-        var due = await context.GatewayEvents
-            // xmin is named explicitly because it is a system column: SELECT * omits it, and the model maps
-            // it as this entity's concurrency token.
-            .FromSql(
+        var due = await context
+            .Claim<GatewayEvent>(
+                "payments.gateway_events",
                 $"""
-                 SELECT *, xmin FROM payments.gateway_events
-                 WHERE signature_valid
+                 signature_valid
                    AND (status = 'Pending'
                         OR (status = 'Failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= {now}))
-                 ORDER BY received_at
-                 LIMIT {options.EventBatchSize}
-                 FOR UPDATE SKIP LOCKED
-                 """)
+                 """,
+                "received_at",
+                options.EventBatchSize)
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Select(entry => entry.Id)

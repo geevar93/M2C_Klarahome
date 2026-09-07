@@ -1,3 +1,4 @@
+using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Modules.Carts.Domain;
 using KlaraHome.Modules.Carts.Infrastructure.Events;
 using KlaraHome.Modules.Carts.Infrastructure.Persistence;
@@ -122,19 +123,16 @@ internal sealed partial class AbandonedCartSweeper : BackgroundService
             // The query filters are bypassed on purpose. This loop has no tenant and no caller — it
             // is the platform tidying up after itself — and a filtered query would sweep only
             // whichever tenant the ambient context happened to name.
-            var stale = await context.Carts
-                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
-                // maps it as this entity's concurrency token.
-                .FromSql(
+            var stale = await context
+                .Claim<Cart>(
+                    "carts.carts",
                     $"""
-                     SELECT *, xmin FROM carts.carts
-                     WHERE (status = 'Active' AND last_activity_at <= {abandonBefore})
-                        OR (status = 'Abandoned' AND abandoned_at <= {retireBefore})
-                        OR (status = 'Active' AND expires_at <= {now})
-                     ORDER BY last_activity_at
-                     LIMIT {options.SweepBatchSize}
-                     FOR UPDATE SKIP LOCKED
-                     """)
+                     (status = 'Active' AND last_activity_at <= {abandonBefore})
+                          OR (status = 'Abandoned' AND abandoned_at <= {retireBefore})
+                          OR (status = 'Active' AND expires_at <= {now})
+                     """,
+                    "last_activity_at",
+                    options.SweepBatchSize)
                 .IgnoreQueryFilters()
                 .Include(cart => cart.Lines)
                 .ToListAsync(cancellationToken)
@@ -165,18 +163,15 @@ internal sealed partial class AbandonedCartSweeper : BackgroundService
                 }
             }
 
-            var sessions = await context.CheckoutSessions
-                // xmin is named explicitly because it is a system column: SELECT * omits it, and the model
-                // maps it as this entity's concurrency token.
-                .FromSql(
+            var sessions = await context
+                .Claim<CheckoutSession>(
+                    "carts.checkout_sessions",
                     $"""
-                     SELECT *, xmin FROM carts.checkout_sessions
-                     WHERE status IN ('Draft', 'AddressSet', 'ShippingSet', 'PaymentSet')
+                     status IN ('Draft', 'AddressSet', 'ShippingSet', 'PaymentSet')
                        AND expires_at <= {now}
-                     ORDER BY expires_at
-                     LIMIT {options.SweepBatchSize}
-                     FOR UPDATE SKIP LOCKED
-                     """)
+                     """,
+                    "expires_at",
+                    options.SweepBatchSize)
                 .IgnoreQueryFilters()
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);

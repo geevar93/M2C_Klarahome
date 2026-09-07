@@ -9,7 +9,9 @@ using KlaraHome.Modules.Shipping.Application.Ndr;
 using KlaraHome.Modules.Shipping.Application.Operations;
 using KlaraHome.Modules.Shipping.Application.Rates;
 using KlaraHome.Modules.Shipping.Application.Shipments;
+using KlaraHome.Modules.Shipping.Domain;
 using KlaraHome.Modules.Shipping.Infrastructure.Persistence;
+using KlaraHome.SharedKernel.Time;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -101,7 +103,7 @@ internal sealed record RecordTrackingBody(string Status, string? Remark, DateTim
 /// <param name="Action">What to do.</param>
 /// <param name="Remark">What the operator wants recorded.</param>
 /// <param name="RescheduledFor">The date the shopper asked for.</param>
-internal sealed record NdrActionBody(string Action, string? Remark, DateTimeOffset? RescheduledFor);
+internal sealed record NdrActionBody(NdrAction Action, string? Remark, DateTimeOffset? RescheduledFor);
 
 /// <summary>The body of a handover.</summary>
 /// <param name="ShipmentIds">The parcels going out, or empty for everything ready.</param>
@@ -145,6 +147,12 @@ internal sealed record CourierRemittanceBody(
 /// </remarks>
 internal static class AdminShippingEndpoints
 {
+    /// <summary>
+    /// How long a label link stays usable. Long enough to click through and print, short enough
+    /// that a URL left in a chat window is not a customer's address.
+    /// </summary>
+    private static readonly TimeSpan LabelLinkLifetime = TimeSpan.FromMinutes(10);
+
     /// <summary>Maps the shipping surface beneath <c>/admin</c>.</summary>
     /// <param name="admin">The <c>/admin</c> group.</param>
     public static IEndpointRouteBuilder MapAdminShippingEndpoints(this IEndpointRouteBuilder admin)
@@ -431,18 +439,20 @@ internal static class AdminShippingEndpoints
 
         group.MapGet("/pick-list", async (
                 Guid? vendorId,
+                Guid? warehouseId,
                 int? size,
                 IDispatcher dispatcher,
                 HttpContext context) =>
             {
                 var result = await dispatcher
-                    .QueryAsync(new GetPickListQuery(vendorId, size), context.RequestAborted)
+                    .QueryAsync(new GetPickListQuery(vendorId, warehouseId, size), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
             })
             .WithName("adminShipmentPickList")
-            .WithSummary("Everything waiting to be packed, one row per item, soonest deadline first.")
+            .WithSummary("Everything waiting to be packed, one row per item, soonest deadline first. Each "
+                         + "row names the stock location it is on, and warehouseId narrows the list to one.")
             .RequirePermission(ShippingPermissions.ShipmentManage)
             .Produces<IReadOnlyList<PickListLineResponse>>();
 
@@ -523,10 +533,10 @@ internal static class AdminShippingEndpoints
         group.MapGet("/{id:guid}/label", async (Guid id, HttpContext context) =>
                 await LabelAsync(id, context).ConfigureAwait(false))
             .WithName("adminGetShipmentLabel")
-            .WithSummary("The label to print: the courier's own where there is one, ours where there is not.")
+            .WithSummary("A short-lived link to the label to print: the courier's own where there is one, "
+                         + "ours where there is not. Minting the link is the grant.")
             .RequirePermission(ShippingPermissions.ShipmentManage)
-            .Produces(StatusCodes.Status302Found)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces<ShipmentLabelResponse>();
 
         group.MapPost("/{id:guid}/schedule-pickup", async (
                 Guid id,
@@ -666,7 +676,7 @@ internal static class AdminShippingEndpoints
         var group = admin.MapGroup("/ndr").WithTags("Shipping");
 
         group.MapGet("/", async (
-                string? action,
+                NdrAction? action,
                 Guid? vendorId,
                 string? reasonCode,
                 string? cursor,
@@ -757,6 +767,13 @@ internal static class AdminShippingEndpoints
     /// through the API would put a customer's address into the application's own logs and caches.
     /// </para>
     /// <para>
+    /// The link is returned <em>in the body</em>, not as a 302. It used to redirect, and a redirect
+    /// is only usable by something that already holds a bearer token — which a plain link and a
+    /// <c>window.open</c> do not, because the access token lives in memory only. The back office
+    /// had to fetch the label as a blob through a bypass of its own generated client to print it.
+    /// A body the client can read the URL out of removes that (Step 28B, deliverable 7).
+    /// </para>
+    /// <para>
     /// The courier's own label wins where there is one, because ours carries no barcode. The
     /// endpoint produces one on demand where neither exists, which is what makes it retryable after
     /// a booking whose label fetch failed.
@@ -791,19 +808,18 @@ internal static class AdminShippingEndpoints
             await data.SaveChangesAsync(context.RequestAborted).ConfigureAwait(false);
         }
 
+        var fileName = $"label-{shipment.Awb ?? shipment.SubOrderNumber}.pdf";
+        var expiresAt = services.GetRequiredService<IClock>().UtcNow.Add(LabelLinkLifetime);
+
         if (shipment.LabelObjectKey is { Length: > 0 } key)
         {
             var storage = services.GetRequiredService<IFileStorage>();
 
-            var link = storage.GetSignedUrl(
-                key,
-                StorageVisibility.Private,
-                TimeSpan.FromMinutes(10),
-                $"label-{shipment.Awb ?? shipment.SubOrderNumber}.pdf");
+            var link = storage.GetSignedUrl(key, StorageVisibility.Private, LabelLinkLifetime, fileName);
 
             if (link is { Length: > 0 })
             {
-                return Results.Redirect(link);
+                return Results.Ok(new ShipmentLabelResponse(shipment.Id, link, expiresAt, fileName));
             }
         }
 
@@ -815,7 +831,7 @@ internal static class AdminShippingEndpoints
 
             if (link is { Length: > 0 })
             {
-                return Results.Redirect(link);
+                return Results.Ok(new ShipmentLabelResponse(shipment.Id, link, expiresAt, fileName));
             }
         }
 

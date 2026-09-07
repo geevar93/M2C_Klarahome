@@ -26,6 +26,21 @@ internal sealed class SettlementsOptions
     public int PayoutReferenceDigits { get; set; } = 6;
 
     /// <summary>
+    /// The prefix on the platform's own tax invoices, as <c>KHC/2026-27/000042</c>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the same series as a seller's own invoices: they are raised by different
+    /// suppliers to different recipients, and a shared series would put two GSTINs on one run of
+    /// numbers.
+    /// </remarks>
+    [StringLength(8, MinimumLength = 1)]
+    public string CommissionInvoicePrefix { get; set; } = "KHC";
+
+    /// <summary>How many digits a commission invoice's counter is padded to.</summary>
+    [Range(4, 10)]
+    public int CommissionInvoiceDigits { get; set; } = 6;
+
+    /// <summary>
     /// Whether the cycle scheduler runs in this process.
     /// </summary>
     /// <remarks>

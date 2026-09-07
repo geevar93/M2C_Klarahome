@@ -101,7 +101,7 @@ internal static class SettlementsCheckConstraints
         "status <> 'Completed' OR provider_payout_id IS NOT NULL";
 
     /// <summary>The values <c>number_sequences.kind</c> accepts.</summary>
-    public const string SequenceKinds = "kind IN ('payout')";
+    public const string SequenceKinds = "kind IN ('payout', 'commission-invoice')";
 }
 
 /// <summary>Maps <see cref="LedgerEntry"/> to <c>settlements.ledger_entries</c>.</summary>
@@ -325,6 +325,60 @@ internal sealed class PayoutItemConfiguration : IEntityTypeConfiguration<PayoutI
     }
 }
 
+/// <summary>Maps <see cref="CommissionInvoice"/> to <c>settlements.commission_invoices</c>.</summary>
+internal sealed class CommissionInvoiceConfiguration : IEntityTypeConfiguration<CommissionInvoice>
+{
+    public void Configure(EntityTypeBuilder<CommissionInvoice> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("commission_invoices", table => table.HasCheckConstraint(
+            "ck_commission_invoices_money",
+            "commission >= 0 AND platform_fee >= 0 AND payment_fee >= 0 AND taxable_value >= 0 "
+            + "AND cgst >= 0 AND sgst >= 0 AND igst >= 0 AND total >= 0"));
+
+        builder.HasKey(invoice => invoice.Id);
+        builder.Property(invoice => invoice.Id).ValueGeneratedNever();
+
+        builder.Property(invoice => invoice.InvoiceNumber).HasMaxLength(32).IsRequired();
+        builder.Property(invoice => invoice.CurrencyCode).HasMaxLength(3).IsRequired();
+        builder.Property(invoice => invoice.SupplierGstin).HasMaxLength(15);
+        builder.Property(invoice => invoice.RecipientGstin).HasMaxLength(15);
+        builder.Property(invoice => invoice.PlaceOfSupplyStateCode).HasMaxLength(2);
+
+        foreach (var money in new[]
+                 {
+                     nameof(CommissionInvoice.Commission),
+                     nameof(CommissionInvoice.PlatformFee),
+                     nameof(CommissionInvoice.PaymentFee),
+                     nameof(CommissionInvoice.TaxableValue),
+                     nameof(CommissionInvoice.Cgst),
+                     nameof(CommissionInvoice.Sgst),
+                     nameof(CommissionInvoice.Igst),
+                     nameof(CommissionInvoice.Total),
+                 })
+        {
+            builder.Property(money).HasColumnType(ModelConventions.MoneyColumnType);
+        }
+
+        builder.Property(invoice => invoice.GstRate).HasColumnType("numeric(9,4)");
+
+        // A statutory number is unique or it is not a number. The index is the enforcement, not this
+        // code: two closings racing for the same counter both reach the insert and one is rejected.
+        builder.HasIndex(invoice => new { invoice.TenantId, invoice.InvoiceNumber }).IsUnique();
+
+        // One invoice per cycle, ever. The same rule a sub-order invoice has, enforced the same way.
+        builder.HasIndex(invoice => invoice.SettlementCycleId).IsUnique();
+
+        // "Show me what I was charged", newest first.
+        builder.HasIndex(invoice => new { invoice.TenantId, invoice.VendorId, invoice.IssuedAt });
+
+        builder.Ignore(invoice => invoice.DomainEvents);
+        builder.Ignore(invoice => invoice.TaxTotal);
+        builder.Ignore(invoice => invoice.IsInterState);
+    }
+}
+
 /// <summary>Maps <see cref="NumberSequence"/> to <c>settlements.number_sequences</c>.</summary>
 internal sealed class NumberSequenceConfiguration : IEntityTypeConfiguration<NumberSequence>
 {
@@ -341,7 +395,7 @@ internal sealed class NumberSequenceConfiguration : IEntityTypeConfiguration<Num
         builder.HasKey(sequence => sequence.Id);
         builder.Property(sequence => sequence.Id).ValueGeneratedNever();
 
-        builder.Property(sequence => sequence.Kind).HasMaxLength(16).IsRequired();
+        builder.Property(sequence => sequence.Kind).HasMaxLength(32).IsRequired();
         builder.Property(sequence => sequence.ScopeKey).HasMaxLength(64).IsRequired();
 
         // One counter per series. The unique index is what makes the "insert if missing, then lock"

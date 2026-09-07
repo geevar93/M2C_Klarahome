@@ -1,5 +1,10 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
-import { ServiceableRegionPayload, VendorsAdminService } from '@klarahome/data-access-admin';
+import { toSignal } from '@angular/core/rxjs-interop';
+import {
+  ReferenceDataService,
+  ServiceableRegionPayload,
+  VendorsAdminService,
+} from '@klarahome/data-access-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
@@ -75,15 +80,19 @@ interface RegionDraft {
             </kh-field>
 
             @if (region.scope === 'State') {
-              <kh-field [label]="'State id'" [for]="'region-state-' + $index">
-                <input
+              <kh-field [label]="'State'" [for]="'region-state-' + $index">
+                <select
                   khControl
                   [id]="'region-state-' + $index"
-                  type="text"
                   [disabled]="!canManage()"
                   [value]="region.stateId"
-                  (input)="setField($index, 'stateId', $any($event.target).value)"
-                />
+                  (change)="setField($index, 'stateId', $any($event.target).value)"
+                >
+                  <option value="">Choose a state…</option>
+                  @for (state of states(); track state.id) {
+                    <option [value]="state.id">{{ state.name }} ({{ state.code }})</option>
+                  }
+                </select>
               </kh-field>
             } @else {
               <kh-field [label]="'Prefix'" [for]="'region-prefix-' + $index" hint="500 covers 500001–500999.">
@@ -198,6 +207,9 @@ interface RegionDraft {
 export class ServiceableRegionsPanel {
   private readonly vendors = inject(VendorsAdminService);
   private readonly toasts = inject(ToastService);
+
+  /** The platform's states, so a rule names one rather than an identifier (Step 28B, deliverable 3). */
+  protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
 
   readonly vendorId = input.required<string>();
   readonly canManage = input(true);

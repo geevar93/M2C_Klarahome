@@ -28,4 +28,11 @@ public static class KlaraHomeClaims
 
     /// <summary>A named cohort, read by the feature-flag evaluator's segment rollout.</summary>
     public const string Segment = "segment";
+
+    /// <summary>
+    /// The support user acting as this token's subject, present only on an impersonated session
+    /// (docs/07-security-compliance.md §2). Its presence is what makes impersonation visible to
+    /// every surface without any of them having to look the session up.
+    /// </summary>
+    public const string ImpersonatorId = "impersonator_id";
 }

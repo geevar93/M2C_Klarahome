@@ -92,7 +92,7 @@ export class GlobalSearchService {
 
     if (this.session.hasPermission('catalog.product.read')) {
       sources.push(
-        this.catalog.adminProductsList({ Search: query, Size: size }, quiet).pipe(
+        this.catalog.adminProductsList({ search: query, size: size }, quiet).pipe(
           map((result) =>
             group('products', 'Products', result.items, (product) => ({
               id: product.id,
@@ -108,7 +108,7 @@ export class GlobalSearchService {
 
     if (this.session.hasPermission('vendors.vendor.read')) {
       sources.push(
-        this.vendors.adminVendorsList({ Search: query, Size: size }, quiet).pipe(
+        this.vendors.adminVendorsList({ search: query, size: size }, quiet).pipe(
           map((result) =>
             group('vendors', 'Sellers', result.items, (vendor) => ({
               id: vendor.id,
@@ -124,7 +124,7 @@ export class GlobalSearchService {
 
     if (this.session.hasPermission('identity.user.read')) {
       sources.push(
-        this.identity.adminUsersGet({ Search: query, Size: size }, quiet).pipe(
+        this.identity.adminUsersGet({ search: query, size: size }, quiet).pipe(
           map((result) =>
             group('users', 'Users', result.items, (user) => ({
               id: user.id,

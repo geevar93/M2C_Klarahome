@@ -60,6 +60,98 @@ internal sealed partial class SessionService(
     }
 
     /// <summary>
+    /// Starts a support session that acts as <paramref name="target"/>
+    /// (docs/07-security-compliance.md §2).
+    /// </summary>
+    /// <remarks>
+    /// No refresh token is stored, deliberately. The access token carries the whole window and
+    /// there is nothing to exchange when it runs out, which is the only way "time-boxed" survives
+    /// contact with a client that refreshes automatically.
+    /// </remarks>
+    /// <param name="target">The user being acted as.</param>
+    /// <param name="operatorId">The support user doing the acting.</param>
+    /// <param name="reason">Why, recorded on the session and in the audit trail.</param>
+    /// <param name="device">What the operator's caller looked like.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<ImpersonationTokens> StartImpersonationAsync(
+        User target,
+        Guid operatorId,
+        string reason,
+        DeviceInfo device,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        var now = clock.UtcNow;
+        var expiresAt = now.AddMinutes(options.Value.Impersonation.WindowMinutes);
+        var resolved = await access.ResolveAsync(target.Id, cancellationToken).ConfigureAwait(false);
+
+        var session = UserSession.StartImpersonation(
+            target.Id,
+            operatorId,
+            reason,
+            device.Device,
+            device.IpAddress,
+            now,
+            expiresAt);
+
+        context.Sessions.Add(session);
+
+        var issued = tokens.Issue(
+            target,
+            session.Id,
+            resolved.Permissions,
+            resolved.VendorId,
+            new ImpersonationStamp(operatorId, expiresAt));
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        ImpersonationStarted(logger, operatorId, target.Id, session.Id);
+        return new ImpersonationTokens(issued.AccessToken, expiresAt, session.Id, resolved);
+    }
+
+    /// <summary>Ends one impersonated session, and reports what it was.</summary>
+    /// <remarks>
+    /// Returns the row rather than a boolean because the caller has to audit what it stopped —
+    /// which user was being acted as, and why — and the row is the only place that is recorded.
+    /// </remarks>
+    /// <param name="sessionId">The impersonated session.</param>
+    /// <param name="operatorId">The support user; one operator cannot end another's impersonation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<ImpersonatedSession?> EndImpersonationAsync(
+        Guid sessionId,
+        Guid operatorId,
+        CancellationToken cancellationToken)
+    {
+        var session = await context.Sessions
+            .FirstOrDefaultAsync(
+                candidate => candidate.Id == sessionId
+                             && candidate.ImpersonatedByUserId == operatorId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (session is null)
+        {
+            return null;
+        }
+
+        var ended = new ImpersonatedSession(
+            session.Id,
+            session.UserId,
+            operatorId,
+            session.ImpersonationReason ?? string.Empty,
+            session.StartedAt);
+
+        if (session.IsActive)
+        {
+            await RevokeSessionAsync(session, SessionEndReason.ImpersonationEnded, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return ended;
+    }
+
+    /// <summary>
     /// Exchanges a refresh token for a new pair, rotating it.
     /// </summary>
     /// <remarks>
@@ -97,6 +189,14 @@ internal sealed partial class SessionService(
 
         if (session is null || !session.IsActive)
         {
+            return RefreshOutcome.Rejected;
+        }
+
+        if (session.IsImpersonated)
+        {
+            // Unreachable today — StartImpersonationAsync stores no refresh token — and checked
+            // anyway, because the day something does store one is the day a support session stops
+            // being time-boxed and nobody notices.
             return RefreshOutcome.Rejected;
         }
 
@@ -281,11 +381,43 @@ internal sealed partial class SessionService(
     /// </summary>
     private static string HashOf(string secret) => SecretHasher.Hash(secret, string.Empty);
 
+    [LoggerMessage(EventId = 1402, Level = LogLevel.Warning,
+        Message = "Support user {OperatorId} began impersonating user {UserId} in session {SessionId}.")]
+    private static partial void ImpersonationStarted(
+        ILogger logger,
+        Guid operatorId,
+        Guid userId,
+        Guid sessionId);
+
     [LoggerMessage(EventId = 1401, Level = LogLevel.Warning,
         Message = "A rotated refresh token was presented again for session {SessionId} (user {UserId}). "
                   + "The session has been revoked; the token is treated as compromised.")]
     private static partial void RefreshTokenReused(ILogger logger, Guid sessionId, Guid userId);
 }
+
+/// <summary>An issued support session: an access token with no refresh behind it.</summary>
+/// <param name="AccessToken">The signed JWT, carrying the impersonator claim.</param>
+/// <param name="ExpiresAt">When it stops being honoured. There is nothing to renew it with.</param>
+/// <param name="SessionId">The impersonated session, which the exit control ends by id.</param>
+/// <param name="Access">What the impersonated user may do.</param>
+internal sealed record ImpersonationTokens(
+    string AccessToken,
+    DateTimeOffset ExpiresAt,
+    Guid SessionId,
+    UserAccess Access);
+
+/// <summary>An impersonation that has just been ended, as the audit entry needs it.</summary>
+/// <param name="SessionId">The session.</param>
+/// <param name="UserId">Who was being acted as.</param>
+/// <param name="OperatorId">Who was acting.</param>
+/// <param name="Reason">Why they said they needed to.</param>
+/// <param name="StartedAt">When it began, so its length is on the record.</param>
+internal sealed record ImpersonatedSession(
+    Guid SessionId,
+    Guid UserId,
+    Guid OperatorId,
+    string Reason,
+    DateTimeOffset StartedAt);
 
 /// <summary>The result of presenting a refresh token.</summary>
 /// <param name="Tokens">The new pair, when the exchange succeeded.</param>

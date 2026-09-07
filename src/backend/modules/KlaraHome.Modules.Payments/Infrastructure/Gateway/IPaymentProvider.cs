@@ -148,6 +148,10 @@ internal sealed record ProviderSettlement(
 /// <param name="ProviderPaymentId">The payment it concerns, where the payload names one.</param>
 /// <param name="ProviderRefundId">The refund it concerns, where the payload names one.</param>
 /// <param name="PaymentId">Our own collection id, echoed back in the notes we sent.</param>
+/// <param name="ProviderTransferId">
+/// The seller payout it concerns, on a Route transfer event. This module owns no payouts and does
+/// nothing with it beyond handing it to the module that does (Step 28B, deliverable 22).
+/// </param>
 internal sealed record WebhookEnvelope(
     string ProviderEventId,
     string EventType,
@@ -155,7 +159,8 @@ internal sealed record WebhookEnvelope(
     string? ProviderOrderId,
     string? ProviderPaymentId,
     string? ProviderRefundId,
-    Guid? PaymentId);
+    Guid? PaymentId,
+    string? ProviderTransferId = null);
 
 /// <summary>
 /// The gateway, behind an interface this platform owns (docs/08-integrations.md §1).

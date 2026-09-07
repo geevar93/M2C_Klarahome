@@ -6,6 +6,7 @@ import {
   CreateWarehouseBody,
   GoodsReceiptResponse,
   InventoryApiClient,
+  OpenStockItemBody,
   PurchaseOrderResponse,
   ReceivePurchaseOrderBody,
   StockAdjustmentBody,
@@ -89,14 +90,14 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminStockList({
-            WarehouseId: current.warehouseId,
-            ListingId: current.listingId,
-            VendorId: current.vendorId,
-            LowStock: current.lowStock,
-            OutOfStock: current.outOfStock,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            warehouseId: current.warehouseId,
+            listingId: current.listingId,
+            vendorId: current.vendorId,
+            lowStock: current.lowStock,
+            outOfStock: current.outOfStock,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<StockItemResponse> => result)),
       filters,
@@ -106,6 +107,18 @@ export class InventoryAdminService {
 
   stockItem(id: string): Observable<StockItemResponse> {
     return this.api.adminStockGet(id);
+  }
+
+  /**
+   * Starts tracking a listing at a warehouse.
+   *
+   * A listing nobody has purchased in has no stock row at all, and an untracked offer is one the
+   * checkout will not sell — which is not the same as one that is out of stock. This is how a row
+   * comes into existence before its first receipt; the endpoint existed from Step 11 and nothing
+   * called it until Step 28B (deliverable 17).
+   */
+  openStockItem(body: OpenStockItemBody): Observable<StockItemResponse> {
+    return this.api.adminStockOpen(body);
   }
 
   /**
@@ -123,11 +136,11 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminStockLedger(stockItemId, {
-            From: current.from,
-            To: current.to,
-            Reason: current.reason,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            from: current.from,
+            to: current.to,
+            reason: current.reason,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<StockLedgerEntryResponse> => result)),
       filters,
@@ -161,11 +174,11 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminWarehousesList({
-            VendorId: current.vendorId,
-            ActiveOnly: current.activeOnly,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            vendorId: current.vendorId,
+            activeOnly: current.activeOnly,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<WarehouseResponse> => result)),
       filters,
@@ -192,10 +205,10 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminSuppliersList({
-            ActiveOnly: current.activeOnly,
-            Search: current.search,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            activeOnly: current.activeOnly,
+            search: current.search,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<SupplierResponse> => result)),
       filters,
@@ -221,11 +234,11 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminPurchaseOrdersList({
-            Status: current.status,
-            SupplierId: current.supplierId,
-            WarehouseId: current.warehouseId,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            supplierId: current.supplierId,
+            warehouseId: current.warehouseId,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<PurchaseOrderResponse> => result)),
       filters,
@@ -294,10 +307,10 @@ export class InventoryAdminService {
       (current, cursor, size) =>
         this.api
           .adminStockTakesList({
-            Status: current.status,
-            WarehouseId: current.warehouseId,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            warehouseId: current.warehouseId,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<StockTakeResponse> => result)),
       filters,

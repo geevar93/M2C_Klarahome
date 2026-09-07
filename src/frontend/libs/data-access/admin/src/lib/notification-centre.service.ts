@@ -50,13 +50,13 @@ export class NotificationCentreService {
       (current, cursor, size) =>
         this.notifications
           .adminNotificationsList({
-            Status: current.status,
-            Channel: current.channel,
-            EventKey: current.eventKey,
-            From: current.from,
-            To: current.to,
-            Cursor: cursor ?? undefined,
-            Size: size,
+            status: current.status,
+            channel: current.channel,
+            eventKey: current.eventKey,
+            from: current.from,
+            to: current.to,
+            cursor: cursor ?? undefined,
+            size: size,
           })
           .pipe(map((result): CursorPage<NotificationLogResponse> => result)),
       filters,
@@ -77,7 +77,7 @@ export class NotificationCentreService {
    */
   refreshAttentionCount(): Observable<number | null> {
     return this.notifications
-      .adminNotificationsList({ Status: 'Failed', Size: 1 }, { silentErrors: true, showLoading: false })
+      .adminNotificationsList({ status: 'Failed', size: 1 }, { silentErrors: true, showLoading: false })
       .pipe(
         map((result) => result.page.total ?? null),
         tap((count) => this.failing.set(count)),

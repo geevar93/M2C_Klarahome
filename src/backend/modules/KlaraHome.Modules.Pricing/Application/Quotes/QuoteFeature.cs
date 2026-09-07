@@ -31,7 +31,7 @@ internal sealed record QuoteLinePayload(Guid? LineId, Guid ListingId, int Quanti
 /// </param>
 /// <param name="StateId">The <c>platform.states</c> row of the shipping address.</param>
 /// <param name="CouponCode">A code to try.</param>
-/// <param name="PaymentMethod">How the basket would be paid for.</param>
+/// <param name="PaymentMethod">How the basket would be paid for. Prepaid when omitted.</param>
 /// <param name="IsFirstOrder">Whether this would be the shopper's first order.</param>
 /// <param name="ShippingAmount">What shipping would cost, as the caller knows it.</param>
 /// <param name="WalletRedeemRequested">How much store credit to try to apply.</param>
@@ -40,7 +40,7 @@ internal sealed record QuoteBasketQuery(
     Guid? CustomerId,
     Guid? StateId,
     string? CouponCode,
-    string? PaymentMethod,
+    QuotePaymentMethod? PaymentMethod,
     bool IsFirstOrder,
     decimal ShippingAmount,
     decimal WalletRedeemRequested) : IQuery<QuoteResult>;
@@ -99,7 +99,9 @@ internal sealed class QuoteBasketQueryHandler(IPriceQuoteEngine engine, IOptions
             query.CustomerId,
             query.StateId,
             query.CouponCode,
-            ParsePaymentMethod(query.PaymentMethod),
+            // Prepaid when omitted, because it is the method that charges no fee: defaulting to
+            // cash on delivery would quote a handling charge to a shopper who never asked for one.
+            query.PaymentMethod ?? QuotePaymentMethod.Prepaid,
             query.IsFirstOrder,
             query.ShippingAmount,
             query.WalletRedeemRequested);
@@ -112,15 +114,4 @@ internal sealed class QuoteBasketQueryHandler(IPriceQuoteEngine engine, IOptions
         return quote.Lines.Count == 0 ? PricingErrors.UnknownListing : Result.Success(quote);
     }
 
-    /// <summary>Reads a payment method, defaulting to prepaid.</summary>
-    /// <remarks>
-    /// Prepaid is the default because it is the one that charges no fee. Defaulting to cash on
-    /// delivery would quote a handling charge to a shopper who never asked for one.
-    /// </remarks>
-    /// <param name="value">What the caller sent.</param>
-    private static QuotePaymentMethod ParsePaymentMethod(string? value)
-        => string.Equals(value, "cod", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(value, nameof(QuotePaymentMethod.CashOnDelivery), StringComparison.OrdinalIgnoreCase)
-            ? QuotePaymentMethod.CashOnDelivery
-            : QuotePaymentMethod.Prepaid;
 }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FulfilmentService, NdrFilters, NdrResponse } from '@klarahome/data-access-admin';
+import { FulfilmentService, NdrAction, NdrFilters, NdrResponse } from '@klarahome/data-access-admin';
 import {
   CellTemplate,
   DataTable,
@@ -17,20 +17,28 @@ import { ToastService } from '@klarahome/util';
 import { describeError } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
 
-/** The four things that can be done with a parcel the courier could not deliver. */
-const ACTIONS = [
+/**
+ * The four things that can be done with a parcel the courier could not deliver.
+ *
+ * Typed against `NdrAction` since Step 28B, and typing it found two of these four were wrong: this
+ * screen sent `Reschedule` and `UpdateAddress`, and the enum's members are `Rescheduled` and
+ * `AddressUpdated`. Both buttons were refused by the server for as long as they existed, which is
+ * precisely the failure an untyped vocabulary produces — a value renamed or misremembered costs a
+ * request rather than a build (deliverable 11).
+ */
+const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; readonly hint: string }[] = [
   {
     value: 'Reattempt',
     label: 'Try again',
     hint: 'The courier makes another attempt, at the same address.',
   },
   {
-    value: 'Reschedule',
+    value: 'Rescheduled',
     label: 'Try again on a date',
     hint: 'The customer has said when they will be in. Pick that day.',
   },
   {
-    value: 'UpdateAddress',
+    value: 'AddressUpdated',
     label: 'Correct the address',
     hint: 'Only for a wrong or incomplete address the customer has corrected.',
   },
@@ -39,7 +47,7 @@ const ACTIONS = [
     label: 'Send it back',
     hint: 'Ends the delivery. The parcel comes back and the order is settled as a return.',
   },
-] as const;
+];
 
 /**
  * Parcels the courier could not deliver.
@@ -137,7 +145,7 @@ const ACTIONS = [
 
         <p class="hint">{{ hint() }}</p>
 
-        @if (action() === 'Reschedule') {
+        @if (action() === 'Rescheduled') {
           <kh-field label="Deliver on" for="ndr-date">
             <input
               khControl
@@ -180,7 +188,7 @@ const ACTIONS = [
           khButton
           type="button"
           [variant]="action() === 'ReturnToOrigin' ? 'danger' : 'primary'"
-          [disabled]="busy() || (action() === 'Reschedule' && !rescheduledFor())"
+          [disabled]="busy() || (action() === 'Rescheduled' && !rescheduledFor())"
           (click)="decide()"
         >
           {{ action() === 'ReturnToOrigin' ? 'Send it back' : 'Tell the courier' }}
@@ -223,7 +231,7 @@ export class NdrPage {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly deciding = signal<NdrResponse | null>(null);
-  protected readonly action = signal<string>('Reattempt');
+  protected readonly action = signal<NdrAction>('Reattempt');
   protected readonly rescheduledFor = signal('');
   protected readonly remark = signal('');
 
@@ -278,7 +286,7 @@ export class NdrPage {
 
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
-    const filters: NdrFilters = { action: values['action'] };
+    const filters: NdrFilters = { action: (values['action'] as NdrAction) || undefined };
     this.list.setFilters(filters);
   }
 
@@ -302,7 +310,7 @@ export class NdrPage {
         remark: this.remark() || null,
         // Only meaningful for a reschedule; sent as null otherwise so the courier is not given a
         // date it did not ask for.
-        rescheduledFor: this.action() === 'Reschedule' ? this.rescheduledFor() || null : null,
+        rescheduledFor: this.action() === 'Rescheduled' ? this.rescheduledFor() || null : null,
       })
       .subscribe({
         next: () => {

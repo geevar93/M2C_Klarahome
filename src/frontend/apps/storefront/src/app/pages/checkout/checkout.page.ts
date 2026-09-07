@@ -54,10 +54,11 @@ const SESSION_KEY = 'kh.checkout.session';
  * address cannot show a payment form, whatever the URL says — a shopper who bookmarked
  * `?step=payment` is put back on the address step rather than shown a form the server would refuse.
  *
- * **Sign-in is required, and that is the API's rule** (`CartsOptions.RequireSignInToCheckout`, and
- * `RequireAuthorization` on the whole `/store/checkout` group). The route's `authenticatedGuard`
- * carries the shopper to sign-in and back with their basket merged, which is the closest this
- * storefront can get to guest checkout until the API offers one.
+ * **Sign-in is required, and that is the API's rule** (`RequireAuthorization` on the whole
+ * `/store/checkout` group: a checkout session is opened against a customer id and the address step
+ * chooses from that customer's address book). The route's `authenticatedGuard` carries the shopper
+ * to sign-in and back with their basket merged, which is the closest this storefront can get until
+ * guest checkout exists as a feature rather than a setting.
  */
 @Component({
   selector: 'kh-checkout-page',

@@ -41,12 +41,15 @@ internal sealed record GetOrderQuery(Guid OrderId) : IQuery<OrderResponse>;
 /// </summary>
 /// <param name="Status">Restrict to one sub-order status.</param>
 /// <param name="VendorId">Restrict to one seller. Ignored for a vendor caller, who has only their own.</param>
+/// <param name="WarehouseId">Restrict to the lines allocated to one warehouse, which is how a
+/// single site works its own queue rather than the whole network's.</param>
 /// <param name="OverdueOnly">Only sub-orders whose dispatch promise has already passed.</param>
 /// <param name="Cursor">Opaque page token.</param>
 /// <param name="Size">Page size.</param>
 internal sealed record ListSubOrdersQuery(
     string? Status,
     Guid? VendorId,
+    Guid? WarehouseId,
     bool? OverdueOnly,
     string? Cursor,
     int? Size) : IQuery<PagedResult<SubOrderResponse>>;
@@ -278,6 +281,15 @@ internal sealed class ListSubOrdersQueryHandler(
         if (!scope.IsVendor && query.VendorId is { } vendorId)
         {
             rows = rows.Where(subOrder => subOrder.VendorId == vendorId);
+        }
+
+        // Which shelves this queue is about. A single-warehouse deployment never passes it and sees
+        // no difference; a second warehouse makes the unfiltered queue wrong for both pickers,
+        // because each is shown every parcel and neither can tell which are theirs
+        // (Step 28B, deliverable 12).
+        if (query.WarehouseId is { } warehouseId)
+        {
+            rows = rows.Where(subOrder => subOrder.Lines.Any(line => line.WarehouseId == warehouseId));
         }
 
         if (query.OverdueOnly == true)

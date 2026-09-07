@@ -440,6 +440,17 @@ GET/POST/PUT/DELETE /admin/categories | /brands | /attributes | /attribute-sets
 GET/POST/PUT        /admin/products[/{id}]         (+ /submit, /approve, /reject, /archive)
 GET/POST/PUT        /admin/products/{id}/variants[/{variantId}]
 POST                /admin/products/import         (multipart) → job id
+POST                /admin/products/bulk-status    { productIds[], status, reason? } → per-id outcome
+                                                     one moderation transition applied to at most 200
+                                                     products. Answers 200 with a row per id saying
+                                                     whether it moved and why not — a partial result,
+                                                     because a batch that fails whole because one
+                                                     product was already archived is a batch an
+                                                     operator has to un-pick by hand
+GET                 /admin/products/import-template → { fileName, columns[] } — the header row as
+                                                     data, not a CSV byte stream: the browser writes
+                                                     the file, so no download endpoint has to be
+                                                     authenticated through a bare <a> tag
 GET                 /admin/jobs/{id}               → import/export progress + error report
 GET/POST/PUT        /admin/listings[/{id}]          (vendor-scoped)
 
@@ -454,9 +465,20 @@ GET/POST /admin/warehouses
 # Orders & fulfilment
 GET   /admin/orders                                 ?status= &vendorId= &from= &to= &q=
 GET   /admin/orders/{id}
+GET   /admin/sub-orders                             ?status= &vendorId= &warehouseId= &overdueOnly=
+                                                      the fulfilment worklist. warehouseId narrows it
+                                                      to the parcels one location is packing, off the
+                                                      warehouse each line was allocated from
 POST  /admin/sub-orders/{id}/transition             { toStatus, reason }
 POST  /admin/sub-orders/{id}/shipments              { lines[], weight, dimensions, courier }
-GET   /admin/shipments/{id}/label | /manifest       → PDF
+GET   /admin/shipments/pick-list                    ?vendorId= &warehouseId= &size= — one row per
+                                                      item waiting to be packed, soonest deadline
+                                                      first, each naming its stock location
+GET   /admin/shipments/{id}/label                   → { url, expiresAt, fileName } — a short-lived
+                                                      link, not the PDF. Minting the link is the
+                                                      grant, and it is what lets a label open in a
+                                                      new tab without putting a bearer token there
+GET   /admin/shipments/{id}/manifest                → PDF
 POST  /admin/shipments/{id}/schedule-pickup | /cancel
 GET   /admin/ndr                                    → queue
 POST  /admin/ndr/{id}/action                        { action, remark }
@@ -545,6 +567,15 @@ GET   /admin/settlements/ledger                     ?vendorId= &entryType= &cycl
 POST  /admin/settlements/adjustments                { vendorId, direction, amount, reason }
                                                       an append, never an edit; the reason is
                                                       required and shows on the seller's statement
+GET   /admin/settlements/commission-invoices         ?vendorId= &financialYear= &from= &to=
+GET   /admin/settlements/commission-invoices/{id}    -> one, with its tax split by head
+GET   /admin/settlements/commission-invoices/{id}/download
+                                                      -> { url, expiresAt, fileName }, short-lived
+# The platform's OWN tax invoice, raised on the seller for the commission and fees a closed cycle
+# charged. It is the mirror of the seller's sale invoice and is a legal obligation, not a statement:
+# commission is a taxable service (SAC 998599), so it needs an invoice number from a financial-year
+# series, a place of supply, and a CGST/SGST-or-IGST split decided by the seller's state against the
+# platform's. The settlement statement shows what was deducted; only this says what was billed.
 GET   /admin/vendors/{id}/ledger                    ?from= &to= -> opening, movements, closing
 GET   /admin/vendors/{id}/ledger/export             ?from= &to= -> text/csv
 GET   /admin/vendors/{id}/balance                   -> owed now, unsettled, awaiting payout
@@ -576,8 +607,15 @@ GET          /admin/pages/{id}/preview              ?version= renders as the sto
                                                       guessable token on the store surface
 GET/POST/PUT/DELETE /admin/menus[/{id}]             the whole tree in one call
 GET/POST/PUT/DELETE /admin/banners[/{id}]           (+ /{id}/active to switch one off in seconds)
-GET/POST/PUT/DELETE /admin/collections[/{id}]       (+ /{id}/rule, /{id}/items, /{id}/refresh,
-                                                      /{id}/items for the resolved cards)
+GET/POST/PUT/DELETE /admin/collections[/{id}]       (+ /{id}/rule, /{id}/refresh)
+GET          /admin/collections/{id}/items          the resolved cards, rule-driven or hand-picked
+PUT          /admin/collections/{id}/items          { productIds[] } replaces the whole hand-picked
+                                                      set, in the order given
+POST         /admin/collections/{id}/items          { productId, position? } adds one
+DELETE       /admin/collections/{id}/items/{productId}
+                                                      removes one. PUT alone made "drop this product"
+                                                      a read-modify-write of the entire list, which is
+                                                      two operators overwriting each other
 GET/POST/PUT/DELETE /admin/redirects[/{id}]         own permission: a redirect is routing
 GET          /admin/seo/robots | /seo/sitemap       what a crawler is served, before it is
 GET          /admin/seo/structured-data             ?path=
@@ -603,9 +641,28 @@ POST         /admin/search/index/rebuild            { afterVariantId?, maxVarian
 
 # Platform
 GET/PUT      /admin/settings
+GET          /admin/settings/schema                 every section's fields, their kinds, and the
+                                                      bounds each value must satisfy — read off the
+                                                      CLR type and the section's FluentValidation
+                                                      rules, so it cannot drift from what the server
+                                                      enforces. Advisory only: the write is validated
+                                                      regardless, and the schema exists so the form
+                                                      draws the right control instead of a textarea
 GET/PUT      /admin/feature-flags
 GET/POST/PUT /admin/users | /roles
+POST         /admin/users/{id}/impersonate          { reason, device } → a short-lived access token
+                                                      for that user and nothing else. No refresh
+                                                      token is issued and the session cannot be
+                                                      refreshed, so the window is the window. Both
+                                                      the start and the end are audited with the
+                                                      reason, and the token carries impersonator_id
+DELETE       /admin/impersonation/{sessionId}       ends it now rather than waiting for the clock
 GET          /admin/audit-logs                      ?entityType= &entityId= &actorId=
+
+# Reference data (states, PIN codes) is deliberately NOT mapped again under /admin. The generated
+# client is grouped by tag rather than by surface, so the back office calls GET /store/states and
+# GET /store/pincodes/{pincode} directly. A second copy would have been two routes wanting no
+# permission on a surface where every other route must declare one.
 # Reviews & Q&A (Step 21). Reading includes what is pending and what was refused, because "where
 # has my review gone" is not answerable from the storefront's view of the world. Moderating is the
 # only permission that can take something down and is deliberately NOT a seller's; replying is a
@@ -626,7 +683,8 @@ POST         /admin/content-reports/{id}/resolve     { uphold, resolution }  uph
 # commercial. Every route is vendor-scoped by the caller's TOKEN, never by an id in the query
 # string; a report the catalogue declares as not vendor-scoped is refused to a seller outright.
 GET          /admin/reports                          the declared catalogue: columns and groupings
-GET          /admin/reports/{reportKey}              ?from= &to= &groupBy= &vendorId= &format=json|csv
+GET          /admin/reports/{reportKey}              ?from= &to= &groupBy= &vendorId=  -> the table
+POST         /admin/reports/{reportKey}/export       { from, to, groupBy, vendorId } -> a run
 GET          /admin/report-runs                      ?reportKey= &status= &cursor= &size=
 GET          /admin/report-runs/{id}/download        -> { url, expiresAt, fileName }  short-lived
 GET/POST     /admin/report-schedules
@@ -751,6 +809,12 @@ one release of overlap.
   types, status codes, and examples.
 - Enriched with `operationId` values that read well as client method names
   (`storeCartAddItem`, `adminOrdersTransitionSubOrder`).
+- Query parameters are declared in `camelCase`, by a document transformer rather than by an
+  attribute on each property. A query record bound with `[AsParameters]` is otherwise declared under
+  its C# property names, and since the document is what the client is generated from, the declared
+  spelling is the spelling that goes on the wire — `?Q=chair&MinPrice=2000` on the storefront's
+  most-shared URL, against the `camelCase` this document states in §1. The binder matches
+  case-insensitively either way, so this changes what is generated, not what is accepted.
 - CI step: build API → export `openapi.json` → generate the Angular client into
   `libs/data-access/api` → fail the build if the generated output differs from what is committed.
   This makes a breaking API change impossible to merge unnoticed.

@@ -14,6 +14,28 @@ using Microsoft.AspNetCore.Routing;
 
 namespace KlaraHome.Modules.Reporting.Endpoints;
 
+/// <summary>Query-string parameters for running a report.</summary>
+/// <param name="From">Earliest instant to include. The report's own default applies when absent.</param>
+/// <param name="To">Latest instant to include.</param>
+/// <param name="GroupBy">One of the groupings the catalogue declares for this report.</param>
+/// <param name="VendorId">One seller. Ignored for a seller's own token, which is already scoped.</param>
+internal sealed record ReportRunFilter(
+    DateTimeOffset? From,
+    DateTimeOffset? To,
+    string? GroupBy,
+    Guid? VendorId);
+
+/// <summary>The body of a CSV export. The same window a run takes, as a body rather than a query.</summary>
+/// <param name="From">Earliest instant to include.</param>
+/// <param name="To">Latest instant to include.</param>
+/// <param name="GroupBy">One of the groupings the catalogue declares for this report.</param>
+/// <param name="VendorId">One seller. Ignored for a seller's own token.</param>
+internal sealed record ExportReportBody(
+    DateTimeOffset? From,
+    DateTimeOffset? To,
+    string? GroupBy,
+    Guid? VendorId);
+
 /// <summary>The body of a new or edited schedule.</summary>
 /// <param name="ReportKey">Which report. Ignored on an edit — a schedule's report is not editable.</param>
 /// <param name="Name">What to call it.</param>
@@ -50,11 +72,18 @@ internal sealed record ScheduleBody(
 /// rather than about a seller are declared as such and a seller is refused them outright.
 /// </para>
 /// <para>
-/// <c>GET /admin/reports/{key}</c> serves the table, and it takes a <c>format</c> parameter as the
-/// API specification says — <c>json</c> returns the table, and <c>csv</c> produces a run and answers
-/// with a short-lived link rather than streaming the file. That indirection is deliberate: a report
-/// somebody asked for and one that arrives by email every Monday are then the same artefact,
-/// produced by the same code and recorded in the same log.
+/// <c>GET /admin/reports/{key}</c> serves the table and <c>POST /admin/reports/{key}/export</c>
+/// produces a run, answering with a short-lived link rather than streaming the file. That
+/// indirection is deliberate: a report somebody asked for and one that arrives by email every Monday
+/// are then the same artefact, produced by the same code and recorded in the same log.
+/// </para>
+/// <para>
+/// Two operations rather than the one <c>?format=json|csv</c> route the specification first
+/// described, because that route had two different 200 bodies and OpenAPI carries one body per
+/// status. The generated client never emitted <c>ReportResult</c> at all and the admin service cast
+/// through <c>unknown</c> to use it. A verb is also the honest description: reading a table is a
+/// GET, and producing a file, recording a run and handing back a link is not
+/// (CHANGE_LOG.md, Step 28B).
 /// </para>
 /// </remarks>
 internal static class AdminReportingEndpoints
@@ -98,38 +127,45 @@ internal static class AdminReportingEndpoints
 
         group.MapGet("/{reportKey}", async (
                 string reportKey,
-                DateTimeOffset? from,
-                DateTimeOffset? to,
-                string? groupBy,
-                Guid? vendorId,
-                string? format,
+                [AsParameters] ReportRunFilter filter,
                 IDispatcher dispatcher,
                 HttpContext context) =>
             {
-                if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
-                {
-                    var exported = await dispatcher
-                        .SendAsync(
-                            new ExportReportCommand(reportKey, from, to, groupBy, vendorId),
-                            context.RequestAborted)
-                        .ConfigureAwait(false);
-
-                    return exported.ToOk(context);
-                }
-
                 var result = await dispatcher
                     .QueryAsync(
-                        new RunReportQuery(reportKey, from, to, groupBy, vendorId),
+                        new RunReportQuery(reportKey, filter.From, filter.To, filter.GroupBy, filter.VendorId),
                         context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
             })
             .WithName("adminRunReport")
-            .WithSummary("Runs a report. format=csv produces a file and answers with the run instead.")
+            .WithSummary("Runs a report and answers with the table.")
             .RequirePermission(ReportingPermissions.ReportRead)
             .RequireFeature(ReportingFeatures.Reports)
-            .Produces<ReportResult>()
+            .Produces<ReportResult>();
+
+        group.MapPost("/{reportKey}/export", async (
+                string reportKey,
+                ExportReportBody? body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var command = new ExportReportCommand(
+                    reportKey,
+                    body?.From,
+                    body?.To,
+                    body?.GroupBy,
+                    body?.VendorId);
+
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+                return result.ToOk(context);
+            })
+            .WithName("adminExportReport")
+            .WithSummary("Produces a CSV of the same report and answers with the run, whose download link "
+                         + "is fetched from /admin/report-runs/{id}/download.")
+            .RequirePermission(ReportingPermissions.ReportRead)
+            .RequireFeature(ReportingFeatures.Reports)
             .Produces<ReportRunResponse>();
     }
 

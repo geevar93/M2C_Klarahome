@@ -350,6 +350,13 @@ internal sealed class OrderLineConfiguration : IEntityTypeConfiguration<OrderLin
         // asks when it needs the line a returned unit came from.
         builder.HasIndex(line => new { line.TenantId, line.ListingId });
 
+        // "What is my warehouse packing today" — the fulfilment queue's warehouse filter. Partial,
+        // because a line placed before the allocation was recorded carries no warehouse and a
+        // single-warehouse deployment never asks.
+        builder
+            .HasIndex(line => line.WarehouseId)
+            .HasFilter("warehouse_id IS NOT NULL");
+
         builder.Ignore(line => line.DomainEvents);
         builder.Ignore(line => line.QuantityLive);
         builder.Ignore(line => line.IsFullyCancelled);

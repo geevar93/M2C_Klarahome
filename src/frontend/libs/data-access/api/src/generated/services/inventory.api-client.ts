@@ -21,32 +21,32 @@ export interface AdminGoodsReceiptsListQuery {
 
 /** Query string for `adminPurchaseOrdersList`. */
 export interface AdminPurchaseOrdersListQuery {
-  Status?: string;
-  SupplierId?: string;
-  WarehouseId?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  supplierId?: string;
+  warehouseId?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminStockLedger`. */
 export interface AdminStockLedgerQuery {
-  From?: string;
-  To?: string;
-  Reason?: string;
-  Cursor?: string;
-  Size?: number;
+  from?: string;
+  to?: string;
+  reason?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminStockList`. */
 export interface AdminStockListQuery {
-  WarehouseId?: string;
-  ListingId?: string;
-  VendorId?: string;
-  LowStock?: boolean;
-  OutOfStock?: boolean;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  warehouseId?: string;
+  listingId?: string;
+  vendorId?: string;
+  lowStock?: boolean;
+  outOfStock?: boolean;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminStockReservations`. */
@@ -63,27 +63,27 @@ export interface AdminStockSerialsQuery {
 
 /** Query string for `adminStockTakesList`. */
 export interface AdminStockTakesListQuery {
-  Status?: string;
-  WarehouseId?: string;
-  Cursor?: string;
-  Size?: number;
+  status?: string;
+  warehouseId?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminSuppliersList`. */
 export interface AdminSuppliersListQuery {
-  ActiveOnly?: boolean;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  activeOnly?: boolean;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** Query string for `adminWarehousesList`. */
 export interface AdminWarehousesListQuery {
-  VendorId?: string;
-  ActiveOnly?: boolean;
-  Search?: string;
-  Cursor?: string;
-  Size?: number;
+  vendorId?: string;
+  activeOnly?: boolean;
+  search?: string;
+  cursor?: string;
+  size?: number;
 }
 
 /** `Inventory` endpoints, generated from the API's OpenAPI document. */

@@ -224,14 +224,12 @@ internal sealed class UpdateMenuCommandHandler(ContentDbContext context)
             if (string.IsNullOrWhiteSpace(body.Label))
             {
                 return Result.Failure<List<MenuItem>>(
-                    ContentErrors.MenuLinkIncomplete(body.LinkType ?? nameof(MenuLinkType.None)));
+                    ContentErrors.MenuLinkIncomplete(body.LinkType.ToString()));
             }
 
-            if (!Enum.TryParse<MenuLinkType>(body.LinkType, ignoreCase: true, out var linkType))
-            {
-                return Result.Failure<List<MenuItem>>(
-                    ContentErrors.MenuLinkIncomplete(body.LinkType ?? nameof(MenuLinkType.None)));
-            }
+            // The link type is an enum in the contract, so an unknown word is refused by the model
+            // binder before this runs (Step 28B, deliverable 11).
+            var linkType = body.LinkType;
 
             var check = CheckTarget(linkType, body);
 

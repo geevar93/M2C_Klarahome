@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import {
   DocumentPrintService,
   FulfilmentService,
+  InventoryAdminService,
   OrdersAdminService,
   PickListLineResponse,
   ShipmentResponse,
@@ -70,6 +71,20 @@ interface PackLine {
       <div class="panel-head">
         <h2>Pick list</h2>
         <p class="hint">{{ pickList().length }} lines to take off the shelves.</p>
+
+        <kh-field label="Warehouse" for="pick-warehouse">
+          <select
+            khControl
+            id="pick-warehouse"
+            [value]="warehouseFilter()"
+            (change)="setWarehouse($any($event.target).value)"
+          >
+            <option value="">Every warehouse</option>
+            @for (warehouse of warehouses.rows(); track warehouse.id) {
+              <option [value]="warehouse.id">{{ warehouse.name }} ({{ warehouse.code }})</option>
+            }
+          </select>
+        </kh-field>
       </div>
 
       @if (pickLoading()) {
@@ -84,6 +99,7 @@ interface PackLine {
               <th scope="col">Item</th>
               <th scope="col" class="numeric">Qty</th>
               <th scope="col">Order</th>
+              <th scope="col">Shelf</th>
               <th scope="col">To</th>
               <th scope="col">Due</th>
             </tr>
@@ -95,6 +111,7 @@ interface PackLine {
                 <td>{{ line.name }}</td>
                 <td class="numeric">{{ line.quantity }}</td>
                 <td>{{ line.subOrderNumber }}</td>
+                <td>{{ line.warehouseName ?? 'Not allocated' }}</td>
                 <td>{{ line.destinationPincode }}</td>
                 <td>{{ when(line.dispatchDueAt) }}</td>
               </tr>
@@ -500,6 +517,12 @@ export class FulfilmentPage {
 
   protected readonly pickList = signal<readonly PickListLineResponse[]>([]);
   protected readonly pickLoading = signal(false);
+
+  /** The stock location both halves of this screen are about, or blank for all of them. */
+  protected readonly warehouseFilter = signal('');
+
+  /** Every warehouse, for the filter. There are few enough that paging one is a control nobody uses. */
+  protected readonly warehouses = inject(InventoryAdminService).warehouses({}, 100);
   protected readonly busy = signal(false);
   protected readonly actionError = signal<string | null>(null);
 
@@ -531,6 +554,7 @@ export class FulfilmentPage {
 
   constructor() {
     this.queue.load();
+    this.warehouses.load();
     this.loadPickList();
   }
 
@@ -550,9 +574,21 @@ export class FulfilmentPage {
     return !!line.dispatchDueAt && this.isPast(line.dispatchDueAt);
   }
 
+  /**
+   * Narrows both halves of this screen to one stock location.
+   *
+   * The pick list and the queue below it are the same warehouse's work, so one control moves both.
+   * With two warehouses and no filter, each picker is handed every parcel (Step 28B, deliverable 12).
+   */
+  protected setWarehouse(warehouseId: string): void {
+    this.warehouseFilter.set(warehouseId);
+    this.queue.setFilters({ ...this.queue.filters(), warehouseId: warehouseId || undefined });
+    this.loadPickList();
+  }
+
   protected loadPickList(): void {
     this.pickLoading.set(true);
-    this.fulfilment.pickList().subscribe({
+    this.fulfilment.pickList(undefined, this.warehouseFilter() || undefined).subscribe({
       next: (lines) => {
         this.pickLoading.set(false);
         this.pickList.set(lines);
@@ -726,9 +762,9 @@ export class FulfilmentPage {
 
     this.busy.set(true);
     this.documents.shipmentLabel(parcel.id).subscribe({
-      next: (blob) => {
+      next: (label) => {
         this.busy.set(false);
-        if (!this.documents.openInNewTab(blob)) {
+        if (!this.documents.openUrl(label.url)) {
           this.actionError.set('The label opened in a tab the browser blocked. Allow pop-ups and try again.');
         }
       },

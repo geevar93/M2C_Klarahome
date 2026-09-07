@@ -117,6 +117,17 @@ internal sealed class OrderLine : Entity<Guid>, ITenantScoped, IVendorScoped, IA
     /// <summary>The sellable thing behind the offer.</summary>
     public Guid VariantId { get; private set; }
 
+    /// <summary>
+    /// The stock location the units were taken from, recorded at placement.
+    /// </summary>
+    /// <remarks>
+    /// Denormalised onto the line rather than looked up through the reservation, because it is a
+    /// fact about the order rather than about a hold: holds are swept, and the answer to "which
+    /// shelf did this parcel come off" has to outlive them. Null on a line placed before this was
+    /// recorded, and on one for an offer nobody stocks (docs/03-database-design.md §4.5).
+    /// </remarks>
+    public Guid? WarehouseId { get; private set; }
+
     /// <summary>The stock-keeping unit, frozen.</summary>
     public string Sku { get; private set; }
 
@@ -222,6 +233,10 @@ internal sealed class OrderLine : Entity<Guid>, ITenantScoped, IVendorScoped, IA
             Guard.NotEmpty(listingId),
             Guard.NotNullOrWhiteSpace(sku),
             Guard.Positive(quantity));
+
+    /// <summary>Records where the units were allocated from.</summary>
+    /// <param name="warehouseId">The stock location, or null when the offer is not stocked.</param>
+    public void AllocateFrom(Guid? warehouseId) => WarehouseId = warehouseId;
 
     /// <summary>Freezes what the item was.</summary>
     /// <param name="variantId">The sellable thing.</param>

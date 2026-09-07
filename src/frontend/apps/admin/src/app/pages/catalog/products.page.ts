@@ -6,6 +6,7 @@ import {
   DocumentPrintService,
   ProductFilters,
   ProductListItem,
+  ProductStatus,
 } from '@klarahome/data-access-admin';
 import {
   BulkAction,
@@ -21,7 +22,7 @@ import {
 } from '@klarahome/ui-admin';
 import { Alert, Button, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
-import { Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { Subscription } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
 import { tableDate, tableDateTime } from '../../core/format';
@@ -31,11 +32,12 @@ import { tableDate, tableDateTime } from '../../core/format';
  *
  * Three things here are decisions rather than layout.
  *
- * **Bulk actions are sequential requests, not a bulk endpoint.** There is no
- * `POST /admin/products/publish` taking forty ids, and inventing a client-side one by firing forty
- * requests and reporting "done" would hide that six of them were refused. So the page fires them,
- * waits for all of them, and reports the count that succeeded *and* the first reason one did not.
- * A bulk action in a back office is only useful if its failures are visible.
+ * **Bulk actions are one request, and its answer is per product.** `POST /admin/products/bulk-status`
+ * moves the selected rows and reports on each of them, so publishing forty where six are refused
+ * publishes thirty-four and says why the six were not — rather than firing forty requests and
+ * reporting "done". A bulk action in a back office is only useful if its failures are visible;
+ * until Step 28B this screen achieved that by fanning out, which cost forty requests for a
+ * screenful of rows (deliverable 8).
  *
  * **Import is a job, and the job's errors are the product of the screen.** The upload answers a
  * job id and the rows are processed afterwards, so the modal polls and then shows
@@ -372,50 +374,51 @@ export class ProductsPage implements OnDestroy {
   protected runBulk(action: { key: string; ids: readonly string[] }): void {
     if (action.ids.length === 0 || this.busy()) return;
 
+    const status: ProductStatus =
+      action.key === 'publish' ? 'Active' : action.key === 'unpublish' ? 'Inactive' : 'Archived';
+
     this.busy.set(true);
     this.actionError.set(null);
 
-    const call = (id: string) => {
-      if (action.key === 'publish') return this.catalog.publishProduct(id);
-      if (action.key === 'unpublish') return this.catalog.unpublishProduct(id);
-      return this.catalog.archiveProduct(id);
-    };
+    this.catalog.bulkProductStatus(action.ids, status).subscribe({
+      next: (outcome) => {
+        this.busy.set(false);
 
-    // `forkJoin` abandons the whole set on the first error, which is the wrong report for a bulk
-    // action: the other thirty-nine may well have worked. Each call therefore catches its own
-    // failure into a value, so every one of them completes and the summary can count both sides.
-    forkJoin(
-      action.ids.map((id) =>
-        call(id).pipe(
-          map(() => null),
-          catchError((error: unknown) => of(describeError(error, 'That product was refused.'))),
-        ),
-      ),
-    ).subscribe((outcomes) => {
-      this.busy.set(false);
-      const failures = outcomes.filter((outcome): outcome is string => outcome !== null);
-      const succeeded = outcomes.length - failures.length;
+        if (outcome.changed > 0) {
+          this.toasts.success(`${outcome.changed} of ${outcome.results.length} updated.`);
+        }
 
-      if (succeeded > 0) this.toasts.success(`${succeeded} of ${outcomes.length} updated.`);
-      if (failures.length > 0) {
-        this.actionError.set(
-          `${failures.length} of ${outcomes.length} were refused. The first said: ${failures[0]}`,
-        );
-      }
-      this.list.refresh();
+        // The first refusal in full rather than a count of them: an operator who can read one
+        // reason usually knows what the other five are, and a list of six identical sentences is
+        // an alert nobody finishes.
+        const refused = outcome.results.find((result) => !result.changed);
+
+        if (refused) {
+          this.actionError.set(
+            `${outcome.failed} of ${outcome.results.length} were refused. The first said: ` +
+              (refused.message ?? 'no reason given.'),
+          );
+        }
+
+        this.list.refresh();
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.actionError.set(describeError(error, 'That bulk action could not be run.'));
+      },
     });
   }
 
   /**
    * The import template.
    *
-   * Fetched rather than linked, for the reason `DocumentPrintService` exists: the access token is
-   * held in memory only, and a plain `<a download>` is a browser navigation that carries no
-   * `Authorization` header. It would download a 401 page named products.csv.
+   * The API answers the column list rather than a file, because a template with no rows in it is a
+   * *shape* — and a shape can be served as JSON to a client that already holds a bearer token,
+   * where a streamed file could not be (Step 28B, deliverable 7). The CSV is written here.
    */
   protected downloadTemplate(): void {
     this.documents.productImportTemplate().subscribe({
-      next: (blob) => this.documents.download(blob, 'product-import-template.csv'),
+      next: (template) => this.documents.saveCsvHeader(template.columns, template.fileName),
       error: (error: unknown) =>
         this.importError.set(describeError(error, 'The template could not be downloaded.')),
     });

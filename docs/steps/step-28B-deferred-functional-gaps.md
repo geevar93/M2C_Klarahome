@@ -160,4 +160,63 @@ worked around it instead.
 
 ---
 
-- **Outcome / Notes:** _(to be filled on completion)_
+- **Outcome / Notes:** **Twenty-three of the twenty-four built; the twenty-fourth split and half of
+  it re-parked on the User's decision.** The step's own claim is narrower than the list suggests,
+  so it is worth stating plainly: this built features that were parked, and it did not test them —
+  26 rows went to [`TEST_DEBT.md`](../TEST_DEBT.md) and the `test` stage is deliberately not one of
+  the acceptance gates.
+
+  **Two of the twenty-four resolved differently from how they were written**, both because the
+  premise in the card turned out to be wrong:
+
+  - **Deliverable 3 (reference data on the admin surface)** asked for the two queries to be mapped
+    again under `/admin`, because "the generated client is surface-scoped". It is not — the client
+    is grouped by **tag**, so `PlatformApiClient` already carried `storeStatesGet` next to
+    `adminSettingsGet` and the back office could always have called it. The duplicate was written,
+    and then `AdminSurfaceTests` refused it: every route under `/admin` outside `/auth` and `/me`
+    must declare a permission, and two routes serving the thirty-six states' GST codes wanted none.
+    **Deleting the endpoints was cheaper than weakening the rule.** The four screens got what they
+    needed — a shared `ReferenceDataService` — and the API surface got smaller rather than larger.
+  - **Deliverable 2 (guest checkout)** was resolved by deletion, on the User's decision at this
+    boundary: `CartsOptions.RequireSignInToCheckout` was never a switch, because a checkout session
+    opens against a customer id and takes its addresses from the shopper's own book. Flipping it
+    would not have produced a guest checkout. A real one remains unbuilt and is now explicitly
+    `Backlog (post-MVP)` rather than implied by a dead flag.
+
+  **Deliverable 18 is half done and the half that is missing is a specification question, not a
+  coding one.** The return screen picks an existing order and `POST /admin/returns/{id}/replace`
+  records it. Creating the replacement order was put to the User, who parked it: what kind of order
+  a replacement is touches payment, commission, invoicing and settlement, and
+  `03-database-design.md` gives the column and answers none of them.
+
+  **What the typing found.** Deliverable 11 replaced nineteen client-side vocabularies with the
+  generated enums, and the compiler immediately found three values the server would have refused —
+  NDR actions `Reschedule` and `UpdateAddress` against the server's `Rescheduled` and
+  `AddressUpdated`, and a QC disposition `Damaged` against `Quarantine`. Three requests that had
+  been wrong for two steps, in screens that had been read and reviewed, found in the first minute
+  of the compiler being allowed to look.
+
+  **Two things were fixed that the card did not ask for, because they were wrong rather than
+  missing.** `GET /store/products`'s newly declared parameters would have gone on the wire as
+  `?Q=chair&MinPrice=2000`, against the `camelCase` §1 of the API specification states — fixed by a
+  document transformer in one place rather than an attribute on every property of twenty-four query
+  records, which re-keyed 122 call sites in the two Angular apps and corrected the pre-existing
+  PascalCase spellings with it. And two integration tests had been red since long before this step:
+  `CrossCuttingTests` asserted the module registry held the four modules of Step 3 against eighteen,
+  and `StoreSettingsTests` asserted five settings sections against thirteen. Both were rewritten
+  against the invariant instead of a snapshot, so neither can rot again.
+
+  **Gates.** `build`, `format`, `lint`, `codegen` and `frontend` all pass. `test` passes 1148
+  backend tests with no failures; the coverage gate is red at 46.27% line / 44.26% branch against
+  70%, which is Step 29's subject and is not among this step's acceptance criteria. The client was
+  regenerated and committed: 499 operations, 531 schemas, 23 files.
+
+  **The ledger.** [`PARKING_LOT.md`](../PARKING_LOT.md) was swept a second time. 103 open rows had
+  no owner among the remaining steps — most of them features that were correctly deferred and then
+  had nowhere to go, because every step after this one is a hardening step. Routing a shopper's
+  blog route to "test hardening" would have put a false owner on a true row, so a `📋 Backlog
+  (post-MVP)` class was added and the honest thing written down. **One row is deliberately left
+  without an owner and marked `⛔ NEEDS A STEP`**: Inventory still has no consumer for
+  `Orders.SubOrderCancelled`, so units committed out of stock after confirmation are never put
+  back. It is the only correctness defect on the list, it is not in this step's twenty-four, and it
+  needs a decision rather than a schedule.

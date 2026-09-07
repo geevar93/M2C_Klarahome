@@ -111,6 +111,11 @@ internal sealed record VariantBody(
 /// <param name="Notes">The reviewer's note. Required for a rejection.</param>
 internal sealed record ModerationBody(string? Notes);
 
+/// <summary>The body of a bulk status change.</summary>
+/// <param name="ProductIds">The products to move. Duplicates are collapsed.</param>
+/// <param name="Status">The status to move them all to.</param>
+internal sealed record BulkProductStatusBody(IReadOnlyList<Guid>? ProductIds, ProductStatus Status);
+
 /// <summary>Query-string filters for the moderation queue.</summary>
 /// <param name="Status">Restrict to one outcome. Defaults to what is still pending.</param>
 /// <param name="Cursor">Opaque token from the previous page.</param>
@@ -464,6 +469,23 @@ internal static class AdminProductEndpoints
 
         MapProductStatus(products, "archive", ProductStatus.Archived, "adminProductArchive",
             "Retires a product for good. Terminal.");
+
+        products.MapPost("/bulk-status", async (
+                BulkProductStatusBody body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var command = new BulkProductStatusCommand(body.ProductIds ?? [], body.Status);
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminProductBulkStatus")
+            .WithSummary("Moves several products to one status and reports on each. A product that could "
+                         + "not move does not stop the ones that could; the response names it and why.")
+            .RequirePermission(CatalogPermissions.ProductModerate)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<BulkProductStatusResponse>();
     }
 
     private static void MapProductStatus(

@@ -76,17 +76,6 @@ internal sealed class CartsOptions
     [Range(1, 120)]
     public int PlacementHoldMinutes { get; set; } = 20;
 
-    /// <summary>
-    /// Whether a shopper must be signed in to open a checkout.
-    /// </summary>
-    /// <remarks>
-    /// On. An order needs somebody to send it to, somebody to answer for it and somewhere to send
-    /// the invoice, and guest checkout would mean building a second identity for people the
-    /// platform already has a way to identify. Recorded as a switch rather than an assumption so
-    /// the decision is visible.
-    /// </remarks>
-    public bool RequireSignInToCheckout { get; set; } = true;
-
     /// <summary>Whether the abandoned-cart sweeper runs in this host. Off in the API, on in the worker.</summary>
     public bool SweeperEnabled { get; set; }
 

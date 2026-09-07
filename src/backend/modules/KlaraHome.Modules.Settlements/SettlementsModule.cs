@@ -1,6 +1,7 @@
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Contracts.Payments;
 using KlaraHome.Contracts.Returns;
+using KlaraHome.Contracts.Settlements;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
@@ -9,6 +10,7 @@ using KlaraHome.Modules.Settlements.Endpoints;
 using KlaraHome.Modules.Settlements.Infrastructure;
 using KlaraHome.Modules.Settlements.Infrastructure.Accounting;
 using KlaraHome.Modules.Settlements.Infrastructure.Events;
+using KlaraHome.Modules.Settlements.Infrastructure.Invoicing;
 using KlaraHome.Modules.Settlements.Infrastructure.Jobs;
 using KlaraHome.Modules.Settlements.Infrastructure.Numbering;
 using KlaraHome.Modules.Settlements.Infrastructure.Payouts;
@@ -138,6 +140,16 @@ public sealed class SettlementsModule : IModule
         services.AddScoped<IPayoutProvider, RazorpayRoutePayoutProvider>();
         services.AddScoped<IPayoutProvider, RazorpayXPayoutProvider>();
         services.AddScoped<IPayoutProvider, UnconfiguredPayoutProvider>();
+
+        // Step 28B. The one line the Payments module calls when a transfer webhook arrives, so a
+        // payout's outcome is known in seconds rather than at the next fifteen-minute sweep. The
+        // sweep still runs: it is what covers a webhook that is never delivered at all.
+        services.AddScoped<IPayoutOutcomes, PayoutOutcomeService>();
+
+        // Step 28B. The platform's own tax invoice, raised when a cycle closes so a seller can claim
+        // input credit against the GST the ledger has been charging them since Step 18.
+        services.AddScoped<CommissionInvoiceNumbering>();
+        services.AddScoped<CommissionInvoiceService>();
         services.AddScoped<PayoutProviderRegistry>();
     }
 

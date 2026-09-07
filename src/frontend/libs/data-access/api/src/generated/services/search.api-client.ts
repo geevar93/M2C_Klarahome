@@ -43,6 +43,22 @@ export interface AdminSearchZeroResultsQuery {
   size?: number;
 }
 
+/** Query string for `storeSearchProducts`. */
+export interface StoreSearchProductsQuery {
+  q?: string;
+  category?: string;
+  brand?: string[];
+  vendor?: string[];
+  minPrice?: number;
+  maxPrice?: number;
+  rating?: number;
+  discount?: number;
+  inStock?: boolean;
+  sort?: string;
+  cursor?: string;
+  size?: number;
+}
+
 /** Query string for `storeSearchSuggest`. */
 export interface StoreSearchSuggestQuery {
   q?: string;
@@ -163,8 +179,8 @@ export class SearchApiClient {
    * The faceted product listing: search, browse, filter, sort and page.
    * `GET /api/v1/store/products`
    */
-  storeSearchProducts(options?: ApiRequestOptions): Observable<Models.ProductSearchResponse> {
-    return this.http.request<Models.ProductSearchResponse>('GET', `${this.baseUrl}/api/v1/store/products`, undefined, undefined, options);
+  storeSearchProducts(query?: StoreSearchProductsQuery, options?: ApiRequestOptions): Observable<Models.ProductSearchResponse> {
+    return this.http.request<Models.ProductSearchResponse>('GET', `${this.baseUrl}/api/v1/store/products`, undefined, query, options);
   }
 
   /**

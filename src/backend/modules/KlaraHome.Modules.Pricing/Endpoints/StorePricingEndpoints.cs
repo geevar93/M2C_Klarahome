@@ -19,14 +19,14 @@ namespace KlaraHome.Modules.Pricing.Endpoints;
 /// <param name="Lines">The basket to price.</param>
 /// <param name="StateId">The shipping address's state, which decides the GST split.</param>
 /// <param name="CouponCode">A code to try.</param>
-/// <param name="PaymentMethod">How it would be paid for: <c>prepaid</c> or <c>cod</c>.</param>
+/// <param name="PaymentMethod">How it would be paid for. Prepaid when omitted.</param>
 /// <param name="ShippingAmount">What shipping would cost, as the caller knows it.</param>
 /// <param name="WalletRedeemRequested">How much store credit to try to apply.</param>
 internal sealed record StoreQuoteBody(
     IReadOnlyList<QuoteLinePayload> Lines,
     Guid? StateId,
     string? CouponCode,
-    string? PaymentMethod,
+    QuotePaymentMethod? PaymentMethod,
     decimal ShippingAmount,
     decimal WalletRedeemRequested);
 
