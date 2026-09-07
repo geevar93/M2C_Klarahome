@@ -286,7 +286,7 @@ internal sealed class VerifyKycDocumentCommandHandler(
         // A seller verifying their own documents defeats the point of collecting them.
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var document = await context.KycDocuments

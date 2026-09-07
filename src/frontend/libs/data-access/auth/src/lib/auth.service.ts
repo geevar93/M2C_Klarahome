@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
+  API_BASE_URL,
+  ExternalProviderResponse,
   IdentityApiClient,
   OtpRequestedResponse,
   SignInResponse,
@@ -25,6 +27,12 @@ export type AuthSurface = 'store' | 'admin';
 export class AuthService {
   private readonly identity = inject(IdentityApiClient);
   private readonly store = inject(SessionStore);
+
+  /**
+   * The API origin, for the one call in this service that is a browser navigation rather than an
+   * XHR. See {@link externalSignInUrl}.
+   */
+  private readonly apiBaseUrl = inject(API_BASE_URL).replace(/\/+$/, '');
 
   /** The refresh currently in flight, if any. Shared by every caller that arrives while it runs. */
   private inFlightRefresh: Observable<boolean> | null = null;
@@ -125,6 +133,49 @@ export class AuthService {
     return this.identity
       .storeAuthRegister(body, { skipAuth: true, silentErrors: true })
       .pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
+   * The identity providers this deployment actually offers, for the sign-in page's buttons.
+   *
+   * **The list is the server's to decide, and it is frequently empty.** A provider appears only
+   * when the `identity.external-login` feature flag is on *and* that provider has been given a
+   * client id and secret — a button that fails when somebody presses it is worse than no button,
+   * so a half-configured provider is not listed (ADR-014). A fresh deployment has none of this,
+   * which is the ordinary case rather than a fault, and the caller renders nothing.
+   *
+   * Errors are swallowed to an empty list for the same reason: whether Google is on offer is not
+   * worth an error banner over a form the shopper can still complete with an email and a password.
+   */
+  externalProviders(): Observable<readonly ExternalProviderResponse[]> {
+    // Admin has no external route on purpose — staff and vendors sign in with a password and a
+    // second factor (ADR-014 decision 3), and there are no endpoints under /admin to call.
+    if (this.surface === 'admin') return of([]);
+
+    return this.identity
+      .storeAuthExternalProviders({ skipAuth: true, silentErrors: true, showLoading: false })
+      .pipe(
+        map((providers) => providers ?? []),
+        catchError(() => of([])),
+      );
+  }
+
+  /**
+   * Where to send the browser to begin signing in with a provider.
+   *
+   * A URL rather than a request, and that is the whole point: the flow is two top-level browser
+   * redirects with a server-to-server token exchange between them (ADR-014 decision 2). Fetching
+   * this with `HttpClient` would follow the 302 as an XHR, land the provider's consent screen in a
+   * response body nobody can render, and drop the `SameSite=Lax` state cookie that only a real
+   * navigation carries. The caller assigns it to `location.href`.
+   *
+   * `returnUrl` is passed through untouched and checked against the server's allow-list, never
+   * here — an open-redirect check that lives in the client is not a check
+   * (docs/07-security-compliance.md §3).
+   */
+  externalSignInUrl(provider: string, returnUrl?: string | null): string {
+    const query = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';
+    return `${this.apiBaseUrl}/api/v1/store/auth/external/${encodeURIComponent(provider)}/start${query}`;
   }
 
   /**

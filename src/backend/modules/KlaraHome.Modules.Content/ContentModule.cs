@@ -4,6 +4,7 @@ using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Persistence.Outbox;
+using KlaraHome.Infrastructure.Persistence.Seeding;
 using KlaraHome.Modules.Content.Endpoints;
 using KlaraHome.Modules.Content.Infrastructure;
 using KlaraHome.Modules.Content.Infrastructure.Blocks;
@@ -103,6 +104,11 @@ public sealed class ContentModule : IModule
         services.AddSingleton<IFeatureFlagSource, ContentFeatureFlagSource>();
 
         // Off in the API and on in the worker, exactly as every sweeper before them.
+        // A published home page for the demonstration catalogue, so a freshly seeded stack does not
+        // open on an empty shop. Registered only outside Production and only when
+        // DemoData:SeedCatalog is on; it never touches a home page somebody else authored.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoHomePageSeeder>(configuration);
+
         services.AddHostedService<ContentSchedulerWorker>();
         services.AddHostedService<CollectionRefreshWorker>();
     }

@@ -52,6 +52,20 @@ public interface IVendorDirectory
     ValueTask<VendorSummary?> FindAsync(Guid vendorId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The published facts about one seller, found by their code rather than their id.
+    /// </summary>
+    /// <remarks>
+    /// The code is the stable, human-quotable handle — it is what appears on an invoice, in a
+    /// support call and in the vendor column of an uploaded spreadsheet. Everything that arrives
+    /// from outside this system names a seller that way and not by a GUID, so a lookup by code is
+    /// the seam those callers need; without it each of them ends up either carrying an id it has no
+    /// way to have learned, or querying across the schema boundary this contract exists to prevent.
+    /// </remarks>
+    /// <param name="code">The seller's code. Matched case-insensitively.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    ValueTask<VendorSummary?> FindByCodeAsync(string code, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The published facts about several sellers at once, keyed by id. Absent ids are simply not
     /// in the result — a listing whose seller has been offboarded is a case the caller handles.
     /// </summary>

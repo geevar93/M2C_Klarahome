@@ -278,7 +278,18 @@ internal sealed class UpdateVariantCommandHandler(
             .FirstOrDefaultAsync(candidate => candidate.Id == variant.ProductId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (product is null || !scope.CanWrite(product.VendorId))
+        // Two different refusals, and the difference is the disclosure
+        // (docs/07-security-compliance.md §2). A product the caller cannot see at all is a 404: a
+        // scope error would confirm that this variant id belongs to somebody. A product they *can*
+        // see but must not write to — the platform's own, shared with every seller — is a scope
+        // error, because pretending it does not exist would contradict the read that just returned
+        // it.
+        if (product is null)
+        {
+            return CatalogErrors.NotFound("variant");
+        }
+
+        if (!scope.CanWrite(product.VendorId))
         {
             return CatalogErrors.OutOfScope;
         }
@@ -389,7 +400,14 @@ internal sealed class ChangeVariantStatusCommandHandler(
             .FirstOrDefaultAsync(candidate => candidate.Id == variant.ProductId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (product is null || !scope.CanWrite(product.VendorId))
+        // 404 for a product the caller cannot see, the scope error for one they can but must
+        // not write to. See the note on the update handler above.
+        if (product is null)
+        {
+            return CatalogErrors.NotFound("variant");
+        }
+
+        if (!scope.CanWrite(product.VendorId))
         {
             return CatalogErrors.OutOfScope;
         }
@@ -470,7 +488,14 @@ internal sealed class DeleteVariantCommandHandler(
             .FirstOrDefaultAsync(candidate => candidate.Id == variant.ProductId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (product is null || !scope.CanWrite(product.VendorId))
+        // 404 for a product the caller cannot see, the scope error for one they can but must not
+        // write to. See the note on the update handler above.
+        if (product is null)
+        {
+            return Result.Failure(CatalogErrors.NotFound("variant"));
+        }
+
+        if (!scope.CanWrite(product.VendorId))
         {
             return Result.Failure(CatalogErrors.OutOfScope);
         }

@@ -41,6 +41,11 @@ show_urls() {
     mail_ui=$(env_value MAILPIT_UI_PORT 8025)
     cat <<EOF
 
+Klara Home applications
+  Storefront         https://$domain
+  Admin back office  https://admin.$domain
+  API                https://api.$domain
+
 Klara Home dev services
   Traefik dashboard  https://traefik.$domain
   MinIO console      https://minio.$domain   (or http://$bind:$console)
@@ -51,6 +56,8 @@ Klara Home dev services
   SMTP (Mailpit)     $bind:$smtp
 
 The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md.
+Accept it on api.$domain too: the two apps call it with XHR, which gets no
+warning to click and simply fails.
 EOF
 }
 

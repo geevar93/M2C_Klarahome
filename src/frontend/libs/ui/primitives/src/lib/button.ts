@@ -1,6 +1,10 @@
 import { Directive, computed, input } from '@angular/core';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger';
+/**
+ * `inverse` is the primary action's stand-in on a `kh-band--inverse` surface: the coffee primary is
+ * 3.2:1 against the ink band, so a primary button there would take its own label below the floor.
+ */
+export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger' | 'inverse';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 /**

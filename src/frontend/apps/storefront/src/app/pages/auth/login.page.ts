@@ -2,114 +2,87 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
-import { email, formField, formGroup, mobile, normaliseMobile, required } from '@klarahome/util';
+import { email, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { SignInFlow } from '../../core/sign-in.flow';
+import { SocialSignIn } from './social-sign-in';
 
 /**
  * Sign in — `/auth/login`.
  *
- * **A mobile number first, a password second**, and that order is the whole design. Most customers
- * of an Indian storefront have a mobile number and no password; the API creates the account on the
- * first successful code (Step 7), so for them there is no sign-up at all — there is only this
- * screen. The password form is there for the customers who set one, behind a link rather than
- * beside it, because two forms side by side is a decision nobody asked to make.
+ * **The email address is the account.** That is a change from the original Step 7 design, which put
+ * a mobile number and a one-time code first and the password behind a link. Mobile-OTP sign-in has
+ * been withdrawn: it needs a DLT-registered SMS route this deployment does not have, and the
+ * fallback that made it usable in development wrote one-time codes to the API log, which
+ * `docs/07-security-compliance.md` §3 forbids outright in a deployed environment. The endpoints
+ * behind it are switched off by the `identity.mobile-otp-login` flag rather than deleted, so the
+ * day an SMS provider is paid for the capability returns without a deploy (ADR-014 decision 4).
+ *
+ * What replaces it is the two routes above and below the divider: an identity provider, which
+ * verifies the address on our behalf and asks the shopper for no new secret, and an email and a
+ * password. Which providers appear is the server's decision, and on an unconfigured deployment it
+ * is none of them — see {@link SocialSignIn}.
+ *
+ * `/auth/otp` is still reachable from here, but only for a **second factor**: a password sign-in
+ * that answers with a challenge instead of a session sends the shopper there to enter the code from
+ * their authenticator app. It is no longer a way to sign in on its own.
  *
  * The `returnUrl` is carried through untouched and handed to `SignInFlow`, which is what validates
  * it. A shopper sent here from a checkout comes back to the checkout with their basket merged.
- *
- * **The screen never says whether a number is registered.** Requesting a code succeeds either way,
- * because an endpoint that answered differently would tell anyone who asked which numbers hold
- * accounts (docs/07-security-compliance.md).
  */
 @Component({
   selector: 'kh-login-page',
-  imports: [Alert, Button, Control, Field, RouterLink],
+  imports: [Alert, Button, Control, Field, RouterLink, SocialSignIn],
   template: `
     <div class="panel">
       <h1>Sign in</h1>
+      <p class="lead">Welcome back. Sign in to see your orders, addresses and wishlist.</p>
 
       @if (failure(); as message) {
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
 
-      @if (mode() === 'otp') {
-        <p class="lead">We will text you a code. No password needed.</p>
+      <kh-social-sign-in [returnUrl]="returnUrl()" />
 
-        <form (submit)="requestCode($event)" novalidate>
-          <kh-field
-            label="Mobile number"
-            for="login-mobile"
-            hint="The 10-digit number on your account."
-            [error]="otpForm.fields.mobile.error()"
-          >
-            <input
-              khControl
-              khNumeric
-              id="login-mobile"
-              type="tel"
-              inputmode="numeric"
-              maxlength="13"
-              autocomplete="tel-national"
-              autofocus
-              [khInvalid]="!!otpForm.fields.mobile.error()"
-              [value]="otpForm.fields.mobile.value()"
-              (input)="otpForm.fields.mobile.set($any($event.target).value)"
-              (touched)="otpForm.fields.mobile.markTouched()"
-            />
-          </kh-field>
+      <form (submit)="signIn($event)" novalidate>
+        <kh-field label="Email address" for="login-email" [error]="form.fields.email.error()">
+          <input
+            khControl
+            id="login-email"
+            type="email"
+            autocomplete="email"
+            autofocus
+            [khInvalid]="!!form.fields.email.error()"
+            [value]="form.fields.email.value()"
+            (input)="form.fields.email.set($any($event.target).value)"
+            (touched)="form.fields.email.markTouched()"
+          />
+        </kh-field>
 
-          <button khButton variant="primary" [block]="true" type="submit" [disabled]="busy()">
-            {{ busy() ? 'Sending…' : 'Send me a code' }}
-          </button>
-        </form>
+        <kh-field label="Password" for="login-password" [error]="form.fields.password.error()">
+          <input
+            khControl
+            id="login-password"
+            type="password"
+            autocomplete="current-password"
+            [khInvalid]="!!form.fields.password.error()"
+            [value]="form.fields.password.value()"
+            (input)="form.fields.password.set($any($event.target).value)"
+            (touched)="form.fields.password.markTouched()"
+          />
+        </kh-field>
 
-        <button khButton variant="tertiary" type="button" (click)="mode.set('password')">
-          Sign in with a password instead
+        <button khButton variant="primary" [block]="true" type="submit" [disabled]="busy()">
+          {{ busy() ? 'Signing in…' : 'Sign in' }}
         </button>
-      } @else {
-        <form (submit)="signIn($event)" novalidate>
-          <kh-field label="Email address" for="login-email" [error]="passwordForm.fields.email.error()">
-            <input
-              khControl
-              id="login-email"
-              type="email"
-              autocomplete="email"
-              [khInvalid]="!!passwordForm.fields.email.error()"
-              [value]="passwordForm.fields.email.value()"
-              (input)="passwordForm.fields.email.set($any($event.target).value)"
-              (touched)="passwordForm.fields.email.markTouched()"
-            />
-          </kh-field>
+      </form>
 
-          <kh-field label="Password" for="login-password" [error]="passwordForm.fields.password.error()">
-            <input
-              khControl
-              id="login-password"
-              type="password"
-              autocomplete="current-password"
-              [khInvalid]="!!passwordForm.fields.password.error()"
-              [value]="passwordForm.fields.password.value()"
-              (input)="passwordForm.fields.password.set($any($event.target).value)"
-              (touched)="passwordForm.fields.password.markTouched()"
-            />
-          </kh-field>
-
-          <button khButton variant="primary" [block]="true" type="submit" [disabled]="busy()">
-            {{ busy() ? 'Signing in…' : 'Sign in' }}
-          </button>
-        </form>
-
-        <div class="links">
-          <a routerLink="/auth/forgot-password" [queryParams]="{ returnUrl: returnUrl() }"
-            >Forgot your password?</a
-          >
-          <button khButton variant="tertiary" type="button" (click)="mode.set('otp')">
-            Use a code instead
-          </button>
-        </div>
-      }
+      <p class="links">
+        <a routerLink="/auth/forgot-password" [queryParams]="{ returnUrl: returnUrl() }"
+          >Forgot your password?</a
+        >
+      </p>
 
       <p class="foot">
         New here?
@@ -129,25 +102,22 @@ import { SignInFlow } from '../../core/sign-in.flow';
     }
 
     h1 {
-      font-size: var(--text-2xl);
+      font-size: var(--text-display-sm);
     }
 
     .lead {
       color: var(--color-text-muted);
       font-size: var(--text-sm);
+      margin-block-end: var(--space-6);
     }
 
     form {
-      margin-block-start: var(--space-4);
+      display: grid;
+      gap: var(--space-4);
     }
 
     .links {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-2);
-      margin-block-start: var(--space-3);
+      margin-block: var(--space-4) 0;
       font-size: var(--text-sm);
     }
 
@@ -166,7 +136,6 @@ export class LoginPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected readonly mode = signal<'otp' | 'password'>('otp');
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
@@ -174,54 +143,18 @@ export class LoginPage {
     () => this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined,
   );
 
-  private readonly otpSubmitted = signal(false);
-  private readonly passwordSubmitted = signal(false);
+  private readonly submitted = signal(false);
 
-  protected readonly otpForm = formGroup(this.otpSubmitted, {
-    mobile: formField('', [required('Mobile number'), mobile], this.otpSubmitted),
+  protected readonly form = formGroup(this.submitted, {
+    email: formField('', [required('Email address'), email()], this.submitted),
+    password: formField('', [required('Password')], this.submitted),
   });
-
-  protected readonly passwordForm = formGroup(this.passwordSubmitted, {
-    email: formField('', [required('Email address'), email()], this.passwordSubmitted),
-    password: formField('', [required('Password')], this.passwordSubmitted),
-  });
-
-  protected requestCode(event: Event): void {
-    event.preventDefault();
-    if (!this.otpForm.submit() || this.busy()) return;
-
-    const number = normaliseMobile(this.otpForm.values().mobile);
-    this.busy.set(true);
-    this.failure.set(null);
-
-    this.auth.requestOtp(number).subscribe({
-      next: (response) => {
-        this.busy.set(false);
-        // The number and what the API said about the code travel in the URL, so the code screen is
-        // reachable on its own and a refresh there does not lose which number is being verified.
-        void this.router.navigate(['/auth/otp'], {
-          queryParams: {
-            mobile: number,
-            length: response.codeLength,
-            expires: response.expiresInSeconds,
-            returnUrl: this.returnUrl(),
-          },
-        });
-      },
-      error: (error: unknown) => {
-        this.busy.set(false);
-        this.failure.set(
-          describeError(error, 'We could not send a code just now. Try again, or sign in with a password.'),
-        );
-      },
-    });
-  }
 
   protected signIn(event: Event): void {
     event.preventDefault();
-    if (!this.passwordForm.submit() || this.busy()) return;
+    if (!this.form.submit() || this.busy()) return;
 
-    const { email: address, password } = this.passwordForm.values();
+    const { email: address, password } = this.form.values();
     this.busy.set(true);
     this.failure.set(null);
 

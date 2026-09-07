@@ -406,11 +406,32 @@ public sealed class IdentityFeatureTests
         });
 
     [Fact]
-    public void Every_flag_ships_on()
+    public void The_paid_provider_flags_ship_on()
     {
-        // What the product does when it is fully provisioned. A deployment without a provider
-        // turns them off, which is a decision an operator makes and the audit trail records.
-        Assert.All(IdentityFeatures.All, flag => Assert.True(flag.Enabled));
+        // What the product does when it is fully provisioned. A deployment without an SMS or email
+        // provider turns these off, which is a decision an operator makes and the audit trail
+        // records, rather than a default nobody chose.
+        var provisioned = IdentityFeatures.All
+            .Where(flag => flag.Key != IdentityFeatures.MobileOtpLogin)
+            .ToList();
+
+        Assert.Equal(3, provisioned.Count);
+        Assert.All(provisioned, flag => Assert.True(flag.Enabled));
+    }
+
+    [Fact]
+    public void Mobile_otp_login_ships_off_because_it_was_withdrawn_rather_than_unprovisioned()
+    {
+        // The one flag that is not waiting on a provider. The storefront has no sign-in-with-a-code
+        // path any more — the email address is the account — so leaving this on would publish an
+        // authentication surface nothing in the UI points at, which is a capability nobody decided
+        // to expose. It stays declared rather than deleted (ADR-014 decision 4) so that the day an
+        // SMS provider is paid for, an operator turns it back on without a deploy.
+        var flag = Assert.Single(
+            IdentityFeatures.All,
+            candidate => candidate.Key == IdentityFeatures.MobileOtpLogin);
+
+        Assert.False(flag.Enabled);
     }
 
     [Fact]

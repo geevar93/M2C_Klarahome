@@ -7,6 +7,7 @@ using KlaraHome.Contracts.Reviews;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
+using KlaraHome.Infrastructure.Persistence.Seeding;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Search.Endpoints;
 using KlaraHome.Modules.Search.Infrastructure;
@@ -95,6 +96,11 @@ public sealed class SearchModule : IModule
         // The single place an index row is written, and the two operations that drive it.
         services.AddScoped<SearchProjectionWriter>();
         services.AddScoped<SearchIndexService>();
+
+        // Builds the projection over the demonstration catalogue, which was written straight to the
+        // Catalog schema and so raised none of the events that normally feed this index. Registered
+        // only outside Production and only when DemoData:SeedCatalog is on.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoSearchIndexSeeder>(configuration);
         services.AddScoped<SearchQueryRecorder>();
 
         AddEngines(services);

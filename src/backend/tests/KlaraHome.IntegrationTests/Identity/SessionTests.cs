@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Identity.Domain;
+using KlaraHome.Modules.Identity.Infrastructure;
 
 namespace KlaraHome.IntegrationTests.Identity;
 
@@ -17,6 +18,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     public async Task The_refresh_token_travels_in_a_cookie_and_never_in_the_body()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var mobile = NewMobile();
@@ -44,6 +50,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     public async Task A_refresh_rotates_the_token_and_issues_a_new_access_token()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var first = await SignInAsCustomerAsync(client);
@@ -73,6 +84,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     public async Task Presenting_a_rotated_token_again_revokes_the_whole_session()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var stolen = await SignInAndReadRefreshTokenAsync(client);
@@ -112,6 +128,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     {
         SkipWithoutDocker();
 
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
+
         using var client = CreateClient();
         await SignInAsCustomerAsync(client);
 
@@ -140,6 +161,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     public async Task A_customer_sees_their_devices_and_can_sign_one_out()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var phone = CreateClient();
         var mobile = NewMobile();
@@ -177,6 +203,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     {
         SkipWithoutDocker();
 
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
+
         var mobile = NewMobile();
         using var phone = CreateClient();
         await SignInAsCustomerAsync(phone, mobile);
@@ -206,6 +237,11 @@ public sealed class SessionTests(KlaraHomeSchemaFixture fixture) : IdentityTestB
     public async Task One_customer_cannot_end_another_customers_session()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var mine = CreateClient();
         await SignInAsCustomerAsync(mine);

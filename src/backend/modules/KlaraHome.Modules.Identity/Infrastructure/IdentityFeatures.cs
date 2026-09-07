@@ -13,18 +13,32 @@ namespace KlaraHome.Modules.Identity.Infrastructure;
 /// paid for, the feature returns without a deploy.
 /// </para>
 /// <para>
-/// Every one of them ships **on**, because that is what the product does when it is fully
+/// Three of them ship <b>on</b>, because that is what the product does when it is fully
 /// provisioned. A deployment without a provider turns them off — which is a decision an operator
 /// makes and the audit trail records, rather than a default nobody chose.
+/// </para>
+/// <para>
+/// <see cref="MobileOtpLogin"/> is the exception and ships <b>off</b>. It is not a missing provider
+/// but a withdrawn product decision: the email address is the customer's account, and there is no
+/// sign-in-with-a-code path on the storefront any more. The declaration below is the default for a
+/// <em>new</em> database only — the seeder never reasserts a flag an operator has already set, so an
+/// environment that has been running since Step 7 still has this switched on and has to be turned
+/// off through <c>PUT /api/v1/admin/feature-flags/identity.mobile-otp-login</c>, which is audited.
 /// </para>
 /// </remarks>
 internal static class IdentityFeatures
 {
     /// <summary>
     /// Gates the mobile-OTP endpoints. Off means a customer signs in with an identity provider or
-    /// with an email and a password; there is no free local path for SMS, so this is the flag a
-    /// developer without an SMS account turns off too.
+    /// with an email and a password, which is now the product's only storefront sign-in.
     /// </summary>
+    /// <remarks>
+    /// Off by default. The storefront no longer offers a code-based sign-in at all, so with this on
+    /// the endpoints would be live and reachable with nothing in the UI pointing at them — a
+    /// capability nobody had decided to expose. The code behind the flag is kept rather than deleted
+    /// (ADR-014 decision 4): the day an SMS provider is paid for, an operator turns this back on and
+    /// the endpoints return without a deploy.
+    /// </remarks>
     public const string MobileOtpLogin = "identity.mobile-otp-login";
 
     /// <summary>
@@ -49,7 +63,7 @@ internal static class IdentityFeatures
     /// <summary>Every flag this module declares.</summary>
     public static IReadOnlyList<FeatureFlagDeclaration> All { get; } =
     [
-        new(MobileOtpLogin, true, "Let customers sign in with a mobile number and a one-time code. Needs an SMS provider."),
+        new(MobileOtpLogin, false, "Let customers sign in with a mobile number and a one-time code. Withdrawn from the storefront; needs an SMS provider before it could be turned back on."),
         new(EmailVerification, true, "Send and accept email verification links. Needs an email provider."),
         new(PasswordResetEmail, true, "Let anyone reset their own password by email. Needs an email provider."),
         new(ExternalLogin, true, "Let customers sign in with an external identity provider such as Google."),

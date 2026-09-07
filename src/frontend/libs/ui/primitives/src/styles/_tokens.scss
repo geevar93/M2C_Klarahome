@@ -1,46 +1,138 @@
 // =================================================================================================
-// Placeholder design tokens — Steps 1 to 29.
+// Klara Home design tokens — Step 30.
 //
-// Transcribed from docs/10-design-system-placeholder.md §2 and deliberately plain. Colour,
-// typography, imagery and motion are OUT OF SCOPE until Step 30; this file exists so that layout,
-// behaviour and accessibility can be built and tested without anyone making a brand decision.
-//
-// TWO RULES, and they are what make Step 30 a token swap rather than a rewrite:
+// Supersedes the neutral placeholder set that carried Steps 1 to 29. The two rules that made this
+// a token swap rather than a rewrite have not changed, and still hold:
 //
 //   1. Never hard-code a colour, font, radius or spacing value in a component. Every value a
 //      component uses comes from a custom property declared here.
 //   2. These are CSS custom properties, not SCSS variables, because they have to be overridable
 //      **at runtime** — white-labelling means a tenant's theme is a payload the app applies to
-//      `:root`, not a rebuild.
+//      `:root`, not a rebuild. Nothing below is compiled into a component's own CSS.
 //
-// Do not add to this file before Step 30, and do not "improve" what is in it. If something looks
-// unfinished, that is the intent.
+// The palette is a single warm earth ramp, given by the client, running from the lightest sand to
+// a near-black burnt umber. Every semantic role beneath is drawn from that ramp, which is what
+// makes the storefront and the back office read as one product rather than two.
+//
+// **Every pairing in the semantic block was checked against WCAG 2.1 before it was written**, and
+// two candidate assignments were rejected by that check rather than by taste:
+//
+//   - `--brand-bronze` (#9e6d43) is 4.45:1 on white and 3.35:1 on sand. It is therefore *not* a
+//     text colour. It carries boundaries, rules, icons and large display type; small text on it is
+//     a bug. `--brand-coffee` is the interactive-text colour instead, at 7.53:1 on white.
+//   - `--brand-tan` (#cda887) is 2.20:1 on white, below the 3:1 floor for a UI boundary, so the
+//     input border a shopper has to find on a sunlit phone is bronze. Tan is a decorative rule only.
 // =================================================================================================
 
 :root {
-  // ---- Colour: neutral greys and one functional blue. Deliberately unbranded ----
-  --color-bg: #ffffff;
-  --color-surface: #f7f7f8;
+  // ---- The brand ramp ---------------------------------------------------------------------------
+  // The client's six colours, plus two tints mixed from the lightest of them so a page has a ground,
+  // a surface and a band to separate sections with. Referenced by the semantic roles below and,
+  // deliberately, by nothing else: a component that reaches for `--brand-*` has skipped the decision
+  // about what the colour *means*, and that decision is the one a re-theme needs to change.
+  --brand-sand-050: #faf6f1; // mixed  — the page ground
+  --brand-sand-100: #f4ece2; // mixed  — a surface raised off that ground
+  --brand-sand-200: #ecddce; // client — section bands, the quiet fill
+  --brand-tan-300: #ddc2a6; // mixed  — hairline rules
+  --brand-tan-400: #cda887; // client — decorative rules, disabled edges
+  --brand-bronze-500: #9e6d43; // client — boundaries, focus, display accents. Never small text
+  --brand-coffee-600: #714c35; // client — the action colour, and interactive text
+  --brand-olive-700: #47351f; // client — hover and pressed states
+  --brand-ink-900: #340c00; // client — body text, the focus ring, inverse surfaces
+
+  // ---- Surfaces ---------------------------------------------------------------------------------
+  // Warm rather than white. A commerce page is mostly product photography, and a paper-white ground
+  // makes every uncropped product shot look like it is floating; a sand ground seats them.
+  --color-bg: var(--brand-sand-050);
+  --color-surface: var(--brand-sand-100);
+  --color-surface-sunken: var(--brand-sand-200);
   --color-surface-raised: #ffffff;
-  --color-border: #d9d9de;
-  --color-border-strong: #b0b0b8;
+  --color-surface-inverse: var(--brand-ink-900);
+  --color-overlay: rgb(52 12 0 / 55%);
 
-  --color-text: #1a1a1e;
-  --color-text-muted: #5c5c66;
-  --color-text-inverse: #ffffff;
+  // ---- Boundaries -------------------------------------------------------------------------------
+  // Two of them, and the difference is not decorative. `--color-border` separates things that are
+  // already obviously separate — a row from the next row — and may be quiet. `--color-border-strong`
+  // is the edge of a control somebody has to *find*: an input, a select, a secondary button. It
+  // clears 3:1 against every ground this theme puts behind it.
+  --color-border: var(--brand-tan-300);
+  --color-border-strong: var(--brand-bronze-500);
+  --color-border-inverse: rgb(236 221 206 / 24%);
 
-  --color-primary: #2f5bd7; // placeholder only
-  --color-primary-hover: #2447ab;
-  --color-primary-subtle: #eaf0ff;
-  --color-on-primary: #ffffff;
+  // ---- Text -------------------------------------------------------------------------------------
+  --color-text: var(--brand-ink-900); // 16.28:1 on the page ground
+  --color-text-muted: var(--brand-coffee-600); // 7.00:1 — a real colour, not a grey wash
+  --color-text-subtle: var(--brand-olive-700); // 10.86:1 — quieter in tone, not in contrast
+  --color-text-inverse: var(--brand-sand-050);
+  --color-text-on-brand: #ffffff;
 
-  --color-success: #1f7a44;
-  --color-warning: #9a6400;
-  --color-danger: #b3261e;
-  --color-info: #17607d;
-  --color-focus-ring: #2f5bd7;
+  // ---- Primary action ---------------------------------------------------------------------------
+  // Coffee rather than bronze, because white on bronze is 4.45:1 and a primary button carries the
+  // one piece of text on the page that must never be marginal.
+  --color-primary: var(--brand-coffee-600);
+  --color-primary-hover: var(--brand-olive-700);
+  --color-primary-active: var(--brand-ink-900);
+  --color-primary-subtle: var(--brand-sand-100);
+  --color-primary-subtle-hover: var(--brand-sand-200);
+  --color-on-primary: var(--color-text-on-brand);
 
-  // ---- Typography: system stack, zero webfont cost, decided at Step 30 ----
+  // ---- Accent -----------------------------------------------------------------------------------
+  // Bronze, and everything it is allowed to do is non-textual: the rule under a section heading, a
+  // rating star, a 24px icon, a display numeral. See the note at the top of this file.
+  --color-accent: var(--brand-bronze-500);
+  --color-accent-muted: var(--brand-tan-400);
+
+  // ---- Status -----------------------------------------------------------------------------------
+  // Warm-shifted so they sit in the same world as the brand, each with a subtle companion for alert
+  // backgrounds. Every foreground clears 4.5:1 on both the page ground and its own subtle fill.
+  // Status is never signalled by colour alone — the alert also carries an icon and a role, and an
+  // invalid control also carries `aria-invalid`.
+  --color-success: #2f6b45;
+  --color-success-subtle: #e8f0e9;
+  --color-success-text: #1f4d31;
+
+  --color-warning: #8a5512;
+  --color-warning-subtle: #f9eddb;
+  --color-warning-text: #734511;
+
+  --color-danger: #a3281c;
+  --color-danger-subtle: #fbe9e6;
+  --color-danger-text: #8f2318;
+
+  // Desaturated well past the usual notification teal. A saturated one is the only cool thing on a
+  // warm page and reads as a foreign element rather than as information; this keeps the cool cast
+  // that makes it legible *as* a status, without competing with the brand.
+  --color-info: #38585c;
+  --color-info-subtle: #e9eeef;
+  --color-info-text: #2f4a4d;
+
+  // ---- Commerce ---------------------------------------------------------------------------------
+  // Price is a role of its own because it is the most-read number on the page, and it must not
+  // inherit whatever a card happened to decide its body colour was.
+  --color-price: var(--brand-ink-900);
+  --color-price-was: var(--brand-coffee-600);
+  --color-savings: #2f6b45;
+
+  // ---- Focus ------------------------------------------------------------------------------------
+  // Ink, not the primary. A ring in the primary colour disappears the moment it is drawn around a
+  // primary button — the one control most likely to be reached by keyboard. Ink clears 13:1 against
+  // every ground in this theme, and the 2px offset in `_base.scss` keeps the ring on the page rather
+  // than on the control it is marking.
+  --color-focus-ring: var(--brand-ink-900);
+  --color-focus-ring-inverse: var(--brand-sand-200);
+
+  // ---- Typography -------------------------------------------------------------------------------
+  // Two families, one job each. Fraunces sets the brand's voice on headings, the wordmark and
+  // display numerals; it is self-hosted, latin-subset, one weight, 35KB, and its `@font-face` rule
+  // lives in `_typography.scss` beside the fallback that has to hold the layout until it lands.
+  //
+  // The interface stays on the system stack. That is the single largest thing this theme does *not*
+  // spend against the 2.5s LCP budget (docs/09-nfr-testing-observability.md): it renders on the
+  // first frame, and on a mid-range Android it is the face the OS already has hinted for that screen.
+  // `Fraunces Fallback` is not a font anybody has — it is the metric-adjusted alias declared in
+  // `_typography.scss`, and it sits second so the swap from fallback to real face does not move the
+  // heading. Georgia and the rest are what a browser too old for `size-adjust` gets.
+  --font-display: 'Fraunces', 'Fraunces Fallback', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -53,14 +145,36 @@
   --text-3xl: 1.875rem;
   --text-4xl: 2.25rem;
 
-  --leading-tight: 1.25;
+  // Display sizes are fluid, because a 2.25rem page title that is right on a 1280px desktop is a
+  // four-line wrap on a 360px phone. `clamp` removes the breakpoint that would otherwise exist for
+  // no reason other than to change a font size.
+  --text-display-sm: clamp(1.5rem, 1.25rem + 1.2vw, 1.875rem);
+  --text-display-md: clamp(1.875rem, 1.5rem + 1.8vw, 2.5rem);
+  --text-display-lg: clamp(2.25rem, 1.7rem + 2.6vw, 3.25rem);
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
   --leading-normal: 1.5;
   --leading-relaxed: 1.7;
+
   --weight-regular: 400;
   --weight-medium: 500;
+  --weight-semibold: 600;
   --weight-bold: 700;
+  --weight-display: 600; // the only weight of Fraunces that ships
 
-  // ---- Spacing: 4px base ----
+  // Tracking. A serif at display size needs pulling in slightly or it reads as loose; a small-caps
+  // label needs the opposite. Both are tokens so a re-theme onto a different face can change them
+  // without touching a component.
+  --tracking-display: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
+
+  // The measure. 65-75 characters is the readable range; prose set without a limit gets a
+  // 90-character line on a desktop and loses the reader between one line and the next.
+  --measure: 68ch;
+
+  // ---- Spacing: 4px base ------------------------------------------------------------------------
   --space-0: 0;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -74,17 +188,31 @@
   --space-16: 4rem;
   --space-20: 5rem;
 
-  // ---- Radius / elevation: minimal on purpose ----
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 8px;
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  // The vertical gap between one band of a page and the next, as one token, so that home, category
+  // and product pages breathe identically instead of each picking a number.
+  --space-section: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
 
-  // ---- Layout ----
+  // ---- Radius -----------------------------------------------------------------------------------
+  // Softer than the placeholder's 2/4/8, which is most of what makes this read as "home goods"
+  // rather than "enterprise console". Not softer than this: a 24px radius on a product card starts
+  // cropping the photograph inside it.
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  // ---- Elevation --------------------------------------------------------------------------------
+  // Warm shadows. A neutral black shadow over a sand ground reads as grey dirt; these are cast in
+  // the ramp's own ink, which is what makes them look like shade rather than smudge.
+  --shadow-sm: 0 1px 2px rgb(52 12 0 / 6%);
+  --shadow-md: 0 2px 4px rgb(52 12 0 / 5%), 0 6px 16px rgb(52 12 0 / 7%);
+  --shadow-lg: 0 4px 8px rgb(52 12 0 / 5%), 0 16px 40px rgb(52 12 0 / 10%);
+  --shadow-inset: inset 0 1px 2px rgb(52 12 0 / 6%);
+
+  // ---- Layout -----------------------------------------------------------------------------------
   --container-max: 1280px;
+  --container-narrow: 46rem; // one column of prose, or a form
   --header-height: 56px; // mobile
   --bottom-bar-height: 60px;
   --z-header: 100;
@@ -92,12 +220,14 @@
   --z-modal: 300;
   --z-toast: 400;
 
-  // ---- Motion: minimal, and always respects prefers-reduced-motion ----
+  // ---- Motion -----------------------------------------------------------------------------------
   --duration-fast: 120ms;
   --duration-base: 200ms;
+  --duration-slow: 320ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  // ---- Touch: the floor, not a suggestion (10-design-system-placeholder.md §4) ----
+  // ---- Touch: the floor, not a suggestion (docs/10-design-system.md §4) --------------------------
   --touch-target-min: 44px;
 }
 
@@ -107,5 +237,6 @@
   :root {
     --duration-fast: 0ms;
     --duration-base: 0ms;
+    --duration-slow: 0ms;
   }
 }

@@ -372,8 +372,14 @@ public sealed class DegradedDeliveryTests(KlaraHomeSchemaFixture fixture) : Iden
     {
         SkipWithoutDocker();
 
-        // The flags ship on, so the default path is the one Step 7 shipped. This is the regression
-        // guard for "I do not want any of the existing functionality disrupted".
+        // The paid-provider flags ship on, so their path is the one Step 7 shipped. This is the
+        // regression guard for "I do not want any of the existing functionality disrupted".
+        //
+        // Mobile-OTP is the exception and is turned on explicitly: it now ships *off*, because it
+        // was withdrawn from the storefront rather than merely left unprovisioned. Everything below
+        // still has to work when an operator turns it back on, which is what this asserts.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
+
         using var client = CreateClient();
         var mobile = NewMobile();
 

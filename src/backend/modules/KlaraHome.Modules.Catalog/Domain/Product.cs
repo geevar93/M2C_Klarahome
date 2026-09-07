@@ -47,8 +47,16 @@ internal enum ProductStatus
 /// disagree about its HSN code, and letting them would produce two different tax treatments of one
 /// purchase.
 /// </para>
+/// <para>
+/// <see cref="IPlatformShared"/> is what makes the shared catalogue real rather than merely
+/// intended. Vendor scoping is otherwise "your rows and nobody else's", the platform's included,
+/// and under that rule a seller could never see the product the platform published — which is the
+/// product several sellers are supposed to compete over. This table opts out of that half of the
+/// rule; <c>CatalogScope.CanWrite</c> still refuses the write.
+/// </para>
 /// </remarks>
-internal sealed class Product : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISoftDeletable, IVendorScoped
+internal sealed class Product
+    : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISoftDeletable, IVendorScoped, IPlatformShared
 {
     private Product(Guid id, string name, string slug, Guid categoryId)
         : base(id)

@@ -261,7 +261,7 @@ internal sealed class CreateCommissionPlanCommandHandler(
 
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var code = command.Code.Trim().ToLowerInvariant();
@@ -323,7 +323,7 @@ internal sealed class UpdateCommissionPlanCommandHandler(
 
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var plan = await context.CommissionPlans

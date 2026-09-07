@@ -3,10 +3,24 @@ using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Persistence;
 using KlaraHome.Infrastructure.Persistence.Migrations;
+using KlaraHome.Modules.Carts;
+using KlaraHome.Modules.Catalog;
+using KlaraHome.Modules.Content;
 using KlaraHome.Modules.Identity;
+using KlaraHome.Modules.Inventory;
 using KlaraHome.Modules.Media;
 using KlaraHome.Modules.Notifications;
+using KlaraHome.Modules.Orders;
+using KlaraHome.Modules.Payments;
 using KlaraHome.Modules.Platform;
+using KlaraHome.Modules.Pricing;
+using KlaraHome.Modules.Reporting;
+using KlaraHome.Modules.Returns;
+using KlaraHome.Modules.Reviews;
+using KlaraHome.Modules.Search;
+using KlaraHome.Modules.Settlements;
+using KlaraHome.Modules.Shipping;
+using KlaraHome.Modules.Vendors;
 using KlaraHome.SharedKernel.Time;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +61,20 @@ public sealed class KlaraHomeSchemaFixture : IAsyncLifetime
         typeof(IdentityModule).Assembly,
         typeof(MediaModule).Assembly,
         typeof(NotificationsModule).Assembly,
+        typeof(VendorsModule).Assembly,
+        typeof(CatalogModule).Assembly,
+        typeof(InventoryModule).Assembly,
+        typeof(PricingModule).Assembly,
+        typeof(CartsModule).Assembly,
+        typeof(OrdersModule).Assembly,
+        typeof(PaymentsModule).Assembly,
+        typeof(ShippingModule).Assembly,
+        typeof(ReturnsModule).Assembly,
+        typeof(SettlementsModule).Assembly,
+        typeof(SearchModule).Assembly,
+        typeof(ContentModule).Assembly,
+        typeof(ReviewsModule).Assembly,
+        typeof(ReportingModule).Assembly,
     ];
 
     /// <summary>The tenant code every test in this collection runs as.</summary>

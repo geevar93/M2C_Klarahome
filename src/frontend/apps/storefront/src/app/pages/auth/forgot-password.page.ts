@@ -121,8 +121,8 @@ import { describeError } from '../../core/describe-error';
         </form>
 
         <p class="foot">
-          Signing in with a code instead?
-          <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Use your mobile number</a>
+          Remembered it?
+          <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Back to sign in</a>
         </p>
       }
     </div>

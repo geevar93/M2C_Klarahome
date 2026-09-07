@@ -1,8 +1,10 @@
 # Klara Home - local development environment (Step 2)
 #
 # Brings up every backing service the platform needs, matching what will run on the VPS,
-# plus the API container (Step 3) and the one-shot migrator job (Step 4). The worker,
-# storefront and admin containers arrive with the steps that give them something to do.
+# plus the API (Step 3), the worker (Step 8), the one-shot migrator job (Step 4) and the two
+# Angular apps - the server-rendered storefront (Steps 23-25) and the admin back office
+# (Steps 26-28). The whole product is now here: `up` gives a browsable shop and a working
+# back office, not just an API to curl.
 #
 #   Up:    ./infra/scripts/dev.ps1 up          (Windows)
 #          ./infra/scripts/dev.sh up           (bash/WSL2)
@@ -48,7 +50,25 @@ services:
       # Production (Step 32) puts a socket proxy in front of this - see the Parking Lot.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - edge
+      edge:
+        # The public hostnames, resolved to Traefik from INSIDE the compose
+        # network as well as from the host.
+        #
+        # The storefront renders on the server, and the URL it fetches has to be
+        # the one the browser will fetch, or the transfer cache the browser reads
+        # its data out of misses every entry. So the renderer asks for
+        # `api.klarahome.localhost` - which the host resolves through the
+        # *.localhost convention, and which a container resolves through nothing
+        # at all: Docker's DNS answers NXDOMAIN, `fetch` fails, and every page
+        # falls back to an empty shell with `NETWORK_UNAVAILABLE` in the log.
+        #
+        # An alias is the smallest fix that keeps one URL for both halves. On the
+        # VPS (Step 32) real DNS does this and the aliases go away.
+        aliases:
+          - ${DEV_DOMAIN:-klarahome.localhost}
+          - www.${DEV_DOMAIN:-klarahome.localhost}
+          - api.${DEV_DOMAIN:-klarahome.localhost}
+          - admin.${DEV_DOMAIN:-klarahome.localhost}
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
@@ -645,6 +665,121 @@ services:
           memory: 512M
 
   # ---------------------------------------------------------------------------
+  # Storefront - the shop, server-rendered (Steps 23-25).
+  #
+  # A Node process, not a static server: the storefront renders on the server so
+  # a crawler and a slow connection both get a page with its price and its
+  # structured data already in the HTML.
+  #
+  # Two variables here are not optional, and both fail in ways that only appear
+  # once the process is behind a real hostname:
+  #   * KH_ALLOWED_HOSTS - Angular's server engine answers 400 to a Host header
+  #     it does not recognise, and the default list is localhost only. Behind
+  #     Traefik every request carries the site's hostname, so it must be listed.
+  #   * KH_TRUST_PROXY_HEADERS - true because Traefik terminates TLS and is the
+  #     only thing that can reach this process. Without it the renderer believes
+  #     it is serving http on port 4000 and writes that into every absolute URL.
+  # ---------------------------------------------------------------------------
+  storefront:
+    <<: *defaults
+    build:
+      context: ../..
+      dockerfile: infra/docker/storefront.Dockerfile
+    image: klarahome/storefront:${FRONTEND_IMAGE_TAG:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-storefront
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # The browser's copy of these values is written to config.json at start-up;
+      # the renderer reads them from here directly. Same names on both sides,
+      # because the two must agree - a page rendered against one API and
+      # hydrated against another is a mismatch with no useful error message.
+      KH_API_BASE_URL: ${KH_API_BASE_URL:-https://api.${DEV_DOMAIN:-klarahome.localhost}}
+      KH_TENANT_CODE: ${KH_TENANT_CODE:-klarahome}
+      KH_LOCALE: ${KH_LOCALE:-en-IN}
+      KH_TIME_ZONE: ${KH_TIME_ZONE:-Asia/Kolkata}
+      KH_ENVIRONMENT: ${KH_ENVIRONMENT:-local}
+      KH_IMAGE_BASE_URL: ${KH_IMAGE_BASE_URL:-}
+      KH_ANALYTICS_PROVIDER: ${KH_ANALYTICS_PROVIDER:-}
+      KH_ANALYTICS_MEASUREMENT_ID: ${KH_ANALYTICS_MEASUREMENT_ID:-}
+      KH_ALLOWED_HOSTS: ${KH_ALLOWED_HOSTS:-${DEV_DOMAIN:-klarahome.localhost},www.${DEV_DOMAIN:-klarahome.localhost},localhost,127.0.0.1}
+      KH_TRUST_PROXY_HEADERS: ${KH_TRUST_PROXY_HEADERS:-true}
+      # DEVELOPMENT ONLY. It must never be set in staging or production.
+      #
+      # The renderer fetches the API over Traefik's own hostname - the same URL
+      # the browser uses, so a document rendered on the server and the transfer
+      # cache the browser reads it out of are keyed alike. In this stack Traefik
+      # serves a self-signed certificate: a browser asks the developer to accept
+      # it once, and Node simply refuses the connection, so every server-rendered
+      # page would fall back to an empty shell with nothing in the log but a
+      # failed fetch.
+      #
+      # The alternative - pointing the renderer at http://api:8080 - trades this
+      # for a quieter problem: the two halves would fetch different URLs, every
+      # transfer-cache entry would miss, and the browser would re-request on
+      # hydration everything the server had already fetched.
+      #
+      # Step 32 deploys behind a real certificate and this line goes away.
+      NODE_TLS_REJECT_UNAUTHORIZED: ${STOREFRONT_NODE_TLS_REJECT_UNAUTHORIZED:-0}
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      - traefik.http.routers.storefront.rule=Host(`${DEV_DOMAIN:-klarahome.localhost}`) || Host(`www.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.storefront.entrypoints=websecure
+      - traefik.http.routers.storefront.tls=true
+      - traefik.http.routers.storefront.middlewares=security-headers@file,compression@file
+      - traefik.http.services.storefront.loadbalancer.server.port=4000
+
+  # ---------------------------------------------------------------------------
+  # Admin - the back office (Steps 26-28).
+  #
+  # Static files behind nginx. The app talks to the API from the browser,
+  # cross-origin through the allow-list the API already declares
+  # (Cors__AllowedOrigins__1 above), so this container proxies nothing and holds
+  # no second copy of the API's address.
+  # ---------------------------------------------------------------------------
+  admin:
+    <<: *defaults
+    build:
+      context: ../..
+      dockerfile: infra/docker/admin.Dockerfile
+    image: klarahome/admin:${FRONTEND_IMAGE_TAG:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-admin
+    environment:
+      KH_API_BASE_URL: ${KH_API_BASE_URL:-https://api.${DEV_DOMAIN:-klarahome.localhost}}
+      KH_TENANT_CODE: ${KH_TENANT_CODE:-klarahome}
+      KH_LOCALE: ${KH_LOCALE:-en-IN}
+      KH_TIME_ZONE: ${KH_TIME_ZONE:-Asia/Kolkata}
+      KH_ENVIRONMENT: ${KH_ENVIRONMENT:-local}
+      KH_IMAGE_BASE_URL: ${KH_IMAGE_BASE_URL:-}
+      KH_ANALYTICS_PROVIDER: ${KH_ANALYTICS_PROVIDER:-}
+      KH_ANALYTICS_MEASUREMENT_ID: ${KH_ANALYTICS_MEASUREMENT_ID:-}
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME:-klarahome-dev}-edge
+      - traefik.http.routers.admin.rule=Host(`admin.${DEV_DOMAIN:-klarahome.localhost}`)
+      - traefik.http.routers.admin.entrypoints=websecure
+      - traefik.http.routers.admin.tls=true
+      - traefik.http.routers.admin.middlewares=security-headers@file,compression@file
+      - traefik.http.services.admin.loadbalancer.server.port=8080
+
+
+  # ---------------------------------------------------------------------------
   # Migrator - one-shot database migration job (Step 4).
   # Applies every module's pending EF Core migrations, runs the idempotent
   # seeders, and exits. The API never migrates on startup.
@@ -699,6 +834,11 @@ services:
       Encryption__CurrentKeyId: ${ENCRYPTION_KEY_ID:-dev}
       Encryption__Keys__dev: ${ENCRYPTION_KEY:-a2xhcmFob21lLWRldmVsb3BtZW50LW9ubHkta2V5ISE=}
       Database__RunSeeders: ${DATABASE_RUN_SEEDERS:-true}
+      # A small demonstration catalogue - one seller, two category branches, three brands, ten
+      # products with live offers - so a freshly migrated stack has something to look at. Off by
+      # default, refused outright in Production, and idempotent: every row it writes is keyed on a
+      # DEMO-/demo- prefix, so re-running adds only what is missing.
+      DemoData__SeedCatalog: ${DEMO_SEED_CATALOG:-false}
       Observability__ServiceName: klarahome-migrator
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
     volumes:

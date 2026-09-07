@@ -494,7 +494,7 @@ namespace KlaraHome.Modules.Content.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_pages_type", "type IN ('Home', 'Landing', 'Static', 'Legal', 'Blog')");
 
-                            t.HasCheckConstraint("ck_pages_version", "version >= 1");
+                            t.HasCheckConstraint("ck_pages_version", "version >= 0");
                         });
                 });
 

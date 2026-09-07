@@ -43,9 +43,18 @@ internal static class VendorErrors
     public static Error NotReady(string because)
         => Error.Validation("VENDOR_NOT_READY", because);
 
-    /// <summary>A vendor caller tried to act on a seller other than their own.</summary>
-    public static Error OutOfScope { get; } =
-        Error.Validation("VENDOR_SCOPE", "You can only do that within your own organisation.");
+    /// <summary>
+    /// The operation belongs to platform staff, whatever roles the caller holds.
+    /// </summary>
+    /// <remarks>
+    /// A <em>permission</em> refusal, not a scope one, and 403 is what
+    /// <c>docs/04-api-specification.md</c> §1 gives it: the caller is authenticated and the
+    /// resource they named is their own, but approving yourself, verifying your own KYC or
+    /// choosing what you are charged are not things a seller does. It leaks nothing, because the
+    /// only resource involved is one they can already see.
+    /// </remarks>
+    public static Error PlatformOnly { get; } =
+        Error.Forbidden("VENDOR_PLATFORM_ONLY", "Only platform staff can do that.");
 
     /// <summary>A seller must keep one owner and one primary bank account.</summary>
     /// <param name="what">What cannot be removed.</param>
@@ -93,9 +102,12 @@ internal sealed class VendorScope(
     {
         if (caller.VendorId is { } scoped)
         {
+            // 404, not 403 and not 422. Naming somebody else's seller must be answered exactly
+            // as naming an invented one is, or the difference between the two answers is itself
+            // the disclosure (docs/07-security-compliance.md §2).
             return requested is null || requested == scoped
                 ? Result.Success(scoped)
-                : Result.Failure<Guid>(VendorErrors.OutOfScope);
+                : Result.Failure<Guid>(VendorErrors.NotFound);
         }
 
         // Platform staff must name a seller. "Mine" is not a thing they have.

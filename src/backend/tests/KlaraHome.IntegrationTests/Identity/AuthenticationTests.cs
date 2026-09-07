@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using KlaraHome.IntegrationTests.Database;
 using KlaraHome.Modules.Identity.Domain;
+using KlaraHome.Modules.Identity.Infrastructure;
 
 namespace KlaraHome.IntegrationTests.Identity;
 
@@ -17,6 +18,11 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     public async Task A_customer_registers_and_signs_in_with_a_mobile_number_and_a_one_time_code()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var mobile = NewMobile();
@@ -61,6 +67,11 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     public async Task The_same_number_signs_the_same_customer_back_in_rather_than_making_a_second_account()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var first = CreateClient();
         var mobile = NewMobile();
@@ -318,6 +329,11 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     {
         SkipWithoutDocker();
 
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
+
         using var client = CreateClient();
         var mobile = NewMobile();
 
@@ -347,6 +363,11 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     public async Task One_number_cannot_be_used_to_send_itself_an_unlimited_number_of_codes()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var mobile = NewMobile();
@@ -378,6 +399,11 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     public async Task Asking_for_a_code_again_invalidates_the_previous_one()
     {
         SkipWithoutDocker();
+
+        // Mobile-OTP sign-in ships off: it was withdrawn from the storefront, not merely left
+        // unprovisioned (IdentityFeatures.MobileOtpLogin). The capability is still supported
+        // behind the flag, so the test that covers it turns it on rather than assuming a default.
+        Features[IdentityFeatures.MobileOtpLogin] = true;
 
         using var client = CreateClient();
         var mobile = NewMobile();

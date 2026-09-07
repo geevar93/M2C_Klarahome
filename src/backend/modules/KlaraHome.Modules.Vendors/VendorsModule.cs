@@ -124,6 +124,10 @@ public sealed class VendorsModule : IModule
             provider => provider.GetRequiredService<Infrastructure.Events.VendorRatingHandlers>());
 
         services.AddDataSeeder<CommissionPlanSeeder>();
+
+        // The seller the demonstration catalogue is offered by. Registered only outside Production
+        // and only when DemoData:SeedCatalog is on — see DemoDataOptions for what that fences.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoVendorSeeder>(configuration);
     }
 
     /// <inheritdoc />

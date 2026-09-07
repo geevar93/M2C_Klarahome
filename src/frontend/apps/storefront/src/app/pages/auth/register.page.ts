@@ -15,6 +15,7 @@ import {
 
 import { describeError } from '../../core/describe-error';
 import { SignInFlow } from '../../core/sign-in.flow';
+import { SocialSignIn } from './social-sign-in';
 
 /**
  * Create an account — `/auth/register`.
@@ -23,7 +24,8 @@ import { SignInFlow } from '../../core/sign-in.flow';
  * keyed on, a password twice because there is no way back from a typo in one that is masked, and a
  * mobile number because a delivery partner needs to ring somebody. The number is optional here — it
  * is asked for again, and required, on the address the order is delivered to, and demanding it twice
- * on a signup form is how people leave.
+ * on a signup form is how people leave. It is **only** a contact number now: mobile-OTP sign-in has
+ * been withdrawn (see `LoginPage`), so nothing about the account is keyed on it.
  *
  * **Marketing consent is opt-in and unticked.** A pre-ticked box is not consent under the DPDP Act,
  * and the API records when it was given (Step 7's `marketingConsentAt`).
@@ -34,18 +36,25 @@ import { SignInFlow } from '../../core/sign-in.flow';
  */
 @Component({
   selector: 'kh-register-page',
-  imports: [Alert, Button, Checkbox, Control, Field, RouterLink],
+  imports: [Alert, Button, Checkbox, Control, Field, RouterLink, SocialSignIn],
   template: `
     <div class="panel">
       <h1>Create an account</h1>
       <p class="lead">
-        Or <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">sign in with a code</a> — no
-        password needed.
+        Already have one?
+        <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Sign in</a>.
       </p>
 
       @if (failure(); as message) {
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
+
+      <!--
+        Above the form, because it is both the faster route and the one that arrives with the
+        address already verified — a stronger assertion than our own verification link would have
+        been (ADR-014). It renders nothing when no provider is configured.
+      -->
+      <kh-social-sign-in [returnUrl]="returnUrl()" />
 
       <form (submit)="submit($event)" novalidate>
         <kh-field label="Email address" for="reg-email" [error]="form.fields.email.error()">

@@ -5,9 +5,8 @@
 // because it navigates, and a component that rendered one of them would force the wrong element
 // somewhere. The `khButton` directive applies these classes; nothing else should use them directly.
 //
-// Every value is a token. The 44px floor is the touch target from
-// docs/10-design-system-placeholder.md §4, and it is a floor rather than a size — the `sm` variant
-// keeps the hit area and only reduces the type.
+// Every value is a token. The 44px floor is the touch target from docs/10-design-system.md §4, and
+// it is a floor rather than a size — the `sm` variant keeps the hit area and only reduces the type.
 
 .kh-button {
   display: inline-flex;
@@ -20,13 +19,20 @@
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-standard);
+
+  // Colour and shadow only. A button that moves on hover is a button that moves under the finger of
+  // somebody who has already started tapping it.
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
 
   &:disabled,
   &[aria-disabled='true'] {
@@ -42,9 +48,19 @@
 .kh-button--primary {
   background: var(--color-primary);
   color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
 
   &:hover:not(:disabled):not([aria-disabled='true']) {
     background: var(--color-primary-hover);
+    box-shadow: var(--shadow-md);
+  }
+
+  // Pressed is darker and flatter, which is the whole of the affordance: the button sinks rather
+  // than lifting. On a touch screen this is the only state feedback there is, because there was
+  // never a hover.
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-primary-active);
+    box-shadow: none;
   }
 }
 
@@ -54,7 +70,12 @@
   color: var(--color-text);
 
   &:hover:not(:disabled):not([aria-disabled='true']) {
-    background: var(--color-surface);
+    background: var(--color-primary-subtle);
+    border-color: var(--color-primary);
+  }
+
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-primary-subtle-hover);
   }
 }
 
@@ -65,11 +86,31 @@
   &:hover:not(:disabled):not([aria-disabled='true']) {
     background: var(--color-primary-subtle);
   }
+
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-primary-subtle-hover);
+  }
 }
 
 .kh-button--danger {
   background: var(--color-danger);
-  color: var(--color-text-inverse);
+  color: var(--color-text-on-brand);
+  box-shadow: var(--shadow-sm);
+
+  &:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--color-danger-text);
+  }
+}
+
+// An action on an inverse band — the footer, a hero laid over the ink surface. It cannot use the
+// primary variant there, because coffee on ink is 3.2:1 and the label would go with it.
+.kh-button--inverse {
+  background: var(--color-text-inverse);
+  color: var(--color-text);
+
+  &:hover:not(:disabled):not([aria-disabled='true']) {
+    background: var(--brand-sand-200);
+  }
 }
 
 // ---- Sizes -------------------------------------------------------------------------------------

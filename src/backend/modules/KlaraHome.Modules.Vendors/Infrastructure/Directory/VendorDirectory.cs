@@ -43,6 +43,23 @@ internal sealed class VendorDirectory(VendorsDbContext context) : IVendorDirecto
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async ValueTask<VendorSummary?> FindByCodeAsync(
+        string code,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
+        var normalised = code.Trim();
+
+        return await context.Vendors
+            .AsNoTracking()
+            .Where(vendor => EF.Functions.ILike(vendor.Code, normalised))
+            .Select(Projection)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyDictionary<Guid, VendorSummary>> FindManyAsync(
         IReadOnlyCollection<Guid> vendorIds,
         CancellationToken cancellationToken = default)

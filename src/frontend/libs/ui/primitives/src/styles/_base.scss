@@ -1,8 +1,9 @@
 // Global base styles.
 //
-// A reset, the accessibility floor, and nothing else. Everything visual is a token, so this file
-// changes at Step 30 only if the design needs different *structure* — which is the test for
-// whether Step 30 has stayed a token swap.
+// A reset, the accessibility floor, and the handful of structural classes the whole product shares
+// — the card, the page band, the section rhythm. Everything visual in here is a token, which is what
+// kept Step 30 a token swap: the classes added at Step 30 are the ones the design needed new
+// *structure* for, and they are listed in docs/10-design-system.md §5.
 
 *,
 *::before,
@@ -65,7 +66,28 @@ button {
 
 a {
   color: var(--color-primary);
-  text-underline-offset: 2px;
+  text-decoration-color: var(--color-accent-muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--duration-fast) var(--ease-standard);
+
+  &:hover {
+    text-decoration-color: currentcolor;
+  }
+}
+
+// Selection in the brand's own colours. The browser default is a saturated blue that looks like a
+// bug on a sand ground.
+::selection {
+  background: var(--brand-sand-200);
+  color: var(--color-text);
+}
+
+// A horizontal rule is a hairline, not the browser's inset 3D groove.
+hr {
+  border: 0;
+  border-block-start: 1px solid var(--color-border);
+  margin-block: var(--space-6);
 }
 
 // ---- Focus -------------------------------------------------------------------------------------
@@ -78,7 +100,7 @@ a {
 }
 
 // ---- Touch targets -----------------------------------------------------------------------------
-// 44 × 44 is the floor from docs/10-design-system-placeholder.md §4, applied to the controls that
+// 44 × 44 is the floor from docs/10-design-system.md §4, applied to the controls that
 // most often fall below it. A component that needs a visually smaller control pads it out rather
 // than shrinking the hit area.
 @media (pointer: coarse) {
@@ -127,17 +149,21 @@ main:focus {
 }
 
 // ---- Placeholder media -------------------------------------------------------------------------
-// A grey box at the right aspect ratio, so layout and CLS behave exactly as they will with real
-// images (docs/10-design-system-placeholder.md §1.3). No illustrations before Step 30.
+// Still a box at a fixed aspect ratio, so layout and CLS behave exactly as they will once real
+// photography lands — but a warm one now, tinted from the ramp rather than grey, because a grey
+// rectangle in the middle of a sand page reads as a broken image rather than as a pending one.
 .kh-placeholder-media {
   display: grid;
   place-items: center;
   aspect-ratio: 1 / 1;
-  background: var(--color-surface);
+  background:
+    linear-gradient(135deg, var(--brand-sand-100) 0%, var(--brand-sand-200) 100%);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-3);
 }
 
 // ---- Skeletons ---------------------------------------------------------------------------------
@@ -154,6 +180,62 @@ main:focus {
   }
 }
 
+// ---- Section rhythm ----------------------------------------------------------------------------
+// The gap between one band of a page and the next, as a class, so home, category and product pages
+// breathe identically instead of each page picking its own margin.
+.kh-section {
+  margin-block: var(--space-section);
+}
+
+// A band that is tinted rather than spaced — the way a home page separates "shop by room" from the
+// grid above it. Full-bleed, so it needs its own inner container.
+.kh-band {
+  background: var(--color-surface);
+  padding-block: var(--space-section);
+}
+
+.kh-band--sunken {
+  background: var(--color-surface-sunken);
+}
+
+.kh-band--inverse {
+  background: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+
+  a {
+    color: var(--brand-tan-400);
+  }
+
+  // The ink ring is invisible on an ink band, so the inverse surfaces get the sand one.
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline-color: var(--color-focus-ring-inverse);
+  }
+}
+
+// ---- Cards ---------------------------------------------------------------------------------------
+// The one surface treatment the whole product uses, so a product card, an order summary and an
+// admin panel are recognisably the same object.
+.kh-card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+// A card that is a link or a button in its own right. The lift is `box-shadow` and `border-color`
+// only: a `transform: scale()` on hover shifts every neighbour in a grid and, on a touch screen
+// where hover sticks after a tap, leaves the card enlarged until something else is touched.
+.kh-card--interactive {
+  transition:
+    box-shadow var(--duration-base) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard);
+
+  &:hover {
+    border-color: var(--color-accent-muted);
+    box-shadow: var(--shadow-md);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kh-skeleton {
     animation: none;
@@ -166,4 +248,10 @@ main:focus {
   max-width: var(--container-max);
   margin-inline: auto;
   padding-inline: var(--space-4);
+}
+
+// One column: a form, a policy page, an order confirmation. Narrower than the grid container
+// because a 1280px-wide login form is not a login form anybody wants to fill in.
+.kh-container--narrow {
+  max-width: var(--container-narrow);
 }

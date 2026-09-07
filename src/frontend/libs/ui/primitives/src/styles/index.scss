@@ -1,9 +1,12 @@
 // The entry point both apps import from their global stylesheet.
 //
-// Order matters: tokens declare the custom properties that `_base.scss` then uses, and a base
-// rule that referenced a token before it was declared would silently resolve to nothing.
+// Order matters twice over. Tokens declare the custom properties that everything below then uses,
+// and a rule that referenced a token before it was declared would silently resolve to nothing.
+// Typography comes after base because it re-states the heading rules base sets — the display face
+// applies to h1-h3 and deliberately does not apply to h4-h6, and that distinction has to win.
 @forward 'breakpoints';
 @use 'tokens';
 @use 'base';
+@use 'typography';
 @use 'button';
 @use 'control';

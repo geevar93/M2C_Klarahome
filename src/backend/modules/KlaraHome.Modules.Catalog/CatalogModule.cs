@@ -2,6 +2,7 @@ using KlaraHome.Contracts.Catalog;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
+using KlaraHome.Infrastructure.Persistence.Seeding;
 using KlaraHome.Infrastructure.Storage;
 using KlaraHome.Modules.Catalog.Application.Import;
 using KlaraHome.Modules.Catalog.Application.Products;
@@ -114,6 +115,10 @@ public sealed class CatalogModule : IModule
             KlaraHome.Infrastructure.Persistence.Outbox.IIntegrationEventHandler<
                 Contracts.Reviews.ProductRatingChanged>>(
             provider => provider.GetRequiredService<ReviewRatingHandlers>());
+
+        // The demonstration catalogue. Registered only outside Production and only when
+        // DemoData:SeedCatalog is on — see DemoDataOptions for what that fences.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoCatalogSeeder>(configuration);
 
         services.AddHostedService<CatalogJobDispatcher>();
     }

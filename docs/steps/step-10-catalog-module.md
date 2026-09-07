@@ -118,6 +118,19 @@ means "leave what is there", so a two-column price file cannot wipe a catalogue'
 export writes the importer's own column layout, streamed in keyset pages, so the round trip is
 genuinely a round trip; `GET /admin/products/import-template` hands out the header row.
 
+> **Corrected at Step 29.** This section originally said "the first row for a product creates it;
+> later rows for the same slug add variants to it". It never could: the template has no attribute
+> columns, so every variant an import creates carries the same "no options" combination hash, and
+> the unique index over `(tenant, product, attribute_hash)` refuses the second row. One SKU per
+> product row is what the importer actually loads. The second row is now refused with a message a
+> merchandiser can act on; attribute columns are a Parking Lot item.
+>
+> Two further claims here needed code rather than a correction, and got it at Step 29: a genuine
+> two-column price file (`sku,mrp`) was **rejected**, because the product was resolved by slug only
+> and a row with no name and no slug named nothing — it now falls back to the SKU's own variant;
+> and a row the database refused **detached the job** along with the failed entity, so the report
+> was never written and the job sat in `Running` for ever, unreportable and never re-claimed.
+
 ### Published contract and events
 
 - **`IProductCatalog`** (`KlaraHome.Contracts.Catalog`) — `FindListingAsync` / `FindListingsAsync`

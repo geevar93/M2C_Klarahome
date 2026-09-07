@@ -225,17 +225,41 @@ public static class ModelConventions
     /// vendor user sees exactly their own.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Like the tenant filter this closes over the context rather than the id, so the value is a
     /// query parameter read per request instead of being baked into the cached model. The null
-    /// check is on the <em>caller's</em> scope, never on the row's: a row with no vendor belongs
-    /// to the platform, and a vendor user has no business seeing it either.
+    /// check is on the <em>caller's</em> scope, never on the row's: a row with no vendor belongs to
+    /// the platform, and a vendor user has no business seeing it either.
+    /// </para>
+    /// <para>
+    /// Unless the table says otherwise. <see cref="IPlatformShared"/> is the one exception, and it
+    /// is declared per table rather than inferred from the column being nullable: a shared
+    /// catalogue only works if every seller can see the product the platform published, whereas a
+    /// platform warehouse or a staff role assignment is nobody else's business. Widening the read
+    /// says nothing about the write — that is the owning module's rule, and the catalogue's lives
+    /// in <c>CatalogScope.CanWrite</c>.
+    /// </para>
     /// </remarks>
     private static void ApplyVendorFilter<TEntity>(ModelBuilder modelBuilder, KlaraHomeDbContext context)
         where TEntity : class, IVendorScoped
-        => modelBuilder.Entity<TEntity>()
+    {
+        if (typeof(IPlatformShared).IsAssignableFrom(typeof(TEntity)))
+        {
+            modelBuilder.Entity<TEntity>()
+                .HasQueryFilter(
+                    VendorFilter,
+                    entity => context.VendorId == null
+                              || entity.VendorId == context.VendorId
+                              || entity.VendorId == null);
+
+            return;
+        }
+
+        modelBuilder.Entity<TEntity>()
             .HasQueryFilter(
                 VendorFilter,
                 entity => context.VendorId == null || entity.VendorId == context.VendorId);
+    }
 
     /// <summary>
     /// <c>timestamptz</c> for every instant. Postgres normalises it to UTC and Npgsql round-trips

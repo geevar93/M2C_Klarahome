@@ -2,6 +2,7 @@ using KlaraHome.Contracts.Inventory;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
+using KlaraHome.Infrastructure.Persistence.Seeding;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Inventory.Endpoints;
 using KlaraHome.Modules.Inventory.Infrastructure;
@@ -97,6 +98,10 @@ public sealed class InventoryModule : IModule
 
         // Both loops are off in the API and on in the worker, exactly as the catalogue job runner
         // and the notification dispatcher are configured.
+        // Stock behind the demonstration offers, without which every demo product renders as
+        // unavailable. Registered only outside Production and only when DemoData:SeedCatalog is on.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoStockSeeder>(configuration);
+
         services.AddHostedService<ReservationSweeper>();
         services.AddHostedService<StockReconciliationJob>();
     }

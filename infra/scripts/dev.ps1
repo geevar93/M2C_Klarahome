@@ -66,6 +66,11 @@ function Show-Urls {
     $mailUi = Get-EnvValue 'MAILPIT_UI_PORT' '8025'
 
     Write-Host ''
+    Write-Host 'Klara Home applications' -ForegroundColor Cyan
+    Write-Host "  Storefront         https://$domain"
+    Write-Host "  Admin back office  https://admin.$domain"
+    Write-Host "  API                https://api.$domain"
+    Write-Host ''
     Write-Host 'Klara Home dev services' -ForegroundColor Cyan
     Write-Host "  Traefik dashboard  https://traefik.$domain"
     Write-Host "  MinIO console      https://minio.$domain   (or http://${bind}:$console)"
@@ -76,6 +81,9 @@ function Show-Urls {
     Write-Host "  SMTP (Mailpit)     ${bind}:$smtp"
     Write-Host ''
     Write-Host 'The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md.' -ForegroundColor DarkGray
+    Write-Host 'Accept it on api.' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$domain too" -NoNewline -ForegroundColor DarkGray
+    Write-Host ' - the two apps call it with XHR, which gets no warning to click and just fails.' -ForegroundColor DarkGray
 }
 
 switch ($Command) {

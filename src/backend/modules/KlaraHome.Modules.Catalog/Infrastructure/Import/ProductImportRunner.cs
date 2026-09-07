@@ -232,11 +232,19 @@ internal sealed class ProductImportRunner(
 
         try
         {
-            var product = await ResolveProductAsync(job, row, cancellationToken).ConfigureAwait(false);
+            var product = await ResolveProductAsync(job, row, sku, cancellationToken).ConfigureAwait(false);
 
             if (product.IsFailure)
             {
                 return new ImportRowError(row.Number, product.Column, sku, product.Message!);
+            }
+
+            var second = await SecondVariantRefusalAsync(product.Value!, sku, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (second is not null)
+            {
+                return second with { RowNumber = row.Number, Sku = sku };
             }
 
             var variant = await UpsertVariantAsync(product.Value!, sku, row, cancellationToken)
@@ -260,7 +268,14 @@ internal sealed class ProductImportRunner(
             // A unique-index collision the pre-checks did not catch — two rows of the same file
             // claiming one slug, most often. The row is reported and the change tracker is left
             // holding a failed entry, so it is detached before the next row is attempted.
+            //
+            // The job is re-attached immediately, and that is not housekeeping. Clearing the tracker
+            // detaches *everything*, the job included, so every RowFailed and the Complete that
+            // follows would mutate an entity nothing is tracking: the dispatcher's final save would
+            // write nothing, and the job would sit in Running for ever with no report and no way to
+            // be re-claimed. One bad row was enough to lose a merchandiser's whole upload.
             context.ChangeTracker.Clear();
+            context.Attach(job);
 
             return new ImportRowError(
                 row.Number,
@@ -270,10 +285,24 @@ internal sealed class ProductImportRunner(
         }
     }
 
-    /// <summary>Finds or creates the product this row belongs to.</summary>
+    /// <summary>
+    /// Finds or creates the product this row belongs to.
+    /// </summary>
+    /// <remarks>
+    /// By slug when the row carries one, and otherwise by the SKU's own variant. The second route
+    /// is what makes a genuine two-column price file work: <c>sku,mrp</c> and nothing else names no
+    /// product, and demanding a name on a row that is only changing a price would mean re-uploading
+    /// the whole catalogue to move one number — and would make blanking a description the price of
+    /// getting the name slightly wrong.
+    /// </remarks>
+    /// <param name="job">The job, for the seller it belongs to.</param>
+    /// <param name="row">The row.</param>
+    /// <param name="sku">The row's SKU, already normalised.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private async Task<ResolvedProduct> ResolveProductAsync(
         CatalogJob job,
         CsvRow row,
+        string sku,
         CancellationToken cancellationToken)
     {
         var name = row.Text(ImportColumns.ProductName);
@@ -282,16 +311,37 @@ internal sealed class ProductImportRunner(
         var slug = slugText?.ToLowerInvariant()
                    ?? (name is null ? null : CatalogFormats.ToSlug(name, 320));
 
-        if (slug is null)
+        var existing = slug is null
+            ? await context.Products
+                .FirstOrDefaultAsync(
+                    candidate => context.Variants.Any(
+                        variant => variant.Sku == sku && variant.ProductId == candidate.Id),
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await context.Products
+                .FirstOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken)
+                .ConfigureAwait(false);
+
+        if (slug is null && existing is null)
         {
             return ResolvedProduct.Rejected(
                 ImportColumns.ProductName,
-                $"A row needs either '{ImportColumns.ProductName}' or '{ImportColumns.ProductSlug}'.");
+                $"A row needs either '{ImportColumns.ProductName}' or '{ImportColumns.ProductSlug}', "
+                + "unless its SKU already exists.");
         }
 
-        var existing = await context.Products
-            .FirstOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken)
-            .ConfigureAwait(false);
+        // A seller's import can see the platform's shared products — that is the point of a shared
+        // catalogue — and must not edit one. The same rule CatalogScope.CanWrite states for a
+        // request, stated here because an import is the one write path that does not go through a
+        // handler. Without it, a seller uploading a file with a slug the platform already owns
+        // would silently rewrite the platform's copy for every other seller on the marketplace.
+        if (existing is not null && job.VendorId is { } importer && existing.VendorId != importer)
+        {
+            return ResolvedProduct.Rejected(
+                ImportColumns.ProductSlug,
+                $"The product '{existing.Slug}' is not yours to edit. "
+                + "Offer against it instead, or choose another slug.");
+        }
 
         var categorySlug = row.Text(ImportColumns.CategorySlug)?.ToLowerInvariant();
         Guid? categoryId = null;
@@ -345,7 +395,8 @@ internal sealed class ProductImportRunner(
                     $"'{ImportColumns.CategorySlug}' is required to create a product.");
             }
 
-            existing = Product.Draft(name, slug, categoryId.Value, job.VendorId);
+            // Not null here: a row that named neither a slug nor a known SKU was rejected above.
+            existing = Product.Draft(name, slug!, categoryId.Value, job.VendorId);
             context.Products.Add(existing);
         }
 
@@ -393,6 +444,56 @@ internal sealed class ProductImportRunner(
             existing.Warranty);
 
         return ResolvedProduct.Accepted(existing);
+    }
+
+    /// <summary>
+    /// Refuses a row that would be a second, undistinguished variant of one product.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A variant's identity within its product is the combination of options that defines it, and
+    /// the uniqueness of that combination is enforced by an index over its hash. The import file has
+    /// no attribute columns, so every variant it creates has the same "no options" hash — which
+    /// means the second row for a product collides with the first.
+    /// </para>
+    /// <para>
+    /// Checked here so the merchandiser is told what is wrong in their own terms. Without it the
+    /// index still refuses the row, but the report says "the database refused this row: duplicate
+    /// key value violates unique constraint", which tells them nothing they can act on. Loading a
+    /// genuinely multi-variant catalogue needs attribute columns in the template, which is a Parking
+    /// Lot item and not something this rejection should pretend to have.
+    /// </para>
+    /// </remarks>
+    /// <param name="product">The product this row belongs to.</param>
+    /// <param name="sku">The row's SKU.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<ImportRowError?> SecondVariantRefusalAsync(
+        Product product,
+        string sku,
+        CancellationToken cancellationToken)
+    {
+        var known = await context.Variants
+            .AnyAsync(candidate => candidate.Sku == sku, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (known)
+        {
+            return null;
+        }
+
+        var siblings = await context.Variants
+            .AnyAsync(candidate => candidate.ProductId == product.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return siblings
+            ? new ImportRowError(
+                0,
+                ImportColumns.Sku,
+                null,
+                $"Product '{product.Slug}' already has a variant, and an import cannot say what "
+                + "distinguishes a second one. Give this SKU its own product, or add the variant "
+                + "through the catalogue screens.")
+            : null;
     }
 
     /// <summary>Creates or updates the variant this row names.</summary>

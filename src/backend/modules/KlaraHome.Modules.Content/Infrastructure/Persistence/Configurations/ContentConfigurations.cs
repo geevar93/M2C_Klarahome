@@ -99,8 +99,24 @@ internal static class ContentCheckConstraints
     /// <summary>A hit count is a count.</summary>
     public const string HitCount = "hit_count >= 0";
 
-    /// <summary>Version numbers are one-based.</summary>
-    public const string Version = "version >= 1";
+    /// <summary>A snapshot's own number. One-based, matching <c>Guard.Positive</c> in the domain.</summary>
+    public const string SnapshotVersion = "version >= 1";
+
+    /// <summary>
+    /// The page's snapshot counter, which starts at zero.
+    /// </summary>
+    /// <remarks>
+    /// Zero and one-based at once, because the two columns count different things.
+    /// <c>page_versions.version</c> names a snapshot, and there is no snapshot zero.
+    /// <c>pages.version</c> counts how many snapshots have been taken, and a page that has never
+    /// been published has taken none — <c>NextVersion()</c> is what turns that into the 1 the
+    /// first snapshot is written under.
+    ///
+    /// Both columns are called <c>version</c> and shared one constant, which made every
+    /// <c>INSERT</c> into <c>pages</c> fail on <c>ck_pages_version</c>: a page could not be
+    /// created at all, and the CMS was unusable from the day the schema landed.
+    /// </remarks>
+    public const string PageVersionCounter = "version >= 0";
 }
 
 /// <summary>Maps <see cref="ContentPage"/> to <c>content.pages</c> and its blocks.</summary>
@@ -115,7 +131,7 @@ internal sealed class ContentPageConfiguration : IEntityTypeConfiguration<Conten
             table.HasCheckConstraint("ck_pages_type", ContentCheckConstraints.PageTypes);
             table.HasCheckConstraint("ck_pages_status", ContentCheckConstraints.PageStatuses);
             table.HasCheckConstraint("ck_pages_schedule", ContentCheckConstraints.ScheduleConsistent);
-            table.HasCheckConstraint("ck_pages_version", ContentCheckConstraints.Version);
+            table.HasCheckConstraint("ck_pages_version", ContentCheckConstraints.PageVersionCounter);
         });
 
         builder.HasKey(page => page.Id);
@@ -212,7 +228,7 @@ internal sealed class PageVersionConfiguration : IEntityTypeConfiguration<PageVe
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.ToTable("page_versions", table =>
-            table.HasCheckConstraint("ck_page_versions_version", ContentCheckConstraints.Version));
+            table.HasCheckConstraint("ck_page_versions_version", ContentCheckConstraints.SnapshotVersion));
 
         builder.HasKey(version => version.Id);
         builder.Property(version => version.Id).ValueGeneratedNever();

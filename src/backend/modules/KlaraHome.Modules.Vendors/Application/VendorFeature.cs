@@ -354,59 +354,74 @@ internal sealed class AddressPayloadValidator : AbstractValidator<AddressPayload
 /// The PAN and GSTIN rules, written once and included by every command that carries the pair.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A rule set rather than a copied block, because the cross-check — that the GSTIN embeds the PAN —
 /// is the kind of rule that gets added on one command and forgotten on the other.
+/// </para>
+/// <para>
+/// The checks are a <see cref="FluentValidation.DefaultValidatorExtensions.Custom{T, TProperty}"/>
+/// rule on the command itself rather than an override of <c>Validate</c>. That is not a style
+/// preference: <c>Include</c> merges another validator's <em>rules</em>, and a validator whose
+/// logic lives in an overridden <c>Validate</c> contributes none — so an override here would be
+/// dead code, and every malformed identifier would reach the database and come back as a 500 from
+/// a <c>CHECK</c> constraint. Found at Step 29 against a live database; see the step card.
+/// </para>
 /// </remarks>
 /// <typeparam name="TCommand">The command carrying the identifiers.</typeparam>
-/// <param name="pan">Reads the PAN off the command.</param>
-/// <param name="gstin">Reads the GSTIN off the command.</param>
-internal sealed class VendorIdentifierRules<TCommand>(
-    Func<TCommand, string?> pan,
-    Func<TCommand, string?> gstin) : AbstractValidator<TCommand>
+internal sealed class VendorIdentifierRules<TCommand> : AbstractValidator<TCommand>
 {
-    private readonly Func<TCommand, string?> _pan = pan;
-    private readonly Func<TCommand, string?> _gstin = gstin;
+    /// <summary>Builds the rule set for one command shape.</summary>
+    /// <param name="pan">Reads the PAN off the command.</param>
+    /// <param name="gstin">Reads the GSTIN off the command.</param>
+    public VendorIdentifierRules(Func<TCommand, string?> pan, Func<TCommand, string?> gstin)
+    {
+        ArgumentNullException.ThrowIfNull(pan);
+        ArgumentNullException.ThrowIfNull(gstin);
 
-    /// <inheritdoc />
-    public override FluentValidation.Results.ValidationResult Validate(
+        RuleFor(command => command).Custom((command, context) => Check(pan(command), gstin(command), context));
+    }
+
+    /// <summary>Adds a failure for every way the pair can be wrong, not only the first.</summary>
+    /// <remarks>
+    /// The field names are set explicitly, because the rule is declared against the command rather
+    /// than against a property and a caller has to be told which of the two is wrong.
+    /// </remarks>
+    private static void Check(
+        string? rawPan,
+        string? rawGstin,
         FluentValidation.ValidationContext<TCommand> context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var failures = new List<FluentValidation.Results.ValidationFailure>();
-        var pan = Normalize(_pan(context.InstanceToValidate));
-        var gstin = Normalize(_gstin(context.InstanceToValidate));
+        var pan = Normalize(rawPan);
+        var gstin = Normalize(rawGstin);
 
         if (pan is not null && !VendorFormats.Pan().IsMatch(pan))
         {
-            failures.Add(new FluentValidation.Results.ValidationFailure(
+            context.AddFailure(
                 "pan",
-                "A PAN is five letters, four digits and a letter — for example ABCDE1234F."));
+                "A PAN is five letters, four digits and a letter — for example ABCDE1234F.");
         }
 
-        if (gstin is not null)
+        if (gstin is null)
         {
-            if (!VendorFormats.Gstin().IsMatch(gstin))
-            {
-                failures.Add(new FluentValidation.Results.ValidationFailure(
-                    "gstin",
-                    "A GSTIN is fifteen characters: a state code, a PAN, an entity number, Z and a check digit."));
-            }
-            else if (!VendorFormats.HasKnownStateCode(gstin))
-            {
-                failures.Add(new FluentValidation.Results.ValidationFailure(
-                    "gstin",
-                    "That GSTIN begins with a state code that does not exist."));
-            }
-            else if (!VendorFormats.PanMatchesGstin(pan, gstin))
-            {
-                failures.Add(new FluentValidation.Results.ValidationFailure(
-                    "gstin",
-                    "That GSTIN belongs to a different PAN. Characters 3 to 12 of a GSTIN are the holder's PAN."));
-            }
+            return;
         }
 
-        return new FluentValidation.Results.ValidationResult(failures);
+        if (!VendorFormats.Gstin().IsMatch(gstin))
+        {
+            context.AddFailure(
+                "gstin",
+                "A GSTIN is fifteen characters: a state code, a PAN, an entity number, Z and a check digit.");
+        }
+        else if (!VendorFormats.HasKnownStateCode(gstin))
+        {
+            context.AddFailure("gstin", "That GSTIN begins with a state code that does not exist.");
+        }
+        else if (!VendorFormats.PanMatchesGstin(pan, gstin))
+        {
+            context.AddFailure(
+                "gstin",
+                "That GSTIN belongs to a different PAN. Characters 3 to 12 of a GSTIN are the holder's PAN.");
+        }
     }
 
     private static string? Normalize(string? value)
@@ -615,7 +630,7 @@ internal sealed class CreateVendorCommandHandler(
         // stops it.
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var displayName = string.IsNullOrWhiteSpace(command.DisplayName)
@@ -936,7 +951,7 @@ internal sealed class ChangeVendorStatusCommandHandler(
         // is the failure this line exists to make impossible, whatever roles they hold.
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var vendor = await scope.FindAsync(command.VendorId, cancellationToken).ConfigureAwait(false);
@@ -1015,7 +1030,7 @@ internal sealed class AssignCommissionPlanCommandHandler(
         // A seller choosing what the platform charges them is not a thing.
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var vendor = await scope.FindAsync(command.VendorId, cancellationToken).ConfigureAwait(false);

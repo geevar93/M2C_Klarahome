@@ -347,7 +347,7 @@ internal sealed class VerifyBankAccountCommandHandler(
 
         if (scope.IsVendorCaller)
         {
-            return VendorErrors.OutOfScope;
+            return VendorErrors.PlatformOnly;
         }
 
         var account = await context.BankAccounts

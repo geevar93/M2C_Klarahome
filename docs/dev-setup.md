@@ -78,6 +78,8 @@ waits for every service to report **healthy**, and prints the URLs.
 | Traefik dashboard | `traefik:v3.6.25` | — | `https://traefik.klarahome.localhost` |
 | **API** | `klarahome/api:dev` (built locally) | — | `https://api.klarahome.localhost` |
 | **Worker** | `klarahome/worker:dev` (built locally) | — | none, by design |
+| **Storefront** | `klarahome/storefront:dev` (built locally) | — | `https://klarahome.localhost` |
+| **Admin** | `klarahome/admin:dev` (built locally) | — | `https://admin.klarahome.localhost` |
 
 The API deliberately publishes **no host port**: Traefik is the only way in, exactly as on the
 VPS. The **worker** publishes no port and carries no Traefik label at all: nothing may reach it. It
@@ -108,6 +110,23 @@ MinIO      klarahome / klarahome_dev_password
 These are **development-only defaults committed on purpose**, so a fresh clone runs with no
 setup. Production credentials never live in a file in this repository — see
 [`06-infrastructure-devops.md`](06-infrastructure-devops.md) §4.1.
+
+**The two Angular apps are built once and configured at start-up.** There is no
+`environment.prod.ts` and no per-environment build: the browser reads `/config.json` before the
+app bootstraps, and in a container that file is written from the `KH_*` variables by
+`infra/docker/write-runtime-config.sh`. The storefront also renders on Node, where there is no
+file to fetch, so the renderer reads the same variables directly — the names match on both
+sides because the two must agree. Rebuild after a frontend change:
+`docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d --build storefront admin`.
+
+**The storefront's renderer fetches the API by its public hostname**, so that a page rendered on
+the server and the transfer cache the browser reads it out of are keyed alike. Two things in the
+dev compose file make that work and are both replaced by real infrastructure at Step 32: Traefik
+carries network aliases for the four public hostnames, because Docker's DNS has never heard of
+`api.klarahome.localhost` and would otherwise answer NXDOMAIN; and the storefront sets
+`NODE_TLS_REJECT_UNAUTHORIZED=0`, because Node — unlike a browser — is never offered the chance
+to accept a self-signed certificate. Issue a locally-trusted certificate (§5) and the second one
+can go.
 
 Buckets are created automatically by the one-shot `minio-init` container:
 `media-public` (anonymous read) and `docs-private` (private, versioning on), per
@@ -190,6 +209,30 @@ curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/enrol   -H 'content-ty
 curl -sX POST http://localhost:8080/api/v1/admin/auth/2fa/verify   -H 'content-type: application/json'   -d '{"challengeToken":"<from step 1>","code":"123456"}'
 ```
 
+### Storefront sign-in: email first, no one-time codes
+
+**A customer's account is keyed on their email address.** They sign in with an identity provider,
+or with an email and a password. There is no sign-in-with-a-code option, and the storefront no
+longer offers one anywhere.
+
+Mobile-number-plus-OTP was the original Step 7 primary and has been withdrawn: it needs a
+DLT-registered SMS route this deployment does not have, and the development stand-in wrote one-time
+codes to the API log, which `docs/07-security-compliance.md` §3 forbids outright in a deployed
+environment. The endpoints are switched off by the `identity.mobile-otp-login` flag rather than
+deleted, so the day an SMS provider is paid for the capability returns without a deploy
+(ADR-014 decision 4).
+
+`/auth/otp` still exists and is still reachable — but only as a **second factor**. A password
+sign-in that answers with a challenge instead of a session sends the customer there to enter the
+code from their authenticator app.
+
+> **A database created before this change still has mobile-OTP switched on.** The flag seeder never
+> reasserts a flag an operator may have set, so the new `false` default applies to new databases
+> only. Turn it off on an existing one with the audited endpoint below, or on a throwaway local
+> database with
+> `docker exec klarahome-dev-postgres psql -U klarahome -d klarahome -c "UPDATE platform.feature_flags SET enabled = false WHERE key = 'identity.mobile-otp-login';"`
+> followed by an API restart, because the flag service caches.
+
 ### Running without an SMS or email provider (Step 7A)
 
 There is no free local path for SMS, and a production email provider costs money. Four flags turn
@@ -220,6 +263,24 @@ POST /api/v1/admin/auth/password/change       { "challengeToken": "...", "curren
 redirect URI, then set `AUTH_GOOGLE_ENABLED=true` with the client id and secret. It works against
 real Google from the dev stack — the only outbound host the API is allowed to reach is the provider
 allow-list, so nothing else is reachable even by mistake.
+
+> **No client id means no button, and that is the design.** The sign-in page asks
+> `GET /store/auth/external/providers` and renders one button per provider it answers with. A
+> provider with no client id and secret is deliberately not answered with, because a button that
+> fails when somebody presses it is worse than no button. So a stack that has never been given an
+> OAuth client shows an email and password form and nothing else — which is correct, not a missing
+> feature in the front end. Check the endpoint before looking anywhere else:
+>
+> ```bash
+> curl -sk https://api.klarahome.localhost/api/v1/store/auth/external/providers
+> # []                                  -> not configured; set AUTH_GOOGLE_* in .env
+> # [{"provider":"google",...}]         -> configured; the button will render
+> ```
+
+**Facebook / Meta** is designed for and left disabled. It cannot leave development mode until the
+deployment's owner completes Business Verification and publishes a privacy-policy URL, and enabling
+it also needs the schema note in ADR-014 addressed, because a Facebook account may carry no email
+address at all. When it is switched on, the button reads "Continue with Meta".
 
 **One-time codes are no longer written to any log** (Step 8). They are rendered from a template,
 handed straight to a provider, and the delivery-log row keeps neither the body nor any variable's
@@ -446,7 +507,14 @@ Chromium and Firefox resolve `*.localhost` to the loopback address on their own,
 
 The certificate is **self-signed by Traefik**, so the browser shows a warning the first time.
 Either accept it, or issue a locally-trusted certificate with
-[mkcert](https://github.com/FiloSottile/mkcert):
+[mkcert](https://github.com/FiloSottile/mkcert).
+
+**If you accept the warning, accept it on `https://api.klarahome.localhost` as well** — visit it
+once directly and click through. The storefront and the admin app call the API with XHR, and an
+XHR to a host whose certificate has not been accepted is refused with no interstitial to click
+and no error a user can act on: the shop looks empty and the sign-in button appears to do
+nothing. This is the one failure in the local stack that looks like a bug in the application and
+is not, which is the reason for mkcert:
 
 ```bash
 mkcert -install
@@ -476,6 +544,37 @@ Add-Content -Path $hosts -Value "`n127.0.0.1 $names"
 ---
 
 ## 6. Everyday tasks
+
+**Seed the demonstration catalogue**
+
+A freshly migrated database is an empty shop, and an empty shop cannot be reviewed. Set
+`DEMO_SEED_CATALOG=true` in `.env` and run the migrator:
+
+```bash
+docker compose -f infra/compose/docker-compose.dev.yml --env-file .env --profile migrate run --rm migrator
+```
+
+That writes one active seller (`DEMO-ATELIER`), two category branches, three brands, ten products
+with live offers, 120 units of stock against each, a published home page, and the search projection
+over all of it. Every row is keyed on a `DEMO-` SKU or a `demo-` slug.
+
+| It is | It is not |
+|---|---|
+| Idempotent — re-running adds only what is missing | An updater: it never rewrites a row it did not create, so copy you edit in the back office survives |
+| Refused outright in Production, at registration and again inside each seeder | Governed by `Database__RunSeeders` alone — it needs `DemoData__SeedCatalog` as well |
+| Visible as `Vendors.DemoVendor`, `Catalog.DemoCatalogue`, `Inventory.DemoStock`, `Content.DemoHomePage` and `Search.DemoIndex` in the migrator log | Silent about what it skipped — each seeder logs why |
+
+Two things worth knowing:
+
+- **It writes no product images.** Every product renders through the placeholder treatment, which
+  is what they should look like until real photography is supplied.
+- **It will not overwrite an existing home page.** If this database already has one — a
+  hand-authored one, say — `Content.DemoHomePage` logs that it skipped and leaves it alone. Delete
+  that page and re-run the migrator if you want the demo front page instead.
+
+To remove it, `dev reset` and migrate again without the flag. There is no targeted undo: everything
+it writes is prefixed, but products have listings, listings have stock and stock has a ledger, so
+unpicking it by hand is more work than recreating the database.
 
 **Connect to PostgreSQL**
 

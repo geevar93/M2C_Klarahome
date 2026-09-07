@@ -100,6 +100,27 @@ public interface IVendorScoped
 }
 
 /// <summary>
+/// A vendor-scoped table whose <em>platform-owned</em> rows are readable by every seller.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The default for <see cref="IVendorScoped"/> is that a seller sees their own rows and nothing
+/// else, platform-owned rows included: a staff role assignment or a platform warehouse is none of
+/// their business. A shared catalogue is the exception the marketplace model is built on — the
+/// platform publishes a product and several sellers offer against it, which they cannot do if they
+/// cannot see it — so the table that holds it says so here, explicitly, rather than the rule being
+/// widened for everything.
+/// </para>
+/// <para>
+/// This widens <b>reads</b> only. Whether a caller may write to a row they can see is a separate
+/// question the owning module answers — <c>CatalogScope.CanWrite</c> is the whole of it for the
+/// catalogue — because "readable by all, writable by its owner" is not something a query filter can
+/// express.
+/// </para>
+/// </remarks>
+public interface IPlatformShared;
+
+/// <summary>
 /// A row in a PostgreSQL <em>partitioned</em> table. Declaring it removes the optimistic-concurrency
 /// convention, because the database cannot supply one: PostgreSQL refuses to return a system column
 /// from a partitioned table, so an <c>INSERT ... RETURNING xmin</c> — which is what mapping
