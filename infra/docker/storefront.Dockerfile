@@ -19,7 +19,7 @@
 # Node 24.20.0 (global.json's sibling - .github/workflows/ci.yml), and building
 # an Angular 22 workspace on an older major is a difference nobody would find
 # until a build failed in CI and passed on a laptop.
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src
 
 # Lockfile first: editing a component must not invalidate the install layer.
@@ -35,7 +35,7 @@ ENV NX_DAEMON=false \
 RUN npx nx build storefront --configuration=production --skip-nx-cache
 
 # --- Runtime -----------------------------------------------------------------
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 ARG VERSION=0.1.0
 ARG GIT_SHA=unknown
