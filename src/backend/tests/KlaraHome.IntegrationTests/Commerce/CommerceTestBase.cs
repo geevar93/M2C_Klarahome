@@ -92,8 +92,6 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
     /// <param name="mobile">The number, or null for one nothing else is using.</param>
     protected async Task<(HttpClient Client, string Mobile)> SignedInShopperAsync(string? mobile = null)
     {
-        Factory.Features[Modules.Identity.Infrastructure.IdentityFeatures.MobileOtpLogin] = true;
-
         var client = CreateClient();
         var number = mobile ?? NewMobile();
 
@@ -153,6 +151,43 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         var session = await TestSignIn.SignInAsync(client, "admin", email, Password, Cancellation);
 
         return (client, session);
+    }
+
+    /// <summary>
+    /// A client signed in as a fresh platform staff user holding one system role.
+    /// </summary>
+    /// <remarks>
+    /// The maker-checker tests need two distinct <em>people</em> both holding permissions a single
+    /// role bundles together — the aggregate's self-approval refusal is keyed on the user id, not the
+    /// role, so two accounts under the same role are exactly what proves it is enforced per person.
+    /// </remarks>
+    /// <param name="admin">A client signed in as platform staff.</param>
+    /// <param name="roleCode">The system role to grant, such as <c>finance</c>.</param>
+    protected async Task<HttpClient> SignedInStaffAsync(HttpClient admin, string roleCode)
+    {
+        ArgumentNullException.ThrowIfNull(admin);
+
+        var email = NewEmail(roleCode);
+        const string Password = "the-back-office-signs-in-here";
+
+        await ReadAsync(await admin.PostAsJsonAsync(
+            "/api/v1/admin/users",
+            new
+            {
+                email,
+                mobile = (string?)null,
+                userType = "Staff",
+                roleCodes = new[] { roleCode },
+                vendorId = (Guid?)null,
+            },
+            Cancellation));
+
+        await SetPasswordAsync(email, Password);
+
+        var client = CreateClient();
+        await TestSignIn.SignInAsync(client, "admin", email, Password, Cancellation);
+
+        return client;
     }
 
     /// <summary>Sets an account's password through the reset flow, as a new joiner would.</summary>

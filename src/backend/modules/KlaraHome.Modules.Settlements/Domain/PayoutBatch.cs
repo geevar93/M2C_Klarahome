@@ -411,12 +411,20 @@ internal sealed class PayoutItem : Entity<Guid>, ITenantScoped, IVendorScoped, I
     }
 
     /// <summary>Records that the money reached the seller.</summary>
+    /// <param name="providerPayoutId">
+    /// The gateway's id for the transfer. A transfer that completes on its very first send — the
+    /// gateway answering synchronously rather than leaving it queued — never passes through
+    /// <see cref="Sent"/> with one, so this is the only place some completed items ever record it;
+    /// dropping it here is what the database's own <c>ck_payout_items_completed</c> constraint
+    /// exists to refuse.
+    /// </param>
     /// <param name="utr">The bank's unique transaction reference.</param>
     /// <param name="providerStatus">The gateway's own status word.</param>
     /// <param name="settledAt">When.</param>
-    public void Complete(string? utr, string? providerStatus, DateTimeOffset settledAt)
+    public void Complete(string? providerPayoutId, string? utr, string? providerStatus, DateTimeOffset settledAt)
     {
         Status = PayoutItemStatus.Completed;
+        ProviderPayoutId = providerPayoutId ?? ProviderPayoutId;
         Utr = utr;
         ProviderStatus = providerStatus ?? ProviderStatus;
         SettledAt = settledAt;

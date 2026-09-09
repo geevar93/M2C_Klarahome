@@ -259,9 +259,10 @@ internal sealed class VendorScenario(HttpClient admin, CancellationToken cancell
     /// incorporation certificate it does not care about.
     /// </remarks>
     /// <param name="commissionRate">What the platform charges them.</param>
-    public async Task<OnboardedVendor> ActiveAsync(decimal commissionRate = 10m)
+    /// <param name="legalName">The registered name, or null for a generated one.</param>
+    public async Task<OnboardedVendor> ActiveAsync(decimal commissionRate = 10m, string? legalName = null)
     {
-        var vendor = await ApplyAsync();
+        var vendor = await ApplyAsync(legalName);
         var vendorId = vendor.GetProperty("id").GetGuid();
 
         var planId = await CommissionPlanAsync(commissionRate);

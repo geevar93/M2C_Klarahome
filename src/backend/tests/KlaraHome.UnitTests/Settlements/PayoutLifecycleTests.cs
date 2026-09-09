@@ -128,7 +128,7 @@ public sealed class PayoutLifecycleTests
         skipped.Skip("The seller has no verified bank account.", now);
         Assert.False(batch.TrySettle(now));
 
-        paid.Complete("UTR123", "processed", now);
+        paid.Complete("trf_1", "UTR123", "processed", now);
         Assert.True(batch.TrySettle(now));
 
         Assert.Equal(PayoutBatchStatus.PartiallyFailed, batch.Status);
