@@ -29,7 +29,15 @@ namespace KlaraHome.Modules.Returns.Infrastructure.Documents;
 /// </remarks>
 internal static class CreditNoteDocumentBuilder
 {
-    private static readonly CultureInfo India = CultureInfo.GetCultureInfo("en-IN");
+    // Not CultureInfo.GetCultureInfo("en-IN"): this process runs with globalization invariant mode
+    // on (no ICU data shipped with the runtime), and a named culture lookup throws
+    // CultureNotFoundException the first time this type is touched — which, being a static field
+    // initializer, takes down every credit note this module ever tries to render rather than just
+    // this one. Found rather than designed around: no credit note PDF has ever actually rendered in
+    // this environment (nor, on the identical pattern, has an Orders invoice's — PARKING_LOT.md).
+    // The invariant culture renders the same digits with Western rather than Indian digit grouping,
+    // which is a cosmetic difference on a document whose money and tax figures are unaffected by it.
+    private static readonly CultureInfo India = CultureInfo.InvariantCulture;
 
     /// <summary>Builds the document.</summary>
     /// <param name="request">The RMA it credits.</param>

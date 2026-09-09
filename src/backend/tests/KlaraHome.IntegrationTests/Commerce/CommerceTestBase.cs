@@ -88,7 +88,7 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         var number = mobile ?? NewMobile();
 
         var start = await client.PostAsJsonAsync(
-            "/api/v1/store/auth/otp/start",
+            "/api/v1/store/auth/otp/request",
             new { mobile = number },
             Cancellation);
 

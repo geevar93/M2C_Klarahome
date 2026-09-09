@@ -26,8 +26,11 @@ namespace KlaraHome.Modules.Inventory.Infrastructure.Stock;
 /// <para>
 /// A quarantined line moves no stock at all and that is deliberate: the goods are physically present
 /// and commercially undecided, and putting them back on sale or writing them off would both be a
-/// lie. It is recorded as a zero-quantity adjustment so the decision is on the ledger — a stock take
-/// that could not account for them would otherwise find a discrepancy nobody could explain.
+/// lie. It writes no ledger entry either — <c>ck_stock_ledger_entries_moves_something</c> refuses a
+/// row that moves neither column, so a decision that moves nothing cannot be put on the one table
+/// that only records movement. A stock take that finds a quarantined line unaccounted for has
+/// nowhere in this ledger to learn why; the disposition itself, on the return line, is the only
+/// record today (Step 29 <c>TEST_DEBT.md</c>).
 /// </para>
 /// </remarks>
 /// <param name="context">The Inventory data context.</param>
@@ -54,36 +57,58 @@ internal sealed partial class StockRestockService(
             return 0;
         }
 
-        // Which stock rows this document has already moved. One query rather than one per line, and
-        // the vendor filter is bypassed because a return is settled by the platform, not by the
-        // seller whose goods they are. The ledger keys on the stock row rather than on the listing,
-        // so the comparison happens against the row this call is about to write to.
-        var already = await context.LedgerEntries
-            .AsNoTracking()
-            .IgnoreQueryFilters([ModelConventions.VendorFilter])
-            .Where(entry => entry.ReferenceType == referenceType && entry.ReferenceId == referenceId)
-            .Select(entry => entry.StockItemId)
-            .Distinct()
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var settled = already.ToHashSet();
         var moved = 0;
 
-        foreach (var unit in units)
-        {
-            if (unit.Quantity <= 0)
+        // The raw movement inside ApplyAsync commits the instant it runs, and the ledger entry that
+        // justifies it is only added to the change tracker — so without an ambient transaction a
+        // failure partway through this batch, or in the SaveChangesAsync below, leaves units already
+        // moved with no ledger entry to explain them, and the idempotency check above would then
+        // treat them as never having happened. One transaction around the whole batch is what makes
+        // "moved but not yet saved" impossible to observe from outside this call, and the "already
+        // moved" read is taken fresh inside it so a retried attempt sees only what the previous
+        // attempt actually committed, not what it merely tried.
+        await context.ExecuteInTransactionAsync(
+            async (_, token) =>
             {
-                continue;
-            }
+                // Which stock rows this document has already moved. One query rather than one per
+                // line, and the vendor filter is bypassed because a return is settled by the
+                // platform, not by the seller whose goods they are. The ledger keys on the stock row
+                // rather than on the listing, so the comparison happens against the row this call is
+                // about to write to.
+                var already = await context.LedgerEntries
+                    .AsNoTracking()
+                    .IgnoreQueryFilters([ModelConventions.VendorFilter])
+                    .Where(entry => entry.ReferenceType == referenceType && entry.ReferenceId == referenceId)
+                    .Select(entry => entry.StockItemId)
+                    .Distinct()
+                    .ToListAsync(token)
+                    .ConfigureAwait(false);
 
-            moved += await ApplyAsync(unit, settled, referenceType, referenceId, note, cancellationToken)
-                .ConfigureAwait(false);
-        }
+                var settled = already.ToHashSet();
+
+                moved = 0;
+
+                foreach (var unit in units)
+                {
+                    if (unit.Quantity <= 0)
+                    {
+                        continue;
+                    }
+
+                    moved += await ApplyAsync(unit, settled, referenceType, referenceId, note, token)
+                        .ConfigureAwait(false);
+                }
+
+                if (moved > 0)
+                {
+                    await context.SaveChangesAsync(token).ConfigureAwait(false);
+                }
+            },
+            cancellationToken)
+            .ConfigureAwait(false);
 
         if (moved > 0)
         {
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             UnitsMoved(logger, referenceType, referenceId, moved);
         }
 

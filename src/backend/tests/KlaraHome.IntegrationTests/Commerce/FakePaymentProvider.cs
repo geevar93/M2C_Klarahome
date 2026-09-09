@@ -36,7 +36,17 @@ internal sealed class FakePaymentProvider : IPaymentProvider
     private readonly ConcurrentDictionary<string, List<string>> _paymentsByOrder = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProviderRefund> _refunds = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Guid> _ourPaymentIdByOrder = new(StringComparer.Ordinal);
-    private int _sequence;
+
+    // Static, not per-instance: a fresh CommerceApiFactory gets its own FakePaymentProvider, but
+    // every host in one test run shares the same Postgres database. An instance counter starting
+    // over at 1 for each host hands out "order_1", "pay_1" … again — collides with an earlier
+    // host's own rows in payments.payments, and the webhook processor's fallback lookup-by
+    // provider-order-id (Step 17 has no kh_payment_id in the body it posts, matching what a real
+    // Razorpay webhook carries) finds the wrong, already-captured payment instead of this order's
+    // own. Found running two Commerce tests that each capture a payment in the same process: the
+    // second one's order sat at PendingPayment forever, because its capture had just applied to the
+    // first one's payment. Static keeps every id unique for the life of the process instead.
+    private static int _sequence;
 
     /// <inheritdoc />
     public string Name => PaymentProviders.Razorpay;
@@ -330,5 +340,5 @@ internal sealed class FakePaymentProvider : IPaymentProvider
         return payment;
     }
 
-    private int Next() => Interlocked.Increment(ref _sequence);
+    private static int Next() => Interlocked.Increment(ref _sequence);
 }

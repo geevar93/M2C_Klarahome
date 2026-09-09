@@ -261,7 +261,9 @@ internal sealed class StockLedgerService(
         ArgumentNullException.ThrowIfNull(item);
 
         // Nothing to do, and a zero-quantity ledger entry is noise in the one table that has to
-        // stay readable.
+        // stay readable — the schema agrees: ck_stock_ledger_entries_moves_something refuses a row
+        // that moves neither column, so a caller asking for a zero movement gets the same answer
+        // whether it goes through here or reaches the database.
         if (change == 0 && reservedChange == 0)
         {
             return new StockMovementResult(true, item.QuantityOnHand, item.QuantityReserved, item.IsAvailable);
