@@ -255,15 +255,20 @@ export class MediaPicker {
     return this.selection().some((file) => file.id === id);
   }
 
-  /** Ready means scanned clean and stored. Anything else is shown but cannot be used yet. */
+  /**
+   * `status` is already the "may this be served" answer (`StoredFileStatus.Ready`), so it alone
+   * decides usability. `scanState` is separately `Skipped` in this deployment — no scanner is
+   * wired in yet (docs/08-integrations.md §4) — and a skipped file is still Ready; it just was
+   * never examined. Waiting on `Clean` here would mean no upload is ever usable.
+   */
   protected isUsable(file: MediaFileResponse): boolean {
-    return file.scanState === 'Clean' && file.status === 'Ready';
+    return file.status === 'Ready';
   }
 
   protected usableReason(file: MediaFileResponse): string {
     if (file.scanState === 'Infected') return 'Refused by the scanner';
-    if (file.scanState !== 'Clean') return 'Being scanned';
-    return 'Not ready yet';
+    if (file.scanState === 'Pending') return 'Being scanned';
+    return 'Not available';
   }
 
   protected thumb(file: MediaFileResponse) {
