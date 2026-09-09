@@ -133,7 +133,12 @@ internal static class FinancialYear
         var local = instant.ToOffset(IndiaOffset);
         var year = local.Month >= StartMonth ? local.Year : local.Year - 1;
 
-        return new DateTimeOffset(year, StartMonth, 1, 0, 0, 0, IndiaOffset);
+        // The instant is right the moment it is computed in India Standard Time; the offset it is
+        // handed back with is normalised to UTC immediately afterwards; because every caller uses
+        // this as a query boundary against a `timestamptz` column, and Npgsql refuses to write a
+        // DateTimeOffset with any offset but zero at all — a value that never reached a database in
+        // this module's own tests until it was asked to filter one.
+        return new DateTimeOffset(year, StartMonth, 1, 0, 0, 0, IndiaOffset).ToUniversalTime();
     }
 
     /// <summary>The period a payout reference is scoped to, as <c>2609</c> for September 2026.</summary>

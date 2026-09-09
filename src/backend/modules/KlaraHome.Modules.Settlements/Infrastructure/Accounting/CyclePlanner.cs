@@ -46,12 +46,21 @@ internal static class CyclePlanner
 
         var local = instant.ToOffset(FinancialYear.IndiaOffset);
 
-        return policy.Frequency switch
+        var period = policy.Frequency switch
         {
             SettlementFrequencies.Monthly => Monthly(local),
             SettlementFrequencies.Fortnightly => Fortnightly(local),
             _ => Weekly(local, policy.WeekStartDay),
         };
+
+        // The boundary is computed in India Standard Time so the calendar day is right, but the
+        // value handed back is normalised to UTC before anything else touches it. Both sides name
+        // the same instant, so nothing about "which day this period starts on" changes — only its
+        // .Offset does. Skipping this step is not cosmetic: Npgsql refuses to write a
+        // DateTimeOffset with a non-zero offset as a `timestamptz` parameter at all, so every query
+        // and every insert built from an un-normalised period fails against a real database, in
+        // memory alone.
+        return new SettlementPeriod(period.Start.ToUniversalTime(), period.End.ToUniversalTime());
     }
 
     /// <summary>The period immediately before the one an instant falls in.</summary>

@@ -65,6 +65,13 @@ internal sealed class CommerceApiFactory(string connectionString) : KlaraHomeApi
     /// <summary>The courier, at the boundary.</summary>
     public FakeShippingProvider Courier { get; } = new();
 
+    /// <summary>
+    /// A payout rail, at the boundary. Registered but not selected by default — <c>Payouts:Provider</c>
+    /// stays blank unless a test opts in through <see cref="Overrides"/>, which is what keeps the
+    /// honest-adapter behaviour provable against the real default.
+    /// </summary>
+    public FakePayoutProvider Payouts { get; } = new();
+
     /// <summary>The one-time codes this host has sent.</summary>
     public CapturingOtpDispatcher Otp { get; } = new();
 
@@ -173,6 +180,10 @@ internal sealed class CommerceApiFactory(string connectionString) : KlaraHomeApi
             services.RemoveAll<IPaymentProvider>();
             services.AddSingleton<IPaymentProvider>(Gateway);
             services.AddSingleton<IPaymentProvider, InternalCodPaymentProvider>();
+
+            // Added alongside the real UnconfiguredPayoutProvider, never replacing it. The registry
+            // picks whichever Payouts:Provider names, and the default configuration names neither.
+            services.AddSingleton<Modules.Settlements.Infrastructure.Payouts.IPayoutProvider>(Payouts);
 
             OverrideFeatureFlags(services, Features);
         });

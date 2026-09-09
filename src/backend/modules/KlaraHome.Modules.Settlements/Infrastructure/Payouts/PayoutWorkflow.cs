@@ -282,7 +282,7 @@ internal sealed partial class PayoutWorkflow(
 
         if (answer.IsProcessed)
         {
-            item.Complete(answer.Utr, answer.Status, answer.OccurredAt ?? clock.UtcNow);
+            item.Complete(answer.ProviderPayoutId, answer.Utr, answer.Status, answer.OccurredAt ?? clock.UtcNow);
 
             await poster
                 .PostPayoutAsync(item, item.SettledAt ?? clock.UtcNow, cancellationToken)
