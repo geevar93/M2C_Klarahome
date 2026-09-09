@@ -377,16 +377,28 @@ internal sealed class TransitionSubOrderCommandHandler(
         var (order, subOrder) = loaded.Value;
         var from = subOrder.Status;
 
-        var moved = await workflow
-            .TransitionAsync(order, subOrder, next, scope.Actor, scope.ActorId, command.Reason, cancellationToken)
+        // In a transaction because packing raises the tax invoice, and the invoice number comes
+        // from a counter row taken with SELECT … FOR UPDATE — a lock that lives exactly as long as
+        // the transaction holding it. Two sellers' parcels closed at the same instant would
+        // otherwise both read the same next value.
+        var moved = await OrdersTransaction
+            .RunAsync(
+                context,
+                token => workflow.TransitionAsync(
+                    order,
+                    subOrder,
+                    next,
+                    scope.Actor,
+                    scope.ActorId,
+                    command.Reason,
+                    token),
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (moved.IsFailure)
         {
             return moved.Error;
         }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await audit.RecordAsync(
             new AuditEntry
@@ -502,14 +514,18 @@ internal sealed class IssueInvoiceCommandHandler(
 
         var (order, subOrder) = loaded.Value;
 
-        var issued = await workflow.IssueInvoiceAsync(order, subOrder, cancellationToken).ConfigureAwait(false);
+        // The gapless series is a locked counter row, so the allocation and the commit have to be
+        // one transaction: without it the lock is released by the select that took it, two
+        // operators pressing "raise invoice" at once both take the same number, and the unique
+        // index turns a queue into a 500.
+        var issued = await OrdersTransaction
+            .RunAsync(context, token => workflow.IssueInvoiceAsync(order, subOrder, token), cancellationToken)
+            .ConfigureAwait(false);
 
         if (issued.IsFailure)
         {
             return issued.Error;
         }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await audit.RecordAsync(
             new AuditEntry

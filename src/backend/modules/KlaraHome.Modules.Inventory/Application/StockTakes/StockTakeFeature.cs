@@ -237,7 +237,7 @@ internal sealed class CreateStockTakeCommandHandler(
 
         if (!scope.CanWrite(warehouse.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var rows = context.StockItems
@@ -304,7 +304,7 @@ internal sealed class RecordStockTakeCountsCommandHandler(InventoryDbContext con
 
         if (!scope.CanWrite(take.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (!take.IsOpen)
@@ -381,7 +381,7 @@ internal sealed class SubmitStockTakeCommandHandler(
 
         if (!scope.CanWrite(take.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (take.Status != StockTakeStatus.Counting)
@@ -490,7 +490,7 @@ internal sealed class CancelStockTakeCommandHandler(InventoryDbContext context, 
 
         if (!scope.CanWrite(take.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (!take.Cancel())

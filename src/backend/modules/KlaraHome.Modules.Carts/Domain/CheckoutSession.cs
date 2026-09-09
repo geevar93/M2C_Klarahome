@@ -331,6 +331,18 @@ internal sealed class CheckoutSession : AggregateRoot<Guid>, ITenantScoped, IAud
         _placements.Add(placement);
         return placement;
     }
+
+    /// <summary>
+    /// Drops an attempt that never became a row, because another request won the key.
+    /// </summary>
+    /// <remarks>
+    /// The loser of the race on <c>(tenant_id, idempotency_key)</c> has to forget the placement it
+    /// tried to make. Detaching it from the change tracker is not enough on its own: it is still on
+    /// this collection, and the next save re-discovers it through the navigation and tries the
+    /// insert again.
+    /// </remarks>
+    /// <param name="placement">The attempt to forget.</param>
+    public void DiscardPlacement(CheckoutPlacement placement) => _placements.Remove(placement);
 }
 
 /// <summary>

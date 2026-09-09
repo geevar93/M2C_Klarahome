@@ -339,7 +339,7 @@ internal sealed class UpdateWarehouseCommandHandler(
 
         if (!scope.CanWrite(warehouse.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var before = new { warehouse.Name, warehouse.Pincode, warehouse.Priority, warehouse.IsActive };
@@ -401,7 +401,7 @@ internal sealed class DeleteWarehouseCommandHandler(
 
         if (!scope.CanWrite(warehouse.VendorId))
         {
-            return Result.Failure(InventoryErrors.OutOfScope);
+            return Result.Failure(InventoryErrors.PlatformOnly);
         }
 
         // A location with stock rows against it cannot go: the ledger entries behind them point at

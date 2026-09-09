@@ -250,8 +250,17 @@ internal sealed class QuoteEngine(
 
     /// <summary>How many times this shopper has already used each candidate promotion.</summary>
     /// <remarks>
+    /// <para>
     /// Only the promotions that actually carry a per-customer limit are counted. Most do not, and
     /// counting redemptions for all of them would be a join nobody needed on every cart render.
+    /// </para>
+    /// <para>
+    /// A <em>reversed</em> redemption still counts. That is the whole reason a reversal marks the
+    /// row instead of deleting it (<see cref="PromotionRedemption"/>): a per-customer limit that
+    /// forgot a cancelled order would let one shopper cycle a single-use coupon for ever by placing
+    /// and cancelling. The global counter is a different question and is given back, because a use
+    /// nobody consumed should not be denied to the next shopper.
+    /// </para>
     /// </remarks>
     /// <param name="customerId">The shopper, or null.</param>
     /// <param name="candidates">The promotions being considered.</param>
@@ -274,8 +283,7 @@ internal sealed class QuoteEngine(
         var counts = await context.PromotionRedemptions
             .AsNoTracking()
             .Where(redemption => redemption.CustomerId == customer
-                                 && limited.Contains(redemption.PromotionId)
-                                 && redemption.Status == RedemptionStatus.Redeemed)
+                                 && limited.Contains(redemption.PromotionId))
             .GroupBy(redemption => redemption.PromotionId)
             .Select(group => new { PromotionId = group.Key, Count = group.Count() })
             .ToListAsync(cancellationToken)

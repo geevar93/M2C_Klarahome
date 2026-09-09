@@ -6,6 +6,7 @@ using KlaraHome.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace KlaraHome.Modules.Inventory.Infrastructure.Stock;
 
@@ -38,6 +39,9 @@ internal sealed partial class StockAvailabilityService(
     IClock clock,
     ILogger<StockAvailabilityService> logger) : IStockAvailability
 {
+    /// <summary>The partial unique index that permits one live hold per cart or order line.</summary>
+    private const string LiveHoldIndex = "ux_stock_reservations_live";
+
     /// <inheritdoc />
     public async ValueTask<StockAvailability> FindAsync(
         Guid listingId,
@@ -110,80 +114,164 @@ internal sealed partial class StockAvailabilityService(
             : expiresAt > ceiling ? ceiling
             : expiresAt;
 
-        var existing = await context.Reservations
-            .FirstOrDefaultAsync(
-                reservation => reservation.ListingId == listingId
-                               && reservation.ReferenceType == referenceType
-                               && reservation.ReferenceId == referenceId
-                               && reservation.LineReferenceId == lineReferenceId
-                               && reservation.Status == ReservationStatus.Held,
-                cancellationToken)
-            .ConfigureAwait(false);
+        Guid? held = null;
+        var considered = 0;
 
-        // Idempotent on the line: a retried checkout gets its own hold back rather than taking the
-        // stock a second time. The expiry is pushed out, because the shopper is evidently still
-        // there.
-        if (existing is not null)
+        // One transaction around the whole thing, and it is not a nicety. The movement is a raw
+        // command: outside a transaction it commits the instant it runs, so the units were held
+        // before the reservation row that justifies them existed. Anything that then refused the
+        // insert — and the partial unique index refuses one on every simultaneous retry of the same
+        // cart line — left the stock held by nothing at all, with no ledger entry to explain it and
+        // no hold anybody could release.
+        try
         {
-            if (existing.Quantity >= quantity)
-            {
-                existing.ExtendTo(expiry);
-                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return existing.Id;
-            }
+            await context.ExecuteInTransactionAsync(
+                async (_, token) =>
+                {
+                    held = null;
+                    considered = 0;
 
-            // They want more than they hold. Release what they have and take the whole quantity
-            // afresh, so the outcome is one hold of the requested size rather than two of unclear
-            // provenance.
-            await SettleOneAsync(existing, ReservationOutcome.Released, now, cancellationToken)
+                    var existing = await context.Reservations
+                        .FirstOrDefaultAsync(
+                            reservation => reservation.ListingId == listingId
+                                           && reservation.ReferenceType == referenceType
+                                           && reservation.ReferenceId == referenceId
+                                           && reservation.LineReferenceId == lineReferenceId
+                                           && reservation.Status == ReservationStatus.Held,
+                            token)
+                        .ConfigureAwait(false);
+
+                    // Idempotent on the line: a retried checkout gets its own hold back rather than
+                    // taking the stock a second time. The expiry is pushed out, because the shopper
+                    // is evidently still there.
+                    if (existing is not null)
+                    {
+                        if (existing.Quantity >= quantity)
+                        {
+                            existing.ExtendTo(expiry);
+                            await context.SaveChangesAsync(token).ConfigureAwait(false);
+                            held = existing.Id;
+                            return;
+                        }
+
+                        // They want more than they hold. Release what they have and take the whole
+                        // quantity afresh, so the outcome is one hold of the requested size rather
+                        // than two of unclear provenance.
+                        //
+                        // Saved before the new hold is added, and that ordering is load-bearing: the
+                        // live-hold index permits one Held row per line, and EF writes an insert
+                        // ahead of an update in the same batch — so the new row would arrive while
+                        // the old one was still Held and collide with it.
+                        await SettleOneAsync(existing, ReservationOutcome.Released, now, token)
+                            .ConfigureAwait(false);
+
+                        await context.SaveChangesAsync(token).ConfigureAwait(false);
+                    }
+
+                    var locations = await context.StockItems
+                        .IgnoreQueryFilters([ModelConventions.VendorFilter])
+                        .Where(item => item.ListingId == listingId)
+                        .Join(
+                            context.Warehouses.AsNoTracking().IgnoreQueryFilters([ModelConventions.VendorFilter]),
+                            item => item.WarehouseId,
+                            warehouse => warehouse.Id,
+                            (item, warehouse) => new { item, warehouse.Priority, warehouse.Code, warehouse.IsActive })
+                        .Where(row => row.IsActive)
+                        .OrderBy(row => row.Priority)
+                        .ThenBy(row => row.Code)
+                        .Select(row => row.item)
+                        .ToListAsync(token)
+                        .ConfigureAwait(false);
+
+                    considered = locations.Count;
+
+                    foreach (var item in locations)
+                    {
+                        var result = await ledger
+                            .ReserveAsync(item, quantity, referenceType, referenceId, token)
+                            .ConfigureAwait(false);
+
+                        if (!result.Applied)
+                        {
+                            continue;
+                        }
+
+                        var reservation = StockReservation.Hold(
+                            item.Id,
+                            listingId,
+                            quantity,
+                            referenceType,
+                            referenceId,
+                            lineReferenceId,
+                            expiry);
+
+                        context.Reservations.Add(reservation);
+                        await context.SaveChangesAsync(token).ConfigureAwait(false);
+
+                        held = reservation.Id;
+                        return;
+                    }
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsLiveHoldCollision(exception))
+        {
+            // Somebody else's retry of this very line committed between our read and our insert.
+            // The whole attempt has rolled back, units included, so the honest answer is the hold
+            // that did win — which is what idempotency on the line means. The change tracker is
+            // cleared because everything in it belongs to the unit of work that was just discarded.
+            context.ChangeTracker.Clear();
+
+            HoldCollided(logger, listingId, referenceId, lineReferenceId);
+
+            return await LiveHoldAsync(listingId, referenceType, referenceId, lineReferenceId, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        var locations = await context.StockItems
-            .IgnoreQueryFilters([ModelConventions.VendorFilter])
-            .Where(item => item.ListingId == listingId)
-            .Join(
-                context.Warehouses.AsNoTracking().IgnoreQueryFilters([ModelConventions.VendorFilter]),
-                item => item.WarehouseId,
-                warehouse => warehouse.Id,
-                (item, warehouse) => new { item, warehouse.Priority, warehouse.Code, warehouse.IsActive })
-            .Where(row => row.IsActive)
-            .OrderBy(row => row.Priority)
-            .ThenBy(row => row.Code)
-            .Select(row => row.item)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var item in locations)
+        if (held is null)
         {
-            var result = await ledger
-                .ReserveAsync(item, quantity, referenceType, referenceId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!result.Applied)
-            {
-                continue;
-            }
-
-            var reservation = StockReservation.Hold(
-                item.Id,
-                listingId,
-                quantity,
-                referenceType,
-                referenceId,
-                lineReferenceId,
-                expiry);
-
-            context.Reservations.Add(reservation);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-            return reservation.Id;
+            HoldRefused(logger, listingId, quantity, considered);
         }
 
-        HoldRefused(logger, listingId, quantity, locations.Count);
-
-        return null;
+        return held;
     }
+
+    /// <summary>The id of the live hold on one line, or null if there is none.</summary>
+    /// <param name="listingId">The offer.</param>
+    /// <param name="referenceType">What is holding it.</param>
+    /// <param name="referenceId">The cart or order.</param>
+    /// <param name="lineReferenceId">The line within it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<Guid?> LiveHoldAsync(
+        Guid listingId,
+        string referenceType,
+        Guid referenceId,
+        Guid lineReferenceId,
+        CancellationToken cancellationToken)
+        => await context.Reservations
+            .AsNoTracking()
+            .Where(reservation => reservation.ListingId == listingId
+                                  && reservation.ReferenceType == referenceType
+                                  && reservation.ReferenceId == referenceId
+                                  && reservation.LineReferenceId == lineReferenceId
+                                  && reservation.Status == ReservationStatus.Held)
+            .Select(reservation => (Guid?)reservation.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <summary>Whether a save failed because this line already has a live hold.</summary>
+    /// <remarks>
+    /// Matched on the index name rather than on the SQLSTATE alone: <c>23505</c> covers every unique
+    /// violation in the schema, and swallowing an unrelated one as "somebody beat us to it" would
+    /// turn a real bug into a wrong answer.
+    /// </remarks>
+    /// <param name="exception">The failure.</param>
+    private static bool IsLiveHoldCollision(DbUpdateException exception)
+        => exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: LiveHoldIndex,
+        };
 
     /// <inheritdoc />
     public async ValueTask<int> SettleAsync(
@@ -207,15 +295,25 @@ internal sealed partial class StockAvailabilityService(
         var now = clock.UtcNow;
         var settled = 0;
 
-        foreach (var reservation in held)
-        {
-            if (await SettleOneAsync(reservation, outcome, now, cancellationToken).ConfigureAwait(false))
+        // In one transaction, for the same reason the hold is: each settlement runs a raw movement
+        // that commits on its own outside one, so a failure part-way through a multi-line order
+        // would leave some units moved with no ledger entry behind them and their holds still live.
+        await context.ExecuteInTransactionAsync(
+            async (_, token) =>
             {
-                settled++;
-            }
-        }
+                settled = 0;
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var reservation in held)
+                {
+                    if (await SettleOneAsync(reservation, outcome, now, token).ConfigureAwait(false))
+                    {
+                        settled++;
+                    }
+                }
+
+                await context.SaveChangesAsync(token).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return settled;
     }
@@ -340,6 +438,17 @@ internal sealed partial class StockAvailabilityService(
         Level = LogLevel.Information,
         Message = "No location could hold {Quantity} of listing {ListingId}; {Locations} considered")]
     private static partial void HoldRefused(ILogger logger, Guid listingId, int quantity, int locations);
+
+    [LoggerMessage(
+        EventId = 7102,
+        Level = LogLevel.Information,
+        Message = "A concurrent hold on listing {ListingId} for {ReferenceId}/{LineReferenceId} won the "
+                  + "live-hold index; returning the hold that committed")]
+    private static partial void HoldCollided(
+        ILogger logger,
+        Guid listingId,
+        Guid referenceId,
+        Guid lineReferenceId);
 
     [LoggerMessage(
         EventId = 7101,

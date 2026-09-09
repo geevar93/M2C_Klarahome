@@ -50,8 +50,20 @@ internal sealed class WarehouseAddress
 /// from. Lower wins. It is not a uniqueness constraint: two warehouses may share a priority, in
 /// which case the tie is broken on the code, so the order is at least reproducible.
 /// </para>
+/// <para>
+/// <see cref="IPlatformShared"/> is what makes the platform's own locations visible to a seller, and
+/// it is declared here and on no other table in this schema. The generic vendor filter's rule is
+/// "a row with no vendor belongs to the platform, and a vendor user has no business seeing it
+/// either", which is right for a supplier list and wrong for a shelf: fulfilment by platform puts a
+/// seller's units in a platform warehouse, the stock row is theirs because a stock row's owner is
+/// the <em>listing's</em> seller, and a seller who could not see the location could not see their
+/// own units — the stock list joins to it. Widening the read says nothing about the write; that
+/// rule is <see cref="Infrastructure.InventoryScope.CanWrite"/>, which is what refuses a seller
+/// opening, renaming, closing or counting a location that is not theirs.
+/// </para>
 /// </remarks>
-internal sealed class Warehouse : AggregateRoot<Guid>, ITenantScoped, IAuditable, IVendorScoped
+internal sealed class Warehouse
+    : AggregateRoot<Guid>, ITenantScoped, IAuditable, IVendorScoped, IPlatformShared
 {
     private Warehouse(Guid id, Guid? vendorId, string code, string name, string pincode)
         : base(id)

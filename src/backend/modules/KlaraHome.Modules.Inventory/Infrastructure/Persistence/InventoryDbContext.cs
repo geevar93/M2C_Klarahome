@@ -15,7 +15,10 @@ namespace KlaraHome.Modules.Inventory.Infrastructure.Persistence;
 /// Nearly every table here is <see cref="KlaraHome.SharedKernel.Domain.IVendorScoped"/> with a
 /// nullable seller, and the nullability is load-bearing: a warehouse, a supplier or a stock row may
 /// belong to a seller or to the platform, and the global vendor filter then shows a vendor caller
-/// their own rows and the platform's shared ones.
+/// their own rows and nobody else's. <see cref="Domain.Warehouse"/> is the one table that also
+/// declares <see cref="KlaraHome.SharedKernel.Domain.IPlatformShared"/>, so the platform's locations
+/// are readable by every seller; see that type for why, and
+/// <see cref="Infrastructure.InventoryScope.CanWrite"/> for what still refuses the write.
 /// </para>
 /// <para>
 /// The line tables — purchase-order lines, receipt lines, take lines — are deliberately <em>not</em>

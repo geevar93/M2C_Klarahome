@@ -97,6 +97,18 @@ internal sealed partial class AbandonedCartSweeper : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Runs exactly one sweep and answers how many rows it wrote off.
+    /// </summary>
+    /// <remarks>
+    /// For a caller that must not race a timer. The loop above is disabled in the API host and a test
+    /// that started it would be asserting on whether a poll had happened yet; this is the same code
+    /// on the same schedule of one, and what it proves is what the worker will do.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal Task<int> SweepOnceAsync(CancellationToken cancellationToken)
+        => SweepAsync(_options.CurrentValue, cancellationToken);
+
     /// <summary>Claims a batch and writes it off. Returns how many rows were touched.</summary>
     private async Task<int> SweepAsync(CartsOptions options, CancellationToken cancellationToken)
     {

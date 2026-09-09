@@ -297,7 +297,7 @@ internal sealed class UpdateSupplierCommandHandler(
 
         if (!scope.CanWrite(supplier.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var before = new { supplier.Name, supplier.Gstin, supplier.PaymentTermsDays, supplier.IsActive };

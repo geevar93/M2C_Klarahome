@@ -28,9 +28,20 @@ internal static class InventoryErrors
     public static Error InvalidTransition(object from, object to)
         => Error.Conflict("INVENTORY_INVALID_TRANSITION", $"That cannot go from {from} to {to}.");
 
-    /// <summary>A vendor caller tried to act on somebody else's stock, warehouse or document.</summary>
-    public static Error OutOfScope { get; } =
-        Error.Validation("INVENTORY_SCOPE", "You can only do that within your own organisation.");
+    /// <summary>
+    /// A vendor caller tried to write to a row the platform owns.
+    /// </summary>
+    /// <remarks>
+    /// A <em>permission</em> refusal rather than a scope one, and 403 is what
+    /// <c>docs/04-api-specification.md</c> §1 gives it — the same split
+    /// <c>VendorScope.PlatformOnly</c> draws. Another seller's rows are not visible at all, so a
+    /// caller who reaches this has named a row they can see and asked to do something to it that
+    /// only staff do: opening stock in a platform warehouse, renaming or closing one, counting one,
+    /// or buying into one. It leaks nothing, because the only resource involved is one they can
+    /// already read.
+    /// </remarks>
+    public static Error PlatformOnly { get; } =
+        Error.Forbidden("INVENTORY_PLATFORM_ONLY", "Only platform staff can do that.");
 
     /// <summary>
     /// The movement would have taken the location below empty.

@@ -176,3 +176,78 @@ batch size.
 
 **Suite state:** 946 unit, 14 architecture, **254 integration** (was 232), all green; solution builds
 at 0 warnings.
+
+#### 29.4 — Wave 1 (done): Steps 11–14, 84 rows closed by 111 integration tests
+
+The first four steps worked **in parallel**, one agent per step in its own git worktree, merged
+into `step29-wave1` and squashed onto `main` as one commit. Each agent wrote a full report; those
+are the detail, and they are the only Step 29 documents worth opening after this paragraph:
+
+| Step | Report | Rows | Tests added |
+|---|---|---|---|
+| 11 — Inventory & warehouse | [`29-reports/step-11-report.md`](29-reports/step-11-report.md) | 18 closed | 24 integration |
+| 12 — Pricing, tax & promotions | [`29-reports/step-12-report.md`](29-reports/step-12-report.md) | 24 closed | 25 integration, 23 unit |
+| 13 — Cart & checkout | [`29-reports/step-13-report.md`](29-reports/step-13-report.md) | 24 closed | 34 integration, 2 unit |
+| 14 — Ordering & the state machine | [`29-reports/step-14-report.md`](29-reports/step-14-report.md) | 18 closed, **2 partially** | 28 integration, 5 unit |
+
+**Twenty real defects were found and fixed**, and the pattern from 29.2 and 29.3 held: the
+expensive ones were not in the algorithms, they were in the seams between a module and the database.
+
+- **Eight in Inventory**, seven of them 🔴: a simultaneous retry of one cart line left stock held by
+  nothing at all; increasing a cart line's quantity was a 500; a multi-line settlement could move
+  stock with no ledger row behind it; the append-only stock ledger was editable one partition at a
+  time, because a `FOR EACH ROW` trigger is inherited by partitions but a `TRUNCATE` reaches none of
+  them; a goods receipt refused on its second line committed its first line's stock; a seller could
+  not see the platform locations their own stock sits on; and a platform-owned write was refused
+  with 422 rather than 403.
+- **Three in Pricing**, one of which stopped the platform dead: the promotion ledger threw on every
+  call, so **no order carrying a promotion could be placed or cancelled at all**. Also a cancelled
+  order that gave a shopper their single-use coupon back, and the same dead-`CanWrite` shape Step 10
+  found, this time hiding the platform's price lists from every seller.
+- **Five in Cart & checkout**, including cash on delivery running only three of its four rules —
+  the missing one was the courier's — and three separate failures of the idempotency guarantee: a
+  successful place-order could never be replayed, an attempt that *threw* compensated nothing and
+  left the stock off sale with the key still claimed, and the loser of a key race left its own
+  placement on the session.
+- **Four in Ordering**, including a gapless invoice series that was not gapless under concurrency
+  (it was a 500), an order completed by a cancellation that never announced itself, and the
+  discovery that **no invoice has ever had a PDF** — `CultureInfo.GetCultureInfo("en-IN")` throws
+  under `InvariantGlobalization`, and nothing said so.
+
+**What was deliberately not fixed** is in [`../PARKING_LOT.md`](../PARKING_LOT.md), fourteen rows
+dated 2026-09-09. The rule the agents worked to: a defect in a module you do not own is reported
+with its fix, not applied, because four agents editing one another's modules produces merge
+conflicts in place of progress. Three of those rows need the **User's decision** rather than a
+schedule — store credit has no product path at all (which is why two Step 14 rows are only
+partially closed), no seeded vendor role grants the Inventory surface, and `02-domain-model.md`
+§5.1's state diagram is missing four implemented edges.
+
+**Suite state:** **977 unit, 14 architecture, 365 integration — 1356 backend tests, 0 failures**
+(was 946 / 14 / 254), plus the frontend unit suites; solution builds at 0 warnings. Verified by one
+`pwsh tools/ci.ps1 -Stage build,test -CoverageMinimum 0` on `main` after the squash, in 23:34.
+
+**Line coverage is 70.94% (branch 61.31%), up from 46.27% at Step 28B — past the committed 70%
+gate.** That is a Part 2 deliverable met while working Part 1, and it is worth being precise about
+why: nobody wrote a test for coverage's sake. Closing four steps' behavioural debt through the real
+API exercises the handlers, the validators, the persistence configuration and the error paths
+underneath it, and the number followed. **It is not yet safe to call the gate restored** — the
+figure comes from a run with `-CoverageMinimum 0`, the per-suite floors in `tools/ci.ps1` still read
+941 / 14 / **180** against real counts of 977 / 14 / 365, and a full `ci.ps1 all` still fails at the
+`format` stage on two module files nothing here touched. Coverage will also move as Steps 15–28's
+rows land. Restoring the gates is still Part 2's job; this is evidence that it will not be a fight.
+
+**One process lesson, recorded because the next wave should not repeat it.** Four integration
+suites sharing one Docker daemon on a 7.5 GB VM produced failures that read as product defects and
+were not: `MigrationPipelineTests` stands up a second Postgres container beside the collection's,
+and it failed in whole-suite runs while passing 6/6 alone, twice. One run had `docker ps` come back
+empty while two test hosts were still alive. **Parallel agents, serialised integration runs.**
+
+**And one defect that only the merge could find.** Four suites that were each green alone were not
+green together: `InventoryStockTests` asserted `Assert.Equal(1, await SweepAsync())`, which was true
+while Step 11's tests were the only ones in that database and false the moment Steps 13 and 14
+joined them — `ReservationSweeper.SweepOnceAsync` runs over the whole database, so a checkout test's
+lapsed hold is swept by the same pass, and the assertion saw three. Rewritten to assert what belongs
+to the test — that the sweep put back at least one hold, and that this test's own reservation reached
+`Expired` — which is the pattern `InventoryConcurrencyTests` was already using. Worth stating plainly
+because it is the cost of the parallel model: **a per-agent green suite is not evidence, and only the
+merged run is.**

@@ -86,6 +86,18 @@ internal sealed class CommerceApiFactory(string connectionString) : KlaraHomeApi
     /// </remarks>
     public Dictionary<string, string?> Overrides { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Extra registrations a single test needs, applied after everything else.
+    /// </summary>
+    /// <remarks>
+    /// The escape hatch for the handful of criteria that are about what a module does when a
+    /// collaborator <em>throws</em>. Nothing real can be made to throw on demand, and a compensating
+    /// release that only ever runs on a well-formed refusal is precisely the bug those criteria exist
+    /// to catch. It is empty for every other host, so the rule above — the substitutions stop at the
+    /// network boundary — still describes what these tests run against.
+    /// </remarks>
+    public List<Action<IServiceCollection>> Overlays { get; } = [];
+
     protected override IDictionary<string, string?> Settings
     {
         get
@@ -175,6 +187,11 @@ internal sealed class CommerceApiFactory(string connectionString) : KlaraHomeApi
             services.AddSingleton<IPaymentProvider, InternalCodPaymentProvider>();
 
             OverrideFeatureFlags(services, Features);
+
+            foreach (var overlay in Overlays)
+            {
+                overlay(services);
+            }
         });
     }
 

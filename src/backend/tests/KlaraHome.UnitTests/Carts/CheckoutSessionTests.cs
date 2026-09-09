@@ -1,5 +1,6 @@
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Shipping;
 using KlaraHome.Modules.Carts.Application.Carts;
 using KlaraHome.Modules.Carts.Domain;
 using KlaraHome.Modules.Carts.Infrastructure.Checkout;
@@ -110,7 +111,8 @@ public sealed class CheckoutSessionTests
         var reason = CheckoutWorkflow.CodRefusalReason(
             CartWith(total: 100m, codAllowed: true),
             Open(),
-            new CommerceSettings { CodEnabled = false });
+            new CommerceSettings { CodEnabled = false },
+            CashCollectable);
 
         Assert.NotNull(reason);
     }
@@ -121,7 +123,8 @@ public sealed class CheckoutSessionTests
         var reason = CheckoutWorkflow.CodRefusalReason(
             CartWith(total: 9000m, codAllowed: true),
             Open(),
-            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m });
+            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m },
+            CashCollectable);
 
         Assert.NotNull(reason);
         Assert.Contains("5000", reason, StringComparison.Ordinal);
@@ -133,7 +136,8 @@ public sealed class CheckoutSessionTests
         var reason = CheckoutWorkflow.CodRefusalReason(
             CartWith(total: 100m, codAllowed: false),
             Open(),
-            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m });
+            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m },
+            CashCollectable);
 
         Assert.NotNull(reason);
         Assert.Contains("Teak table", reason, StringComparison.Ordinal);
@@ -145,13 +149,60 @@ public sealed class CheckoutSessionTests
         var reason = CheckoutWorkflow.CodRefusalReason(
             CartWith(total: 100m, codAllowed: true),
             Open(),
-            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m });
+            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m },
+            CashCollectable);
+
+        Assert.Null(reason);
+    }
+
+    [Fact]
+    public void Cash_on_delivery_is_refused_where_no_courier_will_collect_cash()
+    {
+        var reason = CheckoutWorkflow.CodRefusalReason(
+            CartWith(total: 100m, codAllowed: true),
+            Open(),
+            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m },
+            CashRefused);
+
+        Assert.Equal(CheckoutWorkflow.CodNotCollected, reason);
+    }
+
+    [Fact]
+    public void Cash_on_delivery_is_allowed_before_an_address_has_been_chosen()
+    {
+        // No destination to ask about yet. Refusing here would grey the option out on a screen the
+        // shopper reaches before they have said where they live.
+        var reason = CheckoutWorkflow.CodRefusalReason(
+            CartWith(total: 100m, codAllowed: true),
+            Open(),
+            new CommerceSettings { CodEnabled = true, CodOrderValueLimit = 5000m },
+            destination: null);
 
         Assert.Null(reason);
     }
 
     private static CheckoutSession Open()
         => CheckoutSession.Open(Cart, Customer, Money.Inr, Morning.AddHours(1));
+
+    /// <summary>A destination a courier will both reach and take cash at.</summary>
+    private static DeliveryCheck CashCollectable => Destination(codAvailable: true);
+
+    /// <summary>A destination a courier will reach and will not take cash at.</summary>
+    private static DeliveryCheck CashRefused => Destination(codAvailable: false);
+
+    /// <summary>What the logistics seam answers about one PIN code.</summary>
+    private static DeliveryCheck Destination(bool codAvailable)
+        => new(
+            "400001",
+            Deliverable: true,
+            Covered: true,
+            Serviceable: true,
+            codAvailable,
+            City: "Mumbai",
+            State: "Maharashtra",
+            EtaDays: 3,
+            codAvailable ? DeliveryRefusal.None : DeliveryRefusal.CodUnavailable,
+            Message: null);
 
     private static AddressSnapshot Address(Guid stateId, string pincode)
         => new()

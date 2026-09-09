@@ -585,10 +585,12 @@ internal sealed class SetCheckoutShippingCommandHandler(
 /// <param name="workflow">The shared checkout steps.</param>
 /// <param name="scope">Who is asking.</param>
 /// <param name="settings">Supplies the store's cash-on-delivery rules.</param>
+/// <param name="deliveries">Answers whether a courier will collect cash at the chosen address.</param>
 internal sealed class GetPaymentMethodsQueryHandler(
     CheckoutWorkflow workflow,
     CartsScope scope,
-    IStoreSettings settings) : IQueryHandler<GetPaymentMethodsQuery, IReadOnlyList<PaymentMethodResponse>>
+    IStoreSettings settings,
+    IShippingOptions deliveries) : IQueryHandler<GetPaymentMethodsQuery, IReadOnlyList<PaymentMethodResponse>>
 {
     public async Task<Result<IReadOnlyList<PaymentMethodResponse>>> HandleAsync(
         GetPaymentMethodsQuery query,
@@ -609,7 +611,11 @@ internal sealed class GetPaymentMethodsQueryHandler(
         var priced = await workflow.RepriceAsync(session, cart, cancellationToken).ConfigureAwait(false);
         var commerce = await settings.GetAsync<CommerceSettings>(cancellationToken).ConfigureAwait(false);
 
-        var refusal = CheckoutWorkflow.CodRefusalReason(priced, session, commerce);
+        var destination = await CheckoutWorkflow
+            .CodDestinationAsync(session, deliveries, cancellationToken)
+            .ConfigureAwait(false);
+
+        var refusal = CheckoutWorkflow.CodRefusalReason(priced, session, commerce, destination);
 
         // The fee is read off a quote rather than off the settings, because this module computes no
         // money. It is the same figure the shopper will be charged for the same reason.
@@ -635,11 +641,13 @@ internal sealed class GetPaymentMethodsQueryHandler(
 /// <param name="context">The Cart data context.</param>
 /// <param name="scope">Who is asking.</param>
 /// <param name="settings">Supplies the store's cash-on-delivery rules.</param>
+/// <param name="deliveries">Answers whether a courier will collect cash at the chosen address.</param>
 internal sealed class SetPaymentMethodCommandHandler(
     CheckoutWorkflow workflow,
     CartsDbContext context,
     CartsScope scope,
-    IStoreSettings settings) : ICommandHandler<SetPaymentMethodCommand, CheckoutResponse>
+    IStoreSettings settings,
+    IShippingOptions deliveries) : ICommandHandler<SetPaymentMethodCommand, CheckoutResponse>
 {
     public async Task<Result<CheckoutResponse>> HandleAsync(
         SetPaymentMethodCommand command,
@@ -673,7 +681,11 @@ internal sealed class SetPaymentMethodCommandHandler(
             var priced = await workflow.RepriceAsync(session, cart, cancellationToken).ConfigureAwait(false);
             var commerce = await settings.GetAsync<CommerceSettings>(cancellationToken).ConfigureAwait(false);
 
-            if (CheckoutWorkflow.CodRefusalReason(priced, session, commerce) is { } refusal)
+            var destination = await CheckoutWorkflow
+                .CodDestinationAsync(session, deliveries, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (CheckoutWorkflow.CodRefusalReason(priced, session, commerce, destination) is { } refusal)
             {
                 return CartsErrors.CodUnavailable(refusal);
             }

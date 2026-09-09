@@ -1,6 +1,7 @@
 using System.Globalization;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Contracts.Pricing;
+using KlaraHome.Contracts.Shipping;
 using KlaraHome.Modules.Carts.Application.Carts;
 using KlaraHome.Modules.Carts.Application.Checkout;
 using KlaraHome.Modules.Carts.Domain;
@@ -198,16 +199,33 @@ internal sealed class CheckoutWorkflow(CartsDbContext context, CartRenderer rend
     /// Whether cash on delivery may be chosen for this basket, and why not when it may not.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Four independent rules, all of which have to hold, and the shopper is told which one failed:
-    /// the store has to offer COD at all, the order has to be under the value ceiling the business
-    /// set, every item has to be one its seller will accept cash for, and every chosen delivery
-    /// service has to be one the courier will collect on. "Not available" without the reason is the
-    /// answer that generates a support call.
+    /// the store has to offer COD at all, every item has to be one its seller will accept cash for,
+    /// the order has to be under the value ceiling the business set, and the destination has to be
+    /// one a courier will collect cash at. "Not available" without the reason is the answer that
+    /// generates a support call.
+    /// </para>
+    /// <para>
+    /// The fourth rule is the one that costs money when it is missing. Delivery is chosen
+    /// <em>before</em> the payment method, so the services on offer were quoted as prepaid parcels
+    /// and say nothing about cash; without asking again, a shopper is allowed to choose cash for a
+    /// PIN code every courier refuses to collect at, and nobody finds out until a driver is at the
+    /// door with a parcel and no way to be paid for it.
+    /// </para>
     /// </remarks>
     /// <param name="cart">The priced basket.</param>
     /// <param name="session">The session, for the chosen delivery services.</param>
     /// <param name="commerce">The store's commerce settings.</param>
-    public static string? CodRefusalReason(CartResponse cart, CheckoutSession session, CommerceSettings commerce)
+    /// <param name="destination">
+    /// What the courier says about collecting cash at the chosen address, or null while no address
+    /// has been chosen — in which case the address step is what will refuse it.
+    /// </param>
+    public static string? CodRefusalReason(
+        CartResponse cart,
+        CheckoutSession session,
+        CommerceSettings commerce,
+        DeliveryCheck? destination)
     {
         ArgumentNullException.ThrowIfNull(cart);
         ArgumentNullException.ThrowIfNull(session);
@@ -232,6 +250,43 @@ internal sealed class CheckoutWorkflow(CartsDbContext context, CartRenderer rend
             return $"Orders over {ceiling} cannot be paid for at the door.";
         }
 
+        if (destination is { CodAvailable: false })
+        {
+            return CodNotCollected;
+        }
+
         return null;
+    }
+
+    /// <summary>What a shopper is told when no courier will take cash to their address.</summary>
+    /// <remarks>
+    /// One string, because the payment-method screen, the payment-method choice and the last check at
+    /// placement all have to say the same thing about the same fact.
+    /// </remarks>
+    public const string CodNotCollected = "No courier will collect cash at that PIN code.";
+
+    /// <summary>
+    /// What the courier says about the chosen address, or null while there is no address to ask
+    /// about.
+    /// </summary>
+    /// <param name="session">The session.</param>
+    /// <param name="deliveries">The logistics seam.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<DeliveryCheck?> CodDestinationAsync(
+        CheckoutSession session,
+        IShippingOptions deliveries,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(deliveries);
+
+        if (session.ShippingAddress is not { } address)
+        {
+            return null;
+        }
+
+        return await deliveries
+            .CheckDestinationAsync(address.Pincode, isCod: true, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

@@ -301,7 +301,7 @@ internal sealed class CreatePurchaseOrderCommandHandler(
 
         if (!scope.CanWrite(warehouse.VendorId) || !scope.CanWrite(supplier.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var number = await scope.NextPurchaseOrderNumberAsync(cancellationToken).ConfigureAwait(false);
@@ -401,7 +401,7 @@ internal sealed class UpdatePurchaseOrderCommandHandler(
 
         if (!scope.CanWrite(order.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         // The document has left the building. A supplier who has been sent an order and then finds
@@ -465,7 +465,7 @@ internal sealed class SubmitPurchaseOrderCommandHandler(
 
         if (!scope.CanWrite(order.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (!order.Submit(clock.UtcNow))
@@ -519,7 +519,7 @@ internal sealed class CancelPurchaseOrderCommandHandler(
 
         if (!scope.CanWrite(order.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         // A partially received order cannot be cancelled: the units already on the shelf are real,

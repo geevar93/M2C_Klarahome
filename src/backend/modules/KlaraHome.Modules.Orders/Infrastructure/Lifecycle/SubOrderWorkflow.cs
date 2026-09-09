@@ -128,7 +128,7 @@ internal sealed class SubOrderWorkflow(
 
         await AfterTransitionAsync(order, subOrder, from, next, cancellationToken).ConfigureAwait(false);
 
-        order.Rederive(now);
+        var derived = order.Rederive(now);
         events.StatusChanged(order, subOrder, from, actor, reason);
 
         if (next == SubOrderStatus.Confirmed)
@@ -136,10 +136,7 @@ internal sealed class SubOrderWorkflow(
             events.Confirmed(order, subOrder);
         }
 
-        if (order.Status == OrderStatus.Completed && order.CompletedAt is not null)
-        {
-            events.Completed(order);
-        }
+        AnnounceCompletion(order, derived);
 
         return Result.Success();
     }
@@ -267,7 +264,7 @@ internal sealed class SubOrderWorkflow(
             visible: true,
             now));
 
-        order.Rederive(now);
+        var derived = order.Rederive(now);
 
         events.Cancelled(order, subOrder, initiator, reason, isPartial, wasConfirmed, cancelledTotal, cancelled);
 
@@ -275,6 +272,13 @@ internal sealed class SubOrderWorkflow(
         {
             events.StatusChanged(order, subOrder, from, actor, reason);
         }
+
+        // A cancellation can be what finishes an order: the last part still open is given up while
+        // another has already completed, and §5.2 makes the whole order Completed. Settlement,
+        // loyalty and the shopper's own "order complete" message all hang off OrderCompleted, so an
+        // order that reaches the state down this path has to announce it exactly as one that
+        // reached it down the other.
+        AnnounceCompletion(order, derived);
 
         await SettleMoneyAndStockAsync(order, wasConfirmed, cancellationToken).ConfigureAwait(false);
 
@@ -297,6 +301,24 @@ internal sealed class SubOrderWorkflow(
         SubOrder subOrder,
         CancellationToken cancellationToken)
         => invoices.IssueAsync(order, subOrder, cancellationToken);
+
+    /// <summary>
+    /// Announces <c>OrderCompleted</c>, and only on the write that actually completed the order.
+    /// </summary>
+    /// <remarks>
+    /// Gated on whether the derivation changed rather than on the state it landed in, so the event
+    /// is published once by whichever write finished the order and never again by a later one that
+    /// merely found it already finished.
+    /// </remarks>
+    /// <param name="order">The order, already re-derived.</param>
+    /// <param name="derivedChanged">Whether that derivation moved the order's status.</param>
+    private void AnnounceCompletion(Order order, bool derivedChanged)
+    {
+        if (derivedChanged && order.Status == OrderStatus.Completed)
+        {
+            events.Completed(order);
+        }
+    }
 
     /// <summary>Everything a particular transition drags along with it.</summary>
     private async Task AfterTransitionAsync(

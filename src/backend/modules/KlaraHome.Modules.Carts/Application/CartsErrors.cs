@@ -125,6 +125,19 @@ internal static class CartsErrors
     public static Error OutOfStock { get; } =
         Error.Conflict("CART_ITEM_OUT_OF_STOCK", "Some items sold out while you were checking out.");
 
+    /// <summary>
+    /// The attempt threw rather than refusing, and nothing it started stands.
+    /// </summary>
+    /// <remarks>
+    /// Recorded on the placement row so the key is <em>reusable</em>. An idempotency key promises at
+    /// most one order; an attempt that blew up created none, and leaving the key claimed would answer
+    /// the shopper's next press of <em>Pay</em> with a conflict for ever.
+    /// </remarks>
+    public static Error PlacementFailed { get; } =
+        Error.Unexpected(
+            "ORDER_PLACEMENT_FAILED",
+            "Your order could not be placed. Nothing was charged — please try again.");
+
     /// <summary>The Ordering module is not installed in this deployment.</summary>
     /// <remarks>
     /// The honest answer between Step 13 and Step 14: checkout is complete and there is nothing to

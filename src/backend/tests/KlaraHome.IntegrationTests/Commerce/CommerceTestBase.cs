@@ -77,24 +77,34 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
     /// A client signed in as a shopper who has never been here before.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Registered by the mobile OTP flow, which is how a storefront customer account actually comes
     /// into existence — there is no other route that produces one with a verified mobile number,
     /// and several of the behaviours under test key off exactly that.
+    /// </para>
+    /// <para>
+    /// The flow ships behind a flag that is <em>off</em>, because a deployment needs an SMS provider
+    /// before it can be offered. Pinned on here rather than switched on through the admin API: the
+    /// flags are rows in a schema the whole collection shares, so turning one on for everybody would
+    /// make each test depend on what the last one left behind.
+    /// </para>
     /// </remarks>
     /// <param name="mobile">The number, or null for one nothing else is using.</param>
     protected async Task<(HttpClient Client, string Mobile)> SignedInShopperAsync(string? mobile = null)
     {
+        Factory.Features[Modules.Identity.Infrastructure.IdentityFeatures.MobileOtpLogin] = true;
+
         var client = CreateClient();
         var number = mobile ?? NewMobile();
 
         var start = await client.PostAsJsonAsync(
-            "/api/v1/store/auth/otp/start",
+            "/api/v1/store/auth/otp/request",
             new { mobile = number },
             Cancellation);
 
         start.EnsureSuccessStatusCode();
 
-        var code = Factory.Otp.Latest(number, Modules.Identity.Domain.OtpPurpose.Login);
+        var code = Factory.Otp.Latest(E164(number), Modules.Identity.Domain.OtpPurpose.Login);
 
         await TestSignIn.SignInWithOtpAsync(client, number, code, Cancellation);
 
@@ -184,13 +194,57 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         await pass(scope.ServiceProvider.GetRequiredService<TService>(), Cancellation);
     }
 
+    /// <summary>Resolves a service from the host under test, in its own scope, and answers what it did.</summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling of <see cref="RunOnceAsync"/>, for the criteria that are about a <em>published
+    /// contract</em> rather than about an endpoint. <c>IStockAvailability.HoldAsync</c> is the
+    /// clearest case: it is the platform's oversell boundary and no route reaches it — Cart and
+    /// Orders call it in process — so a test that proves it must call it the same way they do.
+    /// </para>
+    /// <para>
+    /// A fresh scope per call, which is what makes it usable for a race: two concurrent calls get
+    /// two contexts on two connections, exactly as two requests would.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TService">The service to resolve.</typeparam>
+    /// <typeparam name="TResult">What the work produces.</typeparam>
+    /// <param name="work">What to do with it.</param>
+    protected async Task<TResult> InScopeAsync<TService, TResult>(
+        Func<TService, CancellationToken, Task<TResult>> work)
+        where TService : notnull
+    {
+        ArgumentNullException.ThrowIfNull(work);
+
+        using var scope = Factory.Services.CreateScope();
+
+        return await work(scope.ServiceProvider.GetRequiredService<TService>(), Cancellation);
+    }
+
     /// <summary>An email address no other test is using.</summary>
     /// <param name="prefix">A readable hint about which test made it.</param>
     protected static string NewEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@klarahome.test";
 
-    /// <summary>An Indian mobile number no other test is using.</summary>
+    /// <summary>
+    /// A mobile number in the form the platform stores it, which is the form a code is sent to.
+    /// </summary>
+    /// <remarks>
+    /// A number is normalised to E.164 on the way in, so the dispatcher is keyed on <c>+91…</c>
+    /// whatever the request carried. A test that looked a code up by the ten digits it typed would
+    /// never find one.
+    /// </remarks>
+    /// <param name="mobile">The number as a request carried it.</param>
+    protected static string E164(string mobile)
+        => mobile is not null && mobile.StartsWith('+') ? mobile : $"+91{mobile}";
+
+    /// <summary>An Indian mobile number no other test is using, in E.164.</summary>
+    /// <remarks>
+    /// E.164 rather than the ten digits a person types, because that is the form the platform stores
+    /// and the form a one-time code is dispatched to — a bare number would be accepted by the request
+    /// and then be unfindable in what was sent.
+    /// </remarks>
     protected static string NewMobile()
-        => $"9{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        => $"+919{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
     /// <summary>Reads a successful response as JSON, failing with the body when it was not successful.</summary>
     /// <param name="response">The response.</param>

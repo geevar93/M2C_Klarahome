@@ -181,7 +181,7 @@ internal sealed class ReceivePurchaseOrderCommandHandler(
 
         if (!scope.CanWrite(order.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (!order.IsReceivable)
@@ -200,30 +200,40 @@ internal sealed class ReceivePurchaseOrderCommandHandler(
             now,
             user.UserId);
 
+        // Every line is resolved and checked *before* anything moves. Refusing from inside the
+        // transaction below is not the same thing: a `return` out of it commits, so a refusal
+        // discovered on the second line used to leave the first line's units on the shelf with no
+        // ledger entry, no receipt and no advance on the order — a quantity nothing explains, which
+        // is exactly the drift the nightly reconciliation exists to find and nobody could then
+        // account for.
+        var counted = new List<(PurchaseOrderLine Line, GoodsReceiptLinePayload Payload)>(command.Lines.Count);
+
+        foreach (var payload in command.Lines)
+        {
+            var orderLine = order.Lines.FirstOrDefault(line => line.Id == payload.PurchaseOrderLineId);
+
+            if (orderLine is null)
+            {
+                return InventoryErrors.NotFound("purchase order line");
+            }
+
+            if (payload.Accepted > 0 && orderLine.QuantityOutstanding == 0)
+            {
+                return InventoryErrors.NothingOutstanding(orderLine.Sku);
+            }
+
+            counted.Add((orderLine, payload));
+        }
+
         Result<GoodsReceiptResponse> outcome = InventoryErrors.NotFound("purchase order line");
 
         await context.ExecuteInTransactionAsync(
             async (_, token) =>
             {
-                var lines = new List<GoodsReceiptLine>(command.Lines.Count);
+                var lines = new List<GoodsReceiptLine>(counted.Count);
 
-                foreach (var payload in command.Lines)
+                foreach (var (orderLine, payload) in counted)
                 {
-                    var orderLine = order.Lines
-                        .FirstOrDefault(line => line.Id == payload.PurchaseOrderLineId);
-
-                    if (orderLine is null)
-                    {
-                        outcome = InventoryErrors.NotFound("purchase order line");
-                        return;
-                    }
-
-                    if (payload.Accepted > 0 && orderLine.QuantityOutstanding == 0)
-                    {
-                        outcome = InventoryErrors.NothingOutstanding(orderLine.Sku);
-                        return;
-                    }
-
                     // Clamped by the line itself rather than trusted: booking in more than was
                     // ordered is the check constraint's job to make impossible and the domain's job
                     // to make unnecessary.

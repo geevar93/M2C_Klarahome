@@ -20,8 +20,15 @@ internal sealed class InMemoryFileStorage : IFileStorage
     /// <summary>How many objects are held.</summary>
     public int Count => _objects.Count;
 
-    /// <inheritdoc />
-    public bool IsAvailable => true;
+    /// <summary>
+    /// Whether this deployment can reach its bucket. Settable, so an outage stays provable.
+    /// </summary>
+    /// <remarks>
+    /// Several criteria are about what happens when object storage is <em>not</em> there — an
+    /// invoice that still gets its number, a seller's bank details that are refused rather than
+    /// stored in clear — and none of them can be shown against a store that is always up.
+    /// </remarks>
+    public bool IsAvailable { get; set; } = true;
 
     /// <summary>Whether an object exists at a key.</summary>
     /// <param name="key">The object key.</param>

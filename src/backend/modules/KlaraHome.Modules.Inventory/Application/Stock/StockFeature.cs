@@ -300,7 +300,7 @@ internal sealed class OpenStockItemCommandHandler(
 
         if (!scope.CanWrite(warehouse.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         if (!warehouse.IsActive)
@@ -375,7 +375,7 @@ internal sealed class ConfigureStockItemCommandHandler(
 
         if (!scope.CanWrite(item.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var before = new
@@ -455,27 +455,44 @@ internal sealed class AdjustStockCommandHandler(
 
         if (!scope.CanWrite(item.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
-        var result = await ledger
-            .MoveAsync(
-                item,
-                command.Change,
-                command.Reason,
-                referenceType: null,
-                referenceId: null,
-                command.Note,
-                user.UserId,
-                cancellationToken)
-            .ConfigureAwait(false);
+        // In a transaction, though it is only one movement. The movement is a raw command that
+        // commits the moment it runs unless something is holding it, and the ledger entry it
+        // justifies is written by the save below — so a save that failed would leave the shelf
+        // changed with nothing in the ledger to say why, which is the one drift the nightly
+        // reconciliation can see and nobody can then explain.
+        var result = StockMovementResult.Refused;
+
+        await context.ExecuteInTransactionAsync(
+            async (_, token) =>
+            {
+                result = await ledger
+                    .MoveAsync(
+                        item,
+                        command.Change,
+                        command.Reason,
+                        referenceType: null,
+                        referenceId: null,
+                        command.Note,
+                        user.UserId,
+                        token)
+                    .ConfigureAwait(false);
+
+                // The row refused it — nothing moved, so there is nothing to roll back and the
+                // caller is told below.
+                if (result.Applied)
+                {
+                    await context.SaveChangesAsync(token).ConfigureAwait(false);
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
 
         if (!result.Applied)
         {
             return InventoryErrors.InsufficientStock;
         }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await audit.RecordAsync(
             new AuditEntry
@@ -552,7 +569,7 @@ internal sealed class TransferStockCommandHandler(
 
         if (!scope.CanWrite(source.VendorId) || !scope.CanWrite(destination.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         // A shared id, so the two legs are recognisably one movement in a ledger that lists them

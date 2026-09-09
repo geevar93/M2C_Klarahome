@@ -38,8 +38,16 @@ internal enum PriceListType
 /// An offer with no item in any applicable list keeps the price on its own listing. That fallback
 /// is what lets a deployment run with no price lists at all, which is how most of them will start.
 /// </para>
+/// <para>
+/// <see cref="IPlatformShared"/> is what makes the platform's own lists visible to a seller, and it
+/// is not optional here: a platform-wide list prices <em>their</em> offers, so a seller who could
+/// not read it could not be told why their offer is selling at a figure they did not set. Widening
+/// the read says nothing about the write — that a seller may not edit a platform list is
+/// <c>PricingScope.CanWrite</c>'s rule, and it only becomes reachable once the row is readable.
+/// </para>
 /// </remarks>
-internal sealed class PriceList : AggregateRoot<Guid>, ITenantScoped, IAuditable, IVendorScoped
+internal sealed class PriceList
+    : AggregateRoot<Guid>, ITenantScoped, IAuditable, IVendorScoped, IPlatformShared
 {
     private readonly List<PriceListItem> _items = [];
 

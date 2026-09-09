@@ -16,6 +16,7 @@ using KlaraHome.Modules.Carts.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Results;
 using KlaraHome.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace KlaraHome.Modules.Carts.Application.Checkout;
@@ -80,7 +81,8 @@ internal sealed class PlaceOrderValidator : AbstractValidator<PlaceOrderCommand>
 /// <param name="options">Supplies the hold window.</param>
 /// <param name="clock">The sanctioned clock.</param>
 /// <param name="deliveries">The last check that the destination can be delivered to.</param>
-internal sealed class PlaceOrderCommandHandler(
+/// <param name="logger">Reports an attempt that threw, and any compensation that could not be made.</param>
+internal sealed partial class PlaceOrderCommandHandler(
     CheckoutWorkflow workflow,
     CartsDbContext context,
     CartsScope scope,
@@ -89,7 +91,8 @@ internal sealed class PlaceOrderCommandHandler(
     CartsEventPublisher events,
     IOptions<CartsOptions> options,
     IClock clock,
-    IShippingOptions deliveries) : ICommandHandler<PlaceOrderCommand, PlaceOrderResponse>
+    IShippingOptions deliveries,
+    ILogger<PlaceOrderCommandHandler> logger) : ICommandHandler<PlaceOrderCommand, PlaceOrderResponse>
 {
     public async Task<Result<PlaceOrderResponse>> HandleAsync(
         PlaceOrderCommand command,
@@ -97,8 +100,12 @@ internal sealed class PlaceOrderCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        // Loaded without requiring an open session, because the two closed states this request has
+        // to answer are its own doing. A session that is *placing* has an attempt running; one that
+        // has been *placed* is exactly where a retried request lands, and refusing it would mean the
+        // replay below could never be reached — which is the whole promise of an idempotency key.
         var loaded = await CheckoutLoader
-            .LoadAsync(workflow, scope, command.SessionId, requireOpen: true, cancellationToken)
+            .LoadAsync(workflow, scope, command.SessionId, requireOpen: false, cancellationToken)
             .ConfigureAwait(false);
 
         if (loaded.IsFailure)
@@ -108,7 +115,22 @@ internal sealed class PlaceOrderCommandHandler(
 
         var (session, cart) = loaded.Value;
 
-        if (session.ShippingAddress is not { } shipping || session.BillingAddress is not { } billing)
+        if (session.Status == CheckoutStatus.Placing)
+        {
+            return CartsErrors.PlacementInProgress;
+        }
+
+        if (session.Status == CheckoutStatus.Placed)
+        {
+            return await ReplayAsync(session, command.IdempotencyKey, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!session.IsOpen)
+        {
+            return CartsErrors.CheckoutClosed;
+        }
+
+        if (session.ShippingAddress is not { } shipping || session.BillingAddress is null)
         {
             return CartsErrors.CheckoutIncomplete("a delivery address");
         }
@@ -134,6 +156,15 @@ internal sealed class PlaceOrderCommandHandler(
             return destination.Refusal == DeliveryRefusal.NotCovered
                 ? CartsErrors.NotCovered(destination.Message)
                 : CartsErrors.PincodeNotServiceable;
+        }
+
+        // A cash parcel is deliverable and still uncollectable. `Deliverable` is coverage and
+        // serviceability and nothing else, so a destination no courier will take cash to passes it
+        // — and an order placed anyway ends with a driver at the door holding a parcel and no way
+        // to be paid for it.
+        if (destination.Refusal == DeliveryRefusal.CodUnavailable)
+        {
+            return CartsErrors.CodUnavailable(CheckoutWorkflow.CodNotCollected);
         }
 
         var priced = await workflow.RepriceAsync(session, cart, cancellationToken).ConfigureAwait(false);
@@ -163,6 +194,42 @@ internal sealed class PlaceOrderCommandHandler(
 
         session.BeginPlacing();
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return await PlaceAsync(command, session, cart, placement, quote, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Everything below the hold is compensated by hand on a refusal. An *exception* is the
+            // path that had none, and it is the worst one to leave uncovered: the units stay held
+            // until Inventory's sweeper notices, and the key stays claimed for ever, so the shopper's
+            // next press of Pay is answered with a conflict rather than with an order.
+            PlacementThrew(logger, cart.Id, exception);
+
+            await CompensateAsync(cart, session, placement).ConfigureAwait(false);
+
+            throw;
+        }
+    }
+
+    /// <summary>Holds the stock, creates the order and closes the basket, or explains why not.</summary>
+    /// <remarks>
+    /// Split out so that every exit below the hold — refusal, exception or success — is inside one
+    /// <c>try</c> in the caller, and no future failure path can be added without the compensating
+    /// release coming with it.
+    /// </remarks>
+    private async Task<Result<PlaceOrderResponse>> PlaceAsync(
+        PlaceOrderCommand command,
+        CheckoutSession session,
+        Cart cart,
+        CheckoutPlacement placement,
+        QuoteResult quote,
+        CancellationToken cancellationToken)
+    {
+        var shipping = session.ShippingAddress!;
+        var billing = session.BillingAddress!;
 
         var held = await HoldStockAsync(cart, cancellationToken).ConfigureAwait(false);
 
@@ -241,6 +308,55 @@ internal sealed class PlaceOrderCommandHandler(
     private sealed record Claim(PlaceOrderResponse? Replay, CheckoutPlacement? Placement);
 
     /// <summary>
+    /// Answers a request against a session that has already been placed, from the stored response.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the ordinary retry, not an exotic one: a shopper on a flaky connection sees the
+    /// request time out, presses <em>Pay</em> again, and their client sends the key it already has.
+    /// The order exists, so the only correct answer is the one the first request got.
+    /// </para>
+    /// <para>
+    /// The key must have been used <em>against this session</em>. A key that succeeded somewhere else
+    /// is a client bug, and answering it with this session's order would hand somebody a confirmation
+    /// for goods they did not buy.
+    /// </para>
+    /// </remarks>
+    private async Task<Result<PlaceOrderResponse>> ReplayAsync(
+        CheckoutSession session,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        var placement = await context.CheckoutPlacements
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.IdempotencyKey == key, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (placement is null)
+        {
+            // A key nobody has used, against a checkout that is over. There is nothing to replay and
+            // nothing left to place.
+            return CartsErrors.CheckoutClosed;
+        }
+
+        if (placement.CheckoutSessionId != session.Id)
+        {
+            return CartsErrors.IdempotencyKeyReused;
+        }
+
+        if (placement.Status != PlacementStatus.Succeeded
+            || placement.Response is not { Length: > 0 } json
+            || JsonSerializer.Deserialize<PlaceOrderResponse>(json, PlacementJson.Options) is not { } stored)
+        {
+            // The session says an order was placed and this row does not agree. Reporting it as still
+            // running is the safe answer: it is a support question rather than a second order.
+            return CartsErrors.PlacementInProgress;
+        }
+
+        return Result.Success(stored);
+    }
+
+    /// <summary>
     /// Claims the idempotency key, or reports what the previous use of it did.
     /// </summary>
     /// <remarks>
@@ -277,7 +393,14 @@ internal sealed class PlaceOrderCommandHandler(
         {
             // Lost the race. The winner's row is the authority; this request reports what it did
             // rather than doing it again.
+            //
+            // Dropped from the session as well as detached, and both halves are load-bearing.
+            // Detaching alone leaves the row in the session's own collection, and the next call to
+            // SaveChanges re-discovers it through the navigation, marks it Added and hits the same
+            // unique index again — turning a lost race into an unhandled 500 for the shopper who
+            // merely tapped Pay twice.
             context.Entry(claimed).State = EntityState.Detached;
+            session.DiscardPlacement(claimed);
 
             // Tracked, not AsNoTracking: a losing request whose winner had failed restarts
             // that row, and a detached entity would report a restart that was never written.
@@ -369,6 +492,44 @@ internal sealed class PlaceOrderCommandHandler(
                 cancellationToken)
             .ConfigureAwait(false);
 
+    /// <summary>
+    /// Puts back everything a thrown attempt started, so the shopper can simply try again.
+    /// </summary>
+    /// <remarks>
+    /// Two things have to be undone and they are not equally urgent. The <b>holds</b> are units
+    /// nobody can buy until Inventory's sweeper notices, and releasing them is what this exists for.
+    /// The <b>placement row</b> is the shopper's own key: left <c>InProgress</c> it answers every
+    /// later press of <em>Pay</em> with a conflict, so it is marked failed — which an idempotency key
+    /// permits, because a failure created no order.
+    /// </remarks>
+    private async Task CompensateAsync(Cart cart, CheckoutSession session, CheckoutPlacement placement)
+    {
+        // Not the request's token: it may be the very thing that was cancelled, and a compensation
+        // that declines to run because the request went away is not a compensation.
+        try
+        {
+            await ReleaseAsync(cart, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ReleaseFailed(logger, cart.Id, exception);
+        }
+
+        try
+        {
+            placement.Fail(CartsErrors.PlacementFailed.Code, clock.UtcNow);
+            session.AbandonPlacing();
+
+            await context.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            // The change tracker may be exactly what threw. Reported rather than rethrown: the
+            // original failure is the one worth surfacing, and the stock is already back on sale.
+            ClaimReleaseFailed(logger, placement.IdempotencyKey, exception);
+        }
+    }
+
     /// <summary>Records a failed attempt and hands the session back to the shopper.</summary>
     private async Task<Result<PlaceOrderResponse>> FailAsync(
         CheckoutSession session,
@@ -443,6 +604,26 @@ internal sealed class PlaceOrderCommandHandler(
 
         return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
+
+    [LoggerMessage(
+        EventId = 7220,
+        Level = LogLevel.Error,
+        Message = "Placing the order for cart {CartId} threw; its holds are being released")]
+    private static partial void PlacementThrew(ILogger logger, Guid cartId, Exception exception);
+
+    [LoggerMessage(
+        EventId = 7221,
+        Level = LogLevel.Critical,
+        Message = "The stock held against cart {CartId} could not be released and is off sale until "
+                  + "the reservation sweeper expires it")]
+    private static partial void ReleaseFailed(ILogger logger, Guid cartId, Exception exception);
+
+    [LoggerMessage(
+        EventId = 7222,
+        Level = LogLevel.Error,
+        Message = "Idempotency key {IdempotencyKey} could not be marked failed and stays claimed, so a "
+                  + "retry carrying it will be refused")]
+    private static partial void ClaimReleaseFailed(ILogger logger, string idempotencyKey, Exception exception);
 }
 
 /// <summary>How a replayed place-order response is stored and read back.</summary>

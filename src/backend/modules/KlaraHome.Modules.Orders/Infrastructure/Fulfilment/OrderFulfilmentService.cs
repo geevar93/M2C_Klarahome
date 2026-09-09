@@ -120,16 +120,28 @@ internal sealed partial class OrderFulfilmentService(
 
         var from = subOrder.Status;
 
-        var moved = await workflow
-            .TransitionAsync(order, subOrder, next, OrderActor.System, actorId: null, note, cancellationToken)
+        // In a transaction, because closing a parcel raises its tax invoice and the invoice number
+        // comes from a counter row held with SELECT … FOR UPDATE. The lock lives exactly as long as
+        // the transaction that took it, so a bare SaveChanges would let two parcels closed at the
+        // same instant take the same number — which is the one thing a gapless series must not do.
+        var moved = await OrdersTransaction
+            .RunAsync(
+                context,
+                token => workflow.TransitionAsync(
+                    order,
+                    subOrder,
+                    next,
+                    OrderActor.System,
+                    actorId: null,
+                    note,
+                    token),
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (moved.IsFailure)
         {
             return moved;
         }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         CourierMoved(logger, subOrder.SubOrderNumber, from, next);
 

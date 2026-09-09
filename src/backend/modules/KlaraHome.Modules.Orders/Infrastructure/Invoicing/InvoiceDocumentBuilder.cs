@@ -28,8 +28,17 @@ namespace KlaraHome.Modules.Orders.Infrastructure.Invoicing;
 /// </remarks>
 internal static class InvoiceDocumentBuilder
 {
-    /// <summary>The Indian number format every figure on the document is written in.</summary>
-    private static readonly CultureInfo India = CultureInfo.GetCultureInfo("en-IN");
+    /// <summary>
+    /// The Indian number format every figure on the document is written in.
+    /// </summary>
+    /// <remarks>
+    /// Built from the invariant culture rather than looked up as <c>en-IN</c>, because the product
+    /// ships with <c>InvariantGlobalization</c> and the lookup therefore throws — silently, since
+    /// the caller swallows a rendering failure to keep a parcel moving, which is how every invoice
+    /// came to be issued with no document at all. The only thing the lookup was wanted for is the
+    /// lakh–crore grouping, and that is one property.
+    /// </remarks>
+    private static readonly CultureInfo India = IndianFormat();
 
     /// <summary>Builds the invoice document.</summary>
     /// <param name="order">The order it belongs to.</param>
@@ -286,6 +295,27 @@ internal static class InvoiceDocumentBuilder
             (null, not null) => name,
             _ => "-",
         };
+    }
+
+    /// <summary>
+    /// The invariant culture with Indian digit grouping: <c>1,23,456.00</c> rather than
+    /// <c>123,456.00</c>.
+    /// </summary>
+    /// <remarks>
+    /// Grouping is the whole of what an Indian reader needs from the format here. Dates are written
+    /// with an explicit <c>dd MMM yyyy</c> pattern whose month names are the same in both cultures,
+    /// and the currency symbol is deliberately not printed — the document names the currency once,
+    /// in words.
+    /// </remarks>
+    private static CultureInfo IndianFormat()
+    {
+        var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+
+        culture.NumberFormat.NumberGroupSizes = [3, 2];
+        culture.NumberFormat.CurrencyGroupSizes = [3, 2];
+        culture.NumberFormat.PercentGroupSizes = [3, 2];
+
+        return CultureInfo.ReadOnly(culture);
     }
 
     /// <summary>Money, in Indian grouping, with the symbol left off — the document says the currency once.</summary>

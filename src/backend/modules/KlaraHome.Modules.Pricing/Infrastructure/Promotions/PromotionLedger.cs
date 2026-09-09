@@ -23,6 +23,14 @@ namespace KlaraHome.Modules.Pricing.Infrastructure.Promotions;
 /// and then failing to record it would spend a coupon nobody can prove was used, and the counter
 /// would drift permanently away from the rows that are supposed to explain it.
 /// </para>
+/// <para>
+/// That transaction is opened through <c>KlaraHomeDbContext.ExecuteInTransactionAsync</c>
+/// rather than by hand. Retry-on-failure is enabled for every context in this platform, and EF
+/// refuses a hand-rolled <c>BeginTransactionAsync</c> under a retrying strategy — the strategy has
+/// to wrap the transaction and not the other way round. Both methods below therefore read their own
+/// inputs inside the operation and reset what they answer at the top of it, because the operation
+/// may run more than once.
+/// </para>
 /// </remarks>
 /// <param name="context">The Pricing data context.</param>
 /// <param name="events">Announces the redemption once the transaction commits.</param>
@@ -47,88 +55,90 @@ internal sealed class PromotionLedger(
         }
 
         var wanted = redemptions.Select(redemption => redemption.PromotionId).Distinct().ToList();
-
-        // Already redeemed against this order? Then this is a replay of an at-least-once event and
-        // the right answer is to do nothing at all rather than to claim a second use.
-        var already = await context.PromotionRedemptions
-            .AsNoTracking()
-            .Where(redemption => redemption.OrderId == orderId && wanted.Contains(redemption.PromotionId))
-            .Select(redemption => redemption.PromotionId)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var outstanding = redemptions
-            .Where(redemption => !already.Contains(redemption.PromotionId))
-            .ToList();
-
-        if (outstanding.Count == 0)
-        {
-            return [];
-        }
-
-        var promotions = await context.Promotions
-            .AsNoTracking()
-            .Where(promotion => outstanding.Select(request => request.PromotionId).Contains(promotion.Id))
-            .Select(promotion => new { promotion.Id, promotion.Code })
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var codes = promotions.ToDictionary(promotion => promotion.Id, promotion => promotion.Code);
         var refused = new List<Guid>();
-        var now = clock.UtcNow;
 
-        var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-        await using (transaction.ConfigureAwait(false))
-        {
-            foreach (var redemption in outstanding)
+        await context.ExecuteInTransactionAsync(
+            async (_, cancellation) =>
             {
-                if (!codes.TryGetValue(redemption.PromotionId, out var code))
-                {
-                    // The promotion was deleted between quoting and placing. Nothing to claim, and
-                    // nothing the order can do about it, so it is reported rather than thrown.
-                    refused.Add(redemption.PromotionId);
-                    continue;
-                }
+                refused.Clear();
 
-                var claimed = await context.Promotions
-                    .Where(promotion => promotion.Id == redemption.PromotionId
-                                        && (promotion.UsageLimitTotal == null
-                                            || promotion.UsageCount < promotion.UsageLimitTotal))
-                    .ExecuteUpdateAsync(
-                        setters => setters.SetProperty(
-                            promotion => promotion.UsageCount,
-                            promotion => promotion.UsageCount + 1),
-                        cancellationToken)
+                // Already redeemed against this order? Then this is a replay of an at-least-once
+                // event and the right answer is to do nothing at all rather than claim a second use.
+                var already = await context.PromotionRedemptions
+                    .AsNoTracking()
+                    .Where(redemption => redemption.OrderId == orderId && wanted.Contains(redemption.PromotionId))
+                    .Select(redemption => redemption.PromotionId)
+                    .ToListAsync(cancellation)
                     .ConfigureAwait(false);
 
-                if (claimed == 0)
+                var outstanding = redemptions
+                    .Where(redemption => !already.Contains(redemption.PromotionId))
+                    .ToList();
+
+                if (outstanding.Count == 0)
                 {
-                    // Somebody else took the last use between the quote and this call. The order
-                    // has to be told, because the total it was quoted is no longer the total.
-                    refused.Add(redemption.PromotionId);
-                    continue;
+                    return;
                 }
 
-                context.PromotionRedemptions.Add(PromotionRedemption.Create(
-                    redemption.PromotionId,
-                    code,
-                    customerId,
-                    orderId,
-                    Math.Max(0m, redemption.DiscountAmount),
-                    now));
+                var promotions = await context.Promotions
+                    .AsNoTracking()
+                    .Where(promotion => outstanding.Select(request => request.PromotionId).Contains(promotion.Id))
+                    .Select(promotion => new { promotion.Id, promotion.Code })
+                    .ToListAsync(cancellation)
+                    .ConfigureAwait(false);
 
-                events.PromotionRedeemed(
-                    redemption.PromotionId,
-                    code,
-                    orderId,
-                    customerId,
-                    redemption.DiscountAmount);
-            }
+                var codes = promotions.ToDictionary(promotion => promotion.Id, promotion => promotion.Code);
+                var now = clock.UtcNow;
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
+                foreach (var redemption in outstanding)
+                {
+                    if (!codes.TryGetValue(redemption.PromotionId, out var code))
+                    {
+                        // The promotion was deleted between quoting and placing. Nothing to claim,
+                        // and nothing the order can do about it, so it is reported rather than
+                        // thrown.
+                        refused.Add(redemption.PromotionId);
+                        continue;
+                    }
+
+                    var claimed = await context.Promotions
+                        .Where(promotion => promotion.Id == redemption.PromotionId
+                                            && (promotion.UsageLimitTotal == null
+                                                || promotion.UsageCount < promotion.UsageLimitTotal))
+                        .ExecuteUpdateAsync(
+                            setters => setters.SetProperty(
+                                promotion => promotion.UsageCount,
+                                promotion => promotion.UsageCount + 1),
+                            cancellation)
+                        .ConfigureAwait(false);
+
+                    if (claimed == 0)
+                    {
+                        // Somebody else took the last use between the quote and this call. The order
+                        // has to be told, because the total it was quoted is no longer the total.
+                        refused.Add(redemption.PromotionId);
+                        continue;
+                    }
+
+                    context.PromotionRedemptions.Add(PromotionRedemption.Create(
+                        redemption.PromotionId,
+                        code,
+                        customerId,
+                        orderId,
+                        Math.Max(0m, redemption.DiscountAmount),
+                        now));
+
+                    events.PromotionRedeemed(
+                        redemption.PromotionId,
+                        code,
+                        orderId,
+                        customerId,
+                        redemption.DiscountAmount);
+                }
+
+                await context.SaveChangesAsync(cancellation).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return refused;
     }
@@ -136,48 +146,51 @@ internal sealed class PromotionLedger(
     /// <inheritdoc />
     public async ValueTask<int> ReverseAsync(Guid orderId, CancellationToken cancellationToken = default)
     {
-        var rows = await context.PromotionRedemptions
-            .Where(redemption => redemption.OrderId == orderId && redemption.Status == RedemptionStatus.Redeemed)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
-
-        var now = clock.UtcNow;
         var reversed = 0;
 
-        var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-        await using (transaction.ConfigureAwait(false))
-        {
-            foreach (var row in rows)
+        await context.ExecuteInTransactionAsync(
+            async (_, cancellation) =>
             {
-                if (!row.Reverse(now))
-                {
-                    continue;
-                }
+                reversed = 0;
 
-                // Floored at zero. A counter that has been reset by hand must not be driven
-                // negative by a reversal, and a negative usage count would make every subsequent
-                // limit check wrong in the shopper's favour.
-                await context.Promotions
-                    .Where(promotion => promotion.Id == row.PromotionId && promotion.UsageCount > 0)
-                    .ExecuteUpdateAsync(
-                        setters => setters.SetProperty(
-                            promotion => promotion.UsageCount,
-                            promotion => promotion.UsageCount - 1),
-                        cancellationToken)
+                var rows = await context.PromotionRedemptions
+                    .Where(redemption => redemption.OrderId == orderId
+                                         && redemption.Status == RedemptionStatus.Redeemed)
+                    .ToListAsync(cancellation)
                     .ConfigureAwait(false);
 
-                reversed++;
-            }
+                if (rows.Count == 0)
+                {
+                    return;
+                }
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
+                var now = clock.UtcNow;
+
+                foreach (var row in rows)
+                {
+                    if (!row.Reverse(now))
+                    {
+                        continue;
+                    }
+
+                    // Floored at zero. A counter that has been reset by hand must not be driven
+                    // negative by a reversal, and a negative usage count would make every subsequent
+                    // limit check wrong in the shopper's favour.
+                    await context.Promotions
+                        .Where(promotion => promotion.Id == row.PromotionId && promotion.UsageCount > 0)
+                        .ExecuteUpdateAsync(
+                            setters => setters.SetProperty(
+                                promotion => promotion.UsageCount,
+                                promotion => promotion.UsageCount - 1),
+                            cancellation)
+                        .ConfigureAwait(false);
+
+                    reversed++;
+                }
+
+                await context.SaveChangesAsync(cancellation).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return reversed;
     }

@@ -104,6 +104,20 @@ internal static class OrdersErrors
     public static Error InvoiceFileMissing { get; } =
         Error.NotFound("ORDER_INVOICE_FILE_MISSING", "That invoice has no document to download yet.");
 
+    /// <summary>
+    /// A re-render of an invoice that has no document failed too.
+    /// </summary>
+    /// <remarks>
+    /// Reported rather than swallowed, because the two callers differ. The automatic issue at
+    /// dispatch swallows a rendering failure so a parcel is not held up by a storage outage; an
+    /// operator who has pressed "raise invoice" precisely to repair that missing document is asking
+    /// about the document, and answering them with a success would be answering the wrong question.
+    /// </remarks>
+    public static Error InvoiceRenderFailed { get; } =
+        Error.Unavailable(
+            "ORDER_INVOICE_RENDER_FAILED",
+            "The invoice document could not be produced. Try again once document storage is back.");
+
     /// <summary>The Payments module is not installed in this deployment.</summary>
     /// <remarks>
     /// The honest answer between Step 14 and Step 15: the order can be created and there is nothing

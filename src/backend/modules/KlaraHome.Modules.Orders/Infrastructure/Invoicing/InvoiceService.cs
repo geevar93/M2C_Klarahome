@@ -81,6 +81,20 @@ internal sealed partial class InvoiceService(
 
         if (existing is not null)
         {
+            // An invoice with no document is the one case where asking again is not asking for a
+            // second invoice: the number was allocated and the render failed — a bucket that was
+            // briefly unreachable — and there is no other way for an operator to obtain the PDF.
+            // Rendering it now attaches the document to the invoice that already exists, so the
+            // series gains neither a hole nor a duplicate.
+            if (existing.FileId is null)
+            {
+                await RenderAsync(order, subOrder, existing, cancellationToken).ConfigureAwait(false);
+
+                return existing.FileId is null
+                    ? OrdersErrors.InvoiceRenderFailed
+                    : Result.Success(existing);
+            }
+
             return OrdersErrors.AlreadyInvoiced;
         }
 

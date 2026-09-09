@@ -92,7 +92,7 @@ internal static class Rest
     /// <param name="rawBody">The body, exactly as it should arrive.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="headers">Headers to set on the request.</param>
-    public static Task<HttpResponseMessage> PostRawAsync(
+    public static async Task<HttpResponseMessage> PostRawAsync(
         HttpClient client,
         string path,
         string rawBody,
@@ -112,7 +112,10 @@ internal static class Rest
             request.Headers.TryAddWithoutValidation(name, value);
         }
 
-        return client.SendAsync(request, cancellationToken);
+        // Awaited inside the using rather than returned from it. The request owns the body content,
+        // and the test host reads that content asynchronously — so handing back the task and letting
+        // the request dispose on the way out closes the stream underneath the server.
+        return await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Uploads a file through the media endpoints, as a person would.</summary>

@@ -133,7 +133,7 @@ internal sealed class RecordStockBatchCommandHandler(InventoryDbContext context,
 
         if (!scope.CanWrite(item.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var code = command.BatchCode.Trim().ToUpperInvariant();
@@ -232,7 +232,7 @@ internal sealed class RecordStockSerialsCommandHandler(InventoryDbContext contex
 
         if (!scope.CanWrite(item.VendorId))
         {
-            return InventoryErrors.OutOfScope;
+            return InventoryErrors.PlatformOnly;
         }
 
         var numbers = command.SerialNumbers

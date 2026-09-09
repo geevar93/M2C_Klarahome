@@ -13,10 +13,17 @@ namespace KlaraHome.Modules.Inventory.Infrastructure;
 /// <para>
 /// Reads are already handled: warehouses, stock items, suppliers and the three document types are
 /// <see cref="KlaraHome.SharedKernel.Domain.IVendorScoped"/>, so the global query filter shows a
-/// vendor caller their own rows and the platform's shared ones and nobody else's. Writes need one
-/// more rule a query filter cannot express — a seller may adjust their own stock but must not adjust
-/// stock in a <em>platform</em> warehouse, even though they can see it — and that rule lives here,
-/// once, rather than in each handler that takes an id from a route.
+/// vendor caller their own rows and nobody else's. <see cref="Domain.Warehouse"/> alone also
+/// declares <see cref="KlaraHome.SharedKernel.Domain.IPlatformShared"/>, which widens that read to
+/// the platform's own locations — fulfilment by platform puts a seller's units on a platform shelf,
+/// and a seller who could not see the shelf could not see the units. Everything else in this schema
+/// stays private to its owner; the platform's supplier list in particular is nobody else's business.
+/// </para>
+/// <para>
+/// Which leaves exactly one rule a query filter cannot express, and it lives here: a seller may open
+/// stock, count, rename or buy into <em>their own</em> location and must not do any of it to a
+/// platform one, even though they can see it. Once, rather than in each handler that takes an id
+/// from a route.
 /// </para>
 /// <para>
 /// The same arrangement as <c>CatalogScope</c>, and deliberately so: two modules answering the same

@@ -93,6 +93,19 @@ internal sealed partial class ReservationSweeper : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Runs one sweep, with this host's current settings, and answers how many holds it released.
+    /// </summary>
+    /// <remarks>
+    /// The seam a deterministic caller needs, and the same one
+    /// <see cref="StockReconciliationJob.ReconcileAsync"/> offers: the loop above is a timer, and a
+    /// test that raced it would fail one run in twenty. Nothing else about the sweep changes — this
+    /// is the pass the timer runs.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal Task<int> SweepOnceAsync(CancellationToken cancellationToken)
+        => SweepAsync(_options.CurrentValue, cancellationToken);
+
     /// <summary>Claims a batch of lapsed holds and releases them. Returns how many were released.</summary>
     private async Task<int> SweepAsync(InventoryOptions options, CancellationToken cancellationToken)
     {
