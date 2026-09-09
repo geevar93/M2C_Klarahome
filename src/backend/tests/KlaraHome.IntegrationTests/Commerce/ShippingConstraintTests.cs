@@ -135,13 +135,16 @@ public sealed class ShippingConstraintTests(KlaraHomeSchemaFixture fixture) : Co
 
         var zoneId = zones.EnumerateArray().First().GetProperty("id").GetGuid();
 
+        // Scoped to this test's own seller, not the platform (vendorId: null) — a platform-wide rate
+        // in the shared zone would undercut every other test's cheapest-shipping resolution for the
+        // life of the collection. Found the hard way: it made CheckoutTests' shipping total 0.00.
         var rate = await ReadAsync(await admin.PostAsJsonAsync(
             "/api/v1/admin/shipping/rates",
             new
             {
                 zoneId,
                 method = "Express",
-                vendorId = (Guid?)null,
+                vendorId = seller.Id,
                 terms = new
                 {
                     minWeightGrams = 0,

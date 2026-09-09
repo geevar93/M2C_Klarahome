@@ -137,16 +137,17 @@ public sealed class ShippingServiceabilityTests(KlaraHomeSchemaFixture fixture) 
                 new { perVendor = new[] { new { vendorId = seller.Id, optionCode = chosenCode } } },
                 Cancellation));
 
-            await ReadAsync(await shopper.PutAsJsonAsync(
-                $"/api/v1/store/checkout/{sessionId}/payment-method",
-                new { method = "cod" },
-                Cancellation));
-
-            var options = await ReadAsync(await shopper.GetAsync(
-                new Uri($"/api/v1/store/checkout/{sessionId}/shipping-options", UriKind.Relative), Cancellation));
-
-            var forVendor = options.EnumerateArray().First(entry => entry.GetProperty("vendorId").GetGuid() == seller.Id);
-            Assert.Empty(forVendor.GetProperty("options").EnumerateArray());
+            // Refused here, not merely filtered on the next read: with only this one seller in the
+            // basket and no courier willing to collect cash at this PIN code, there is nothing left
+            // for a cash payment method to mean — the same CHECKOUT_COD_UNAVAILABLE CheckoutTests'
+            // own fourth rule proves.
+            await RefusedAsync(
+                await shopper.PutAsJsonAsync(
+                    $"/api/v1/store/checkout/{sessionId}/payment-method",
+                    new { method = "cod" },
+                    Cancellation),
+                System.Net.HttpStatusCode.UnprocessableEntity,
+                "CHECKOUT_COD_UNAVAILABLE");
         }
     }
 
