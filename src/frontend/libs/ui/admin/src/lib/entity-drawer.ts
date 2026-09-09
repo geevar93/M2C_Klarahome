@@ -22,7 +22,7 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
   selector: 'kh-entity-drawer',
   imports: [Button, Drawer, Icon],
   template: `
-    <kh-drawer [open]="open()" side="end" [label]="heading()" (closed)="closed.emit()">
+    <kh-drawer [open]="true" side="end" [label]="heading()" (closed)="closed.emit()">
       <header>
         <div class="titles">
           <h2>{{ heading() }}</h2>
@@ -100,7 +100,6 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EntityDrawer {
-  readonly open = input(false);
   readonly heading = input.required<string>();
   readonly subtitle = input<string | null>(null);
   readonly closed = output<void>();
