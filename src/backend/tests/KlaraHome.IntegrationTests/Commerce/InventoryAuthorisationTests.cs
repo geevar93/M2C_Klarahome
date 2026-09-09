@@ -343,10 +343,13 @@ public sealed class InventoryAuthorisationTests(KlaraHomeSchemaFixture fixture) 
     /// </summary>
     /// <remarks>
     /// The role is minted through the role-management API rather than taken from the seeded set,
-    /// because none of the seeded vendor roles grants all five — <c>vendor-staff</c> has stock and
-    /// stock takes but not locations or purchasing, and <c>vendor-owner</c> has none of them at all.
-    /// What is under test here is the scope machinery, not which bundle a deployment happens to hand
-    /// out, so the account is given exactly the surface the module defines.
+    /// because what is under test here is the scope machinery, not which bundle a deployment
+    /// happens to hand out: the account is given exactly the surface the module defines, and it
+    /// keeps passing whoever a later deployment decides should hold it. <c>vendor-owner</c> does
+    /// now grant all five (2026-09-09, the User's decision — it previously granted none of them,
+    /// which left an owner with fewer rights over their own stock than their own staff);
+    /// <c>vendor-staff</c> still holds stock and stock takes but not locations or purchasing,
+    /// because opening a warehouse and committing the seller's money to a supplier are the owner's.
     /// </remarks>
     /// <param name="admin">A client signed in as platform staff.</param>
     /// <param name="vendorId">The seller the account belongs to.</param>

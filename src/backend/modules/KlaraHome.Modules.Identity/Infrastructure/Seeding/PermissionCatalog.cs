@@ -883,6 +883,17 @@ internal static class SystemRoles
                 PermissionCatalog.CatalogListingManage,
                 PermissionCatalog.CatalogImportRun,
 
+                // Step 11. Their own stock, on their own locations, confined by the vendor scope.
+                // The owner holds everything their staff hold and the two decisions that are not
+                // staff's to take: opening a warehouse, and committing the seller's money to a
+                // supplier. A seller runs their own warehouse and buys their own stock; the
+                // platform does not do it for them.
+                PermissionCatalog.InventoryStockRead,
+                PermissionCatalog.InventoryStockAdjust,
+                PermissionCatalog.InventoryStockTakeManage,
+                PermissionCatalog.InventoryWarehouseManage,
+                PermissionCatalog.InventoryPurchasingManage,
+
                 // Step 12. Their own price lists, confined to their own seller by the vendor scope.
                 // A seller discounts their own goods with a price list; a marketplace-wide coupon
                 // is the platform's, and pricing.promotion.* is deliberately absent.

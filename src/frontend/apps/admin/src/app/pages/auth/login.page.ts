@@ -1,12 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '@klarahome/data-access-auth';
+import { AuthService, TwoFactorSetupResponse } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
 import { email, formField, formGroup, minLength, numeric, required } from '@klarahome/util';
 import { firstValueFrom } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { SignInFlow } from '../../core/sign-in.flow';
+
+/**
+ * The challenge types a password can be answered with (`AuthContracts.cs`).
+ *
+ * Named rather than inlined because the set is open: a challenge added to the API after this
+ * screen was written must fail loudly here, and that is only possible if the ones it does handle
+ * are enumerated.
+ */
+const CHALLENGE_CODE = 'two-factor';
+const CHALLENGE_ENROLMENT = 'two-factor-enrolment';
+const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
 
 /**
  * The way into the back office.
@@ -22,6 +33,13 @@ import { SignInFlow } from '../../core/sign-in.flow';
  * from the storefront's login. A back-office account is created by an administrator
  * (`POST /admin/users`); an account that could be created by whoever holds a phone number would be
  * an account that grants itself access to other people's orders.
+ *
+ * **The second step is either a code or an enrolment.** An account whose role makes a second
+ * factor mandatory and which has not enrolled one — the first administrator of every new
+ * deployment — is answered with `two-factor-enrolment`, and the only thing that satisfies it is a
+ * secret this screen stages and displays. Treating it as an ordinary code challenge asks for a
+ * code from an app that was never set up: an administrator locked out of a working deployment,
+ * with nothing on screen explaining why.
  *
  * Sign-in failures are shown as one message and never say which half was wrong. "That email is not
  * registered" is an account-enumeration oracle, and the API answers accordingly
@@ -79,9 +97,26 @@ import { SignInFlow } from '../../core/sign-in.flow';
           <a routerLink="/forgot-password">Forgotten your password?</a>
         </p>
       } @else {
-        <p class="lead">
-          Enter the six-digit code from your authenticator app. It changes every thirty seconds.
-        </p>
+        @if (setup(); as details) {
+          <p class="lead">
+            This account needs an authenticator app before it can sign in. Add it below, then enter the code
+            it shows.
+          </p>
+
+          <ol class="steps">
+            <li>Open your authenticator app and add an account.</li>
+            <li>
+              Enter this key, or scan the URI below if your app can:
+              <code class="secret">{{ details.secret }}</code>
+              <code class="uri">{{ details.otpAuthUri }}</code>
+            </li>
+            <li>Type the six-digit code it shows.</li>
+          </ol>
+        } @else {
+          <p class="lead">
+            Enter the six-digit code from your authenticator app. It changes every thirty seconds.
+          </p>
+        }
 
         <form (submit)="submitCode($event)" novalidate>
           @if (failure(); as message) {
@@ -154,6 +189,33 @@ import { SignInFlow } from '../../core/sign-in.flow';
       margin-block-end: var(--space-4);
     }
 
+    .steps {
+      margin: 0 0 var(--space-4);
+      padding-inline-start: var(--space-5);
+      font-size: var(--text-sm);
+    }
+
+    code {
+      display: block;
+      margin-block: var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      font-family: var(--font-mono);
+      overflow-wrap: anywhere;
+    }
+
+    .secret {
+      font-size: var(--text-base);
+      letter-spacing: 0.08em;
+    }
+
+    .uri {
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
     .foot {
       margin: var(--space-4) 0 0;
       font-size: var(--text-sm);
@@ -186,6 +248,13 @@ export class LoginPage {
   protected readonly codeField = formField('', [required('Code'), numeric(6)], this.codeSubmitted);
 
   protected readonly step = signal<'password' | 'code'>('password');
+
+  /**
+   * The staged authenticator secret, set only when the second step is an enrolment rather than a
+   * code. One step serves both because the field, the submit and the endpoint are identical; only
+   * the instructions above them differ.
+   */
+  protected readonly setup = signal<TwoFactorSetupResponse | null>(null);
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
@@ -208,11 +277,32 @@ export class LoginPage {
     try {
       const response = await firstValueFrom(this.auth.signIn(address, password));
 
-      if (response.challenge) {
-        this.challengeToken = response.challenge.challengeToken;
+      const challenge = response.challenge;
+
+      if (challenge) {
+        this.challengeToken = challenge.challengeToken;
         this.codeField.reset();
         this.codeSubmitted.set(false);
-        this.step.set('code');
+
+        if (challenge.type === CHALLENGE_ENROLMENT) {
+          await this.beginEnrolment(challenge.challengeToken);
+          return;
+        }
+
+        if (challenge.type === CHALLENGE_CODE) {
+          this.setup.set(null);
+          this.step.set('code');
+          return;
+        }
+
+        // A challenge this screen cannot answer. Saying so is the whole point: falling through to
+        // the code box would ask for six digits that cannot satisfy it, and read as a broken login.
+        this.challengeToken = null;
+        this.failure.set(
+          challenge.type === CHALLENGE_PASSWORD_CHANGE
+            ? 'This password was issued by an administrator and has to be replaced before you can sign in. Use "Forgotten your password?" below to set your own.'
+            : 'This account needs a step this screen does not support yet. Ask an administrator for help.',
+        );
         return;
       }
 
@@ -246,6 +336,7 @@ export class LoginPage {
 
     try {
       await firstValueFrom(this.auth.verifyTwoFactor(token, this.codeField.value().trim()));
+      this.setup.set(null);
       await this.flow.completeSignIn(this.returnUrl());
     } catch (error) {
       this.failure.set(
@@ -256,8 +347,30 @@ export class LoginPage {
     }
   }
 
+  /**
+   * Stages a secret for a sign-in that stopped at enrolment, and shows it.
+   *
+   * A failure here returns to the password step rather than leaving an unanswerable code box on
+   * screen: without a staged secret there is no code the user could produce.
+   */
+  private async beginEnrolment(token: string): Promise<void> {
+    try {
+      this.setup.set(await firstValueFrom(this.auth.enrolTwoFactor(token)));
+      this.step.set('code');
+    } catch (error) {
+      this.challengeToken = null;
+      this.setup.set(null);
+      this.failure.set(
+        describeError(error, 'Two-factor setup could not be started. Sign in again to retry.'),
+      );
+    }
+  }
+
   protected backToPassword(): void {
     this.challengeToken = null;
+    // The staged secret is dropped rather than kept for a second attempt: an abandoned enrolment
+    // leaving a live secret in a browser tab is a credential nobody is looking after.
+    this.setup.set(null);
     this.failure.set(null);
     this.form.fields.password.reset();
     this.submitted.set(false);

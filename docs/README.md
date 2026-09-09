@@ -35,6 +35,7 @@ Written as the corresponding step lands, not up front.
 | Guide | Added at | What it covers |
 |---|---|---|
 | [dev-setup.md](dev-setup.md) | Step 2 | Running the local containerised environment: prerequisites, commands, hostnames and TLS, troubleshooting. Extended at Step 3 with the API container |
+| [deployment-vps.md](deployment-vps.md) | Ahead of Step 32 | Deploying the whole stack to a VPS: Docker containers behind a host-installed Caddy, the database volume, migrating and seeding, backups and restore, and the one-variable move to Neon or another managed PostgreSQL |
 | [ci-pipeline.md](ci-pipeline.md) | Step 5 | The quality gates: what each one checks, running them locally with `tools/ci.sh`, how coverage is measured and enforced, the GitHub branch-protection setup they need, and what is deliberately deferred to a later step |
 
 ### Plan files and ledgers

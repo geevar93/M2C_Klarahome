@@ -217,10 +217,25 @@ expensive ones were not in the algorithms, they were in the seams between a modu
 **What was deliberately not fixed** is in [`../PARKING_LOT.md`](../PARKING_LOT.md), fourteen rows
 dated 2026-09-09. The rule the agents worked to: a defect in a module you do not own is reported
 with its fix, not applied, because four agents editing one another's modules produces merge
-conflicts in place of progress. Three of those rows need the **User's decision** rather than a
-schedule — store credit has no product path at all (which is why two Step 14 rows are only
-partially closed), no seeded vendor role grants the Inventory surface, and `02-domain-model.md`
-§5.1's state diagram is missing four implemented edges.
+conflicts in place of progress. Three of those rows needed the **User's decision** rather than a
+schedule, and all three were taken on 2026-09-09:
+
+- **Store credit is deferred to Phase 2 whole.** It is a prepaid wallet the customer already owns —
+  a refund paid as credit, loyalty, or a goodwill adjustment — and never the shop lending money, so
+  nothing is deleted: the tables stay, `pricing.store-credit` stays off by shipping default, and
+  only the product path that would elect an amount is deferred. The two Step 14 rows that were
+  partial for want of it now close against the deferral, which is why this wave reads 84 rows rather
+  than 82 plus two hanging.
+- **`vendor-owner` now holds all five Inventory permissions.** The staff role's own comment had
+  already written the rule — "opening a warehouse and committing the seller's money to a supplier
+  are the owner's decisions" — and the owner's list carried a block for Steps 12, 14, 16, 17 and 18
+  and none for Step 11. An omission, not a policy. It could not have been fixed from the console:
+  seeded roles are `IsSystem`, and the seeder reasserts them on every deploy — which is also why it
+  needs no migration.
+- **`02-domain-model.md` §5.1 is corrected, and it was worse than this step reported.** The Step 14
+  report said four missing edges; the table declares **25** and the diagram drew **19**. The report
+  grouped the two return edges as one and missed `Packed → Cancelled` entirely — which §5.1's own
+  prose already described. Taken from the table rather than from the report.
 
 **Suite state:** **977 unit, 14 architecture, 365 integration — 1356 backend tests, 0 failures**
 (was 946 / 14 / 254), plus the frontend unit suites; solution builds at 0 warnings. Verified by one

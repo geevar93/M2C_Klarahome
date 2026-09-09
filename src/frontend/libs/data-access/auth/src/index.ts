@@ -22,4 +22,5 @@ export type {
   ProblemDetails,
   SignInResponse,
   TwoFactorChallengeResponse,
+  TwoFactorSetupResponse,
 } from '@klarahome/data-access-api';

@@ -28,14 +28,17 @@
 > correctness defects — availability and the hold disagree about an inactive warehouse, the MRP
 > ceiling is documented but never enforced, a goods receipt double-counts if its transaction is
 > retried, and the audit log's tamper-proofing never fires on `TRUNCATE`. **Three needed a decision
-> from the User rather than a schedule, and two are now decided** (2026-09-09): spending store
+> from the User rather than a schedule, and all three are now taken** (2026-09-09). Spending store
 > credit at checkout is **deferred to Phase 2** — it is a prepaid wallet the customer already owns,
-> not the shop lending money, so nothing is deleted and the flag stays off — and **§5.1's order
-> diagram is corrected**, which turned out to be six missing edges rather than the four the Step 14
-> report claimed: the table declares 25 and the diagram drew 19. The third is still open: **no
-> seeded vendor role grants the Inventory surface**, and because seeded roles are `IsSystem` and the
-> seeder reasserts them on every deploy, that one cannot be fixed from the admin console — it is a
-> change to `PermissionCatalog.cs` and a deploy. The oldest unowned row is still there and first —
+> not the shop lending money, so nothing is deleted and the flag stays off. **§5.1's order diagram
+> is corrected**, which turned out to be six missing edges rather than the four the Step 14 report
+> claimed: the table declares 25 and the diagram drew 19. And **`vendor-owner` now holds all five
+> Inventory permissions** — the three its staff already held plus warehouse and purchasing — which
+> the staff role's own comment had already declared the owner's ("opening a warehouse and committing
+> the seller's money to a supplier are the owner's decisions"), making it an omission rather than a
+> policy. It could not have been fixed from the admin console: seeded roles are `IsSystem`, the
+> console refuses to edit one, and the seeder reasserts them on every deploy — which is also why it
+> needs no migration. The oldest unowned row is still there and first —
 > Inventory has no consumer for `Orders.SubOrderCancelled`, so units committed out of stock by an
 > order cancelled after confirmation are never put back. **Parts 2 and 3 are untouched**: coverage
 > against the 70% gate, the restored CI floors, Playwright, k6, and the security and accessibility
@@ -265,8 +268,8 @@ ones. **This is a deliberate speed-for-rework trade** taken to reach a demo soon
 
 | Ledger | File | Rows today |
 |---|---|---|
-| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 461 (+14 from Step 29's first wave; four are correctness defects, two of the three decisions are taken and one is open) |
-| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 47 |
+| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 461 (+14 from Step 29's first wave; four are correctness defects still owned by Step 29, and all three of the decisions it raised are now taken) |
+| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 48 |
 | Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | **426 open of 542** — 116 closed at Step 29 so far (Steps 9–14). Two of those closed against a Phase 2 deferral rather than a test: the store-credit halves of Step 14's two placement rows |
 
 ---
