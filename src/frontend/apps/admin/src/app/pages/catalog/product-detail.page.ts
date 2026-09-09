@@ -93,7 +93,7 @@ interface CategoryOption {
         <kh-status-badge [status]="current.status" />
 
         <button
-          *khHasPermission="'catalog.product.write'"
+          *khHasPermission="'catalog.product.manage'"
           khButton
           type="button"
           size="sm"
@@ -127,7 +127,7 @@ interface CategoryOption {
         </button>
 
         <button
-          *khHasPermission="'catalog.product.publish'"
+          *khHasPermission="'catalog.product.moderate'"
           khButton
           type="button"
           size="sm"
@@ -143,7 +143,7 @@ interface CategoryOption {
         </button>
 
         <button
-          *khHasPermission="'catalog.product.write'"
+          *khHasPermission="'catalog.product.manage'"
           khButton
           type="button"
           size="sm"
@@ -326,7 +326,7 @@ interface CategoryOption {
               <kh-field
                 [label]="party.label + ' name'"
                 [for]="'party-' + party.key + '-name'"
-                [optional]="true"
+                [optional]="partyOptional(party.key, 'name')"
               >
                 <input
                   khControl
@@ -339,7 +339,7 @@ interface CategoryOption {
               <kh-field
                 [label]="party.label + ' address'"
                 [for]="'party-' + party.key + '-address'"
-                [optional]="true"
+                [optional]="partyOptional(party.key, 'address')"
               >
                 <input
                   khControl
@@ -856,6 +856,12 @@ export class ProductDetailPage implements HasUnsavedChanges {
     this.attributes().filter((attribute) => attribute.isVariantDefining),
   );
 
+  /** "Imported goods" per `Product.ComplianceGaps` — a country of origin declared and not India. */
+  protected readonly isImported = computed(() => {
+    const country = this.form.fields.countryOfOrigin.value().trim().toUpperCase();
+    return country.length > 0 && country !== 'IN';
+  });
+
   protected readonly auditEntries = computed(() => this.audit.rows().map(toAuditEntry));
 
   constructor() {
@@ -899,6 +905,21 @@ export class ProductDetailPage implements HasUnsavedChanges {
 
   protected partyValue(key: string, field: 'name' | 'address' | 'contact'): string {
     return this.partyValues()[key]?.[field] ?? '';
+  }
+
+  /**
+   * Whether this party's field is safe to label "(optional)".
+   *
+   * Mirrors `Product.ComplianceGaps` exactly, not the general rule of thumb: the manufacturer's
+   * name is required to publish regardless of origin (its address is not — `Manufacturer.IsEmpty`
+   * only fires when both are blank), and the importer's name and address are required together,
+   * but only once the product declares a foreign country of origin.
+   */
+  protected partyOptional(key: string, field: 'name' | 'address' | 'contact'): boolean {
+    if (field === 'contact' || key === 'packer') return true;
+    if (key === 'manufacturer') return field === 'address';
+    if (key === 'importer') return !this.isImported();
+    return true;
   }
 
   protected setParty(key: string, field: 'name' | 'address' | 'contact', value: string): void {

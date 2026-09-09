@@ -124,9 +124,9 @@ export class CatalogAdminService {
    * The product lifecycle, one method per edge.
    *
    * Named after the transitions rather than offered as `transition(status)` because these are not
-   * one endpoint: submit, approve, reject, publish, unpublish and archive are six routes with six
-   * permissions, and a single method taking a status string would hide that a caller needs
-   * `catalog.product.moderate` for two of them and `catalog.product.publish` for another.
+   * one endpoint: submit, approve, reject, publish, unpublish and archive are six routes, and a
+   * single method taking a status string would hide that a caller needs `catalog.product.manage`
+   * for submit/archive and `catalog.product.moderate` for approve/reject/publish/unpublish.
    */
   submitProduct(id: string): Observable<ProductResponse> {
     return this.api.adminProductSubmit(id);
