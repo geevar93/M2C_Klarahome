@@ -36,7 +36,17 @@ internal sealed class FakePaymentProvider : IPaymentProvider
     private readonly ConcurrentDictionary<string, List<string>> _paymentsByOrder = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProviderRefund> _refunds = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Guid> _ourPaymentIdByOrder = new(StringComparer.Ordinal);
-    private int _sequence;
+    /// <summary>
+    /// Shared across every instance in the process, not per instance.
+    /// </summary>
+    /// <remarks>
+    /// Every test gets its own <see cref="FakePaymentProvider"/>, but they all write into the one
+    /// database the collection shares. An instance counter starting at zero would hand two different
+    /// tests' collections the identical id <c>order_1</c>, and a webhook naming that id would then
+    /// resolve to whichever row a query happened to return first — the two tests' money silently
+    /// crossing over rather than either one failing loudly.
+    /// </remarks>
+    private static int _sequence;
 
     /// <inheritdoc />
     public string Name => PaymentProviders.Razorpay;
@@ -330,5 +340,5 @@ internal sealed class FakePaymentProvider : IPaymentProvider
         return payment;
     }
 
-    private int Next() => Interlocked.Increment(ref _sequence);
+    private static int Next() => Interlocked.Increment(ref _sequence);
 }
