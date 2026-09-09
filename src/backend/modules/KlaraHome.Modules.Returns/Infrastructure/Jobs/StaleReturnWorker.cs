@@ -79,8 +79,23 @@ internal sealed partial class StaleReturnWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Runs one deterministic pass, for a test that needs the effect of the loop without its timer.
+    /// </summary>
+    /// <remarks>
+    /// The same reasoning as <c>ReservationSweeper.SweepOnceAsync</c>: the loop above is disabled in
+    /// the test host (<c>Returns:SweeperEnabled</c>), and a fixed-count report is what a test can
+    /// assert on deterministically where a log line cannot.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal Task<(int Uncollected, int Uninspected, int Unpaid)> SweepOnceAsync(
+        CancellationToken cancellationToken)
+        => SweepAsync(_options.CurrentValue, cancellationToken);
+
     /// <summary>Looks for the three ways a return goes quiet, and names each one it finds.</summary>
-    private async Task SweepAsync(ReturnsOptions options, CancellationToken cancellationToken)
+    private async Task<(int Uncollected, int Uninspected, int Unpaid)> SweepAsync(
+        ReturnsOptions options,
+        CancellationToken cancellationToken)
     {
         using var scope = _services.CreateScope();
 
@@ -141,6 +156,8 @@ internal sealed partial class StaleReturnWorker : BackgroundService
         {
             RefundOverdue(_logger, number);
         }
+
+        return (uncollected.Count, uninspected.Count, unpaid.Count);
     }
 
     [LoggerMessage(EventId = 1770, Level = LogLevel.Information,

@@ -35,7 +35,7 @@ internal sealed class FakeShippingProvider : IShippingProvider
     private readonly ConcurrentDictionary<string, CourierBooking> _bookings = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, List<CourierScan>> _scans = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Guid> _shipmentIdByAwb = new(StringComparer.Ordinal);
-    private int _sequence;
+    private static int _sequence;
 
     /// <inheritdoc />
     public string Name => ShippingProviders.Shiprocket;
@@ -344,5 +344,5 @@ internal sealed class FakeShippingProvider : IShippingProvider
             ? value.GetString()
             : null;
 
-    private int Next() => Interlocked.Increment(ref _sequence);
+    private static int Next() => Interlocked.Increment(ref _sequence);
 }

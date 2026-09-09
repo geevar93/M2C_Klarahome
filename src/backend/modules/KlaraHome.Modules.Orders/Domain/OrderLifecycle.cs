@@ -183,7 +183,13 @@ internal static class SubOrderLifecycle
 
             // After delivery. Completion is the sweeper's; the return branch is the shopper's.
             (SubOrderStatus.Delivered, SubOrderStatus.Completed) => OrderActor.System | OrderActor.Platform,
-            (SubOrderStatus.Delivered, SubOrderStatus.ReturnRequested) => OrderActor.Customer | OrderActor.Platform,
+            // IOrderReturns.AdvanceAsync — the only caller of this edge from outside the module —
+            // moves the sub-order "as the system" by contract (docs on the seam itself), because the
+            // decision that a return was asked for was already made in the Returns module by whoever
+            // actually raised it (a shopper, or staff on their behalf). Refusing System here would
+            // refuse every return the platform ever raises at the very first step of its lifecycle.
+            (SubOrderStatus.Delivered, SubOrderStatus.ReturnRequested) =>
+                OrderActor.Customer | OrderActor.Platform | OrderActor.System,
             (SubOrderStatus.ReturnRequested, SubOrderStatus.ReturnInProgress) =>
                 OrderActor.Platform | OrderActor.Vendor | OrderActor.System,
 

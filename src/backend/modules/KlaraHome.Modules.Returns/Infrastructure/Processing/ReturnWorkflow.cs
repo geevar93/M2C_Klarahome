@@ -43,6 +43,38 @@ internal sealed partial class ReturnWorkflow(
     ILogger<ReturnWorkflow> logger)
 {
     /// <summary>
+    /// Announces the state a return was <em>raised</em> into.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A brand-new <see cref="ReturnRequest"/> is constructed already sitting in
+    /// <see cref="ReturnStatus.Requested"/> — that is what makes the constructor a fact rather than a
+    /// transition — so calling <see cref="TransitionAsync"/> with that same status the moment it is
+    /// raised would hit the idempotent "already there" guard and silently skip both the order
+    /// timeline entry and the sync that puts the sub-order into
+    /// <c>ReturnRequested</c>. The sub-order would then sit at <c>Delivered</c> forever, and the very
+    /// next transition — approval, which asks for <c>ReturnInProgress</c> — would be refused because
+    /// the machine has no edge from <c>Delivered</c> to it.
+    /// </para>
+    /// <para>
+    /// This does the same three things <see cref="TransitionAsync"/> does after a move succeeds
+    /// (annotate, sync the order, publish), without asking the transition table for an edge that a
+    /// brand-new aggregate was never on the far side of.
+    /// </para>
+    /// </remarks>
+    /// <param name="request">The RMA, just raised.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task AnnounceRaisedAsync(ReturnRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        await AnnotateAsync(request, request.Status, note: null, cancellationToken).ConfigureAwait(false);
+        await SyncOrderAsync(request, request.Status, cancellationToken).ConfigureAwait(false);
+
+        Moved(logger, request.ReturnNumber, request.Status, request.Status);
+    }
+
+    /// <summary>
     /// Moves a return, if the machine has the edge and this actor may take it.
     /// </summary>
     /// <param name="request">The RMA.</param>

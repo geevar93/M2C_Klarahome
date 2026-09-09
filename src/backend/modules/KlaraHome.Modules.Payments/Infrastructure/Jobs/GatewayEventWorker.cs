@@ -96,6 +96,19 @@ internal sealed partial class GatewayEventWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Claims and applies one batch, for a test that needs the effect of the loop without its timer.
+    /// </summary>
+    /// <remarks>
+    /// The same reasoning as <c>ReservationSweeper.SweepOnceAsync</c> and
+    /// <c>StockReconciliationJob.ReconcileAsync</c>: the loop above is disabled in the test host
+    /// (<c>Payments:EventProcessorEnabled</c>), so a test that needs a stored webhook applied asks
+    /// for one deterministic pass instead of racing a timer.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal Task<int> DrainOnceAsync(CancellationToken cancellationToken)
+        => DrainAsync(_options.CurrentValue, cancellationToken);
+
     /// <summary>Claims a batch and applies it. Returns how many events were touched.</summary>
     private async Task<int> DrainAsync(PaymentsOptions options, CancellationToken cancellationToken)
     {

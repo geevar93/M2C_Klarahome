@@ -693,6 +693,13 @@ internal sealed class RefundReturnCommandHandler(
 
         if (paid.IsFailure)
         {
+            // The credit note is raised before the money is asked for, and it is raised whether or
+            // not money moves — that is the whole point of issuing it first. A gateway or wallet
+            // refusal must not take it back down with it: saving here is what makes a return refused
+            // for want of anything to refund (RETURN_NOTHING_REFUNDABLE, a cash-on-delivery parcel
+            // among them) keep the note it already earned.
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
             return Result.Failure<ReturnResponse>(paid.Error);
         }
 

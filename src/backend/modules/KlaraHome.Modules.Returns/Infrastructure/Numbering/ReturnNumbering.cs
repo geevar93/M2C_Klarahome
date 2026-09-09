@@ -17,10 +17,25 @@ namespace KlaraHome.Modules.Returns.Infrastructure.Numbering;
 /// cosmetic problem (docs/03-database-design.md §4.8).
 /// </para>
 /// <para>
-/// The allocation is therefore: find or create the counter row, take it with
-/// <c>SELECT ... FOR UPDATE</c>, read it, increment it. The lock is held until the caller's
-/// transaction ends, which serialises allocation within one series and gives the number back if the
-/// caller rolls back. Both are the point rather than the cost.
+/// The allocation is therefore meant to be: find or create the counter row, take it with
+/// <c>SELECT ... FOR UPDATE</c>, read it, increment it, with the lock held until the caller's
+/// transaction ends — serialising allocation within one series and giving the number back if the
+/// caller rolls back.
+/// </para>
+/// <para>
+/// <b>That is not what happens today, and it is a known, parked defect (PARKING_LOT.md; found while
+/// closing Step 17's test debt).</b> No caller of <see cref="NextCreditNoteNumberAsync"/> opens an
+/// explicit transaction before calling it, so the <c>FOR UPDATE</c> row lock — taken by a bare
+/// command with no ambient transaction — is released by Npgsql's autocommit the instant that one
+/// statement completes, long before the caller's own <c>SaveChangesAsync</c> writes the increment.
+/// Two concurrent callers can both read the same counter value and both attempt to commit a credit
+/// note carrying it, which the unique index on <c>(tenant, vendor, financial year, number)</c> then
+/// refuses as a 500 rather than the graceful retry this class's shape suggests. Reproduced directly:
+/// two return inspections issuing credit notes for the same seller at the same time. Fixing it
+/// properly means every caller opening its own transaction before asking for a number, which is
+/// wider than this module can decide alone — parked for the User rather than patched here in a way
+/// that could silently drop other pending writes on the same context (see the parking-lot entry for
+/// the trade-off considered and rejected).
 /// </para>
 /// <para>
 /// The series is narrow so the lock is narrow: RMA numbers are scoped to a calendar month and

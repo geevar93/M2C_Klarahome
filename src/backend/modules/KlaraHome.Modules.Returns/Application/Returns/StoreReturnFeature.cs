@@ -432,17 +432,12 @@ internal sealed class RaiseReturnCommandHandler(
 
         events.Requested(request);
 
-        // The order timeline says a return was asked for, whether or not it is approved in a moment.
-        // A shopper looking at their order should see the request they made, not only its outcome.
-        await workflow
-            .TransitionAsync(
-                request,
-                ReturnStatus.Requested,
-                ReturnActor.Customer,
-                customerId,
-                note: null,
-                cancellationToken)
-            .ConfigureAwait(false);
+        // The order timeline says a return was asked for, whether or not it is approved in a moment,
+        // and the sub-order moves into ReturnRequested so the next real transition (approval, into
+        // ReturnInProgress) has an edge to take. This is not a call to TransitionAsync: the aggregate
+        // was constructed already sitting in Requested, so asking the transition table to move it
+        // from Requested to Requested would hit the idempotent "already there" guard and skip both.
+        await workflow.AnnounceRaisedAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (ReturnPolicyService.IsAutoApproved(reason, total.Payable, resolved))
         {

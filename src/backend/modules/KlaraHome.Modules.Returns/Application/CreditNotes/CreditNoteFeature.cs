@@ -1,5 +1,6 @@
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
+using KlaraHome.Modules.Returns.Domain;
 using KlaraHome.Modules.Returns.Infrastructure;
 using KlaraHome.Modules.Returns.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Results;
@@ -122,9 +123,14 @@ internal sealed class GetCreditNoteQueryHandler(ReturnsDbContext context)
 /// Reads the credit note raised against one return.
 /// </summary>
 /// <remarks>
-/// The shopper's route to their own copy, and the reason it is keyed on the return rather than on
-/// the note: a shopper knows their RMA number and has no reason ever to have seen a credit-note id.
-/// It is confined to their own returns by the caller's token, never by a parameter.
+/// The one route both a shopper and an operator reach through — <c>/store/returns/{id}/credit-note</c>
+/// and <c>/admin/returns/{id}/credit-note</c> dispatch the identical query — so "confined by the
+/// caller's token" has to mean something different for each of the three callers who can ask: a
+/// shopper only their own, a seller only their own goods, and platform staff (already gated at the
+/// admin route by <c>returns.return.read</c>) anyone's. A check that only ever compared the caller's
+/// user id to the return's customer id answered every staff and seller request with the same 404 an
+/// invented id gets — found while proving this exact row, and it is the reason a support agent could
+/// never open a credit note through the admin surface at all.
 /// </remarks>
 /// <param name="context">The Returns data context.</param>
 /// <param name="scope">Who is asking.</param>
@@ -137,12 +143,15 @@ internal sealed class GetReturnCreditNoteQueryHandler(ReturnsDbContext context, 
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var owns = await context.Returns
+        var request = await context.Returns
             .AsNoTracking()
-            .AnyAsync(
-                request => request.Id == query.ReturnId && request.CustomerId == scope.CustomerId,
-                cancellationToken)
+            .FirstOrDefaultAsync(candidate => candidate.Id == query.ReturnId, cancellationToken)
             .ConfigureAwait(false);
+
+        var owns = request is not null
+            && (scope.IsVendor
+                ? request.VendorId == scope.VendorId
+                : scope.Actor == ReturnActor.Platform || request.CustomerId == scope.CustomerId);
 
         if (!owns)
         {
