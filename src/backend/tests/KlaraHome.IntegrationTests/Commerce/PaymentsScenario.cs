@@ -8,7 +8,7 @@ namespace KlaraHome.IntegrationTests.Commerce;
 /// <param name="ListingId">The offer.</param>
 /// <param name="VariantId">The variant it is against.</param>
 /// <param name="Price">What it sells for.</param>
-internal sealed record SellableOffer(Guid VendorId, Guid ListingId, Guid VariantId, decimal Price);
+internal sealed record PaymentsSellableOffer(Guid VendorId, Guid ListingId, Guid VariantId, decimal Price);
 
 /// <summary>An order this scenario placed, and what a payment test needs to act on it.</summary>
 /// <param name="OrderId">The order.</param>
@@ -18,7 +18,7 @@ internal sealed record SellableOffer(Guid VendorId, Guid ListingId, Guid Variant
 /// <param name="Amount">What is payable.</param>
 /// <param name="CurrencyCode">ISO 4217 code the amount is in.</param>
 /// <param name="ProviderOrderId">The gateway order id opened for it, or null for cash on delivery.</param>
-internal sealed record PlacedOrder(
+internal sealed record PaymentsPlacedOrder(
     Guid OrderId,
     string OrderNumber,
     Guid SubOrderId,
@@ -58,7 +58,7 @@ internal sealed class PaymentsScenario(HttpClient admin, CancellationToken cance
     /// <summary>Opens a seller, a warehouse, a taxonomy, a variant and a live, stocked offer.</summary>
     /// <param name="price">What it sells for.</param>
     /// <param name="quantity">How many units are on hand.</param>
-    public async Task<SellableOffer> OfferAsync(decimal price = 999m, int quantity = 50)
+    public async Task<PaymentsSellableOffer> OfferAsync(decimal price = 999m, int quantity = 50)
     {
         var seller = await _vendors.ActiveAsync();
         await EnsureShippingRateCardAsync();
@@ -77,7 +77,7 @@ internal sealed class PaymentsScenario(HttpClient admin, CancellationToken cance
         var stockItemId = await OpenStockAsync(listingId, warehouseId);
         await AdjustStockAsync(stockItemId, quantity);
 
-        return new SellableOffer(seller.Id, listingId, product.VariantId, price);
+        return new PaymentsSellableOffer(seller.Id, listingId, product.VariantId, price);
     }
 
     /// <summary>Saves a delivery address for a shopper, as they would on their first order.</summary>
@@ -123,9 +123,9 @@ internal sealed class PaymentsScenario(HttpClient admin, CancellationToken cance
     /// <param name="method">"prepaid" or "cod".</param>
     /// <param name="quantity">How many units.</param>
     /// <param name="idempotencyKey">The placement key, or a fresh one.</param>
-    public async Task<(PlacedOrder Order, JsonElement PlaceOrderResponse)> PlaceOrderAsync(
+    public async Task<(PaymentsPlacedOrder Order, JsonElement PlaceOrderResponse)> PlaceOrderAsync(
         HttpClient shopper,
-        SellableOffer offer,
+        PaymentsSellableOffer offer,
         string method = "prepaid",
         int quantity = 1,
         string? idempotencyKey = null)
@@ -218,7 +218,7 @@ internal sealed class PaymentsScenario(HttpClient admin, CancellationToken cance
             : null;
 
         return (
-            new PlacedOrder(
+            new PaymentsPlacedOrder(
                 orderId,
                 placed.GetProperty("orderNumber").GetString()!,
                 subOrder.GetProperty("id").GetGuid(),

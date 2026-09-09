@@ -97,6 +97,11 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         var client = CreateClient();
         var number = mobile ?? NewMobile();
 
+        // Shipped off by default (IdentityFeatures.MobileOtpLogin) — withdrawn from the live
+        // storefront for want of an SMS provider, but it is still the only route that produces a
+        // customer account with a verified mobile number, which several commerce criteria key off.
+        Factory.Features[Modules.Identity.Infrastructure.IdentityFeatures.MobileOtpLogin] = true;
+
         var start = await client.PostAsJsonAsync(
             "/api/v1/store/auth/otp/request",
             new { mobile = number },

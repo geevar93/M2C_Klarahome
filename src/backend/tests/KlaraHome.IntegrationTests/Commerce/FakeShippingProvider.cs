@@ -116,7 +116,11 @@ internal sealed class FakeShippingProvider : IShippingProvider
             Bookings.Add(request);
         }
 
-        var awb = $"AWB{Next():D8}";
+        // Globally unique, not merely unique within this instance: every test in the collection
+        // shares one tenant and therefore one `(tenant, awb)` unique index, but each test's own
+        // CommerceApiFactory gets a fresh FakeShippingProvider whose sequence restarts at 1. A
+        // sequence number alone would hand out "AWB00000001" to the first booking of every test.
+        var awb = $"AWB{Guid.NewGuid():N}"[..14].ToUpperInvariant();
 
         var booking = new CourierBooking(
             "Delhivery Surface",
@@ -153,7 +157,13 @@ internal sealed class FakeShippingProvider : IShippingProvider
         DateTimeOffset? occurredAt = null)
     {
         var scan = new CourierScan(
-            $"evt_{Next()}",
+            // Globally unique, not merely unique within this instance: the webhook receiver's
+            // replay protection is keyed on (provider, provider_event_id) across the whole shared
+            // tenant, and every test gets its own FakeShippingProvider whose sequence restarts at
+            // 1 — "evt_2" from one test is "evt_2" from every other, and the second test's own
+            // event is silently treated as a duplicate of the first's before its signature is ever
+            // checked.
+            $"evt_{Guid.NewGuid():N}",
             status,
             status.ToString().ToUpperInvariant(),
             "Hyderabad Hub",
