@@ -87,8 +87,13 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         var client = CreateClient();
         var number = mobile ?? NewMobile();
 
+        // Shipped off by default (IdentityFeatures.MobileOtpLogin) — withdrawn from the live
+        // storefront for want of an SMS provider, but it is still the only route that produces a
+        // customer account with a verified mobile number, which several commerce criteria key off.
+        Factory.Features[Modules.Identity.Infrastructure.IdentityFeatures.MobileOtpLogin] = true;
+
         var start = await client.PostAsJsonAsync(
-            "/api/v1/store/auth/otp/start",
+            "/api/v1/store/auth/otp/request",
             new { mobile = number },
             Cancellation);
 
@@ -188,9 +193,12 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
     /// <param name="prefix">A readable hint about which test made it.</param>
     protected static string NewEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@klarahome.test";
 
-    /// <summary>An Indian mobile number no other test is using.</summary>
+    /// <summary>
+    /// An Indian mobile number no other test is using, in the E.164 shape the OTP dispatcher and
+    /// <c>RequestOtpCommand</c> both key on.
+    /// </summary>
     protected static string NewMobile()
-        => $"9{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        => $"+919{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
     /// <summary>Reads a successful response as JSON, failing with the body when it was not successful.</summary>
     /// <param name="response">The response.</param>

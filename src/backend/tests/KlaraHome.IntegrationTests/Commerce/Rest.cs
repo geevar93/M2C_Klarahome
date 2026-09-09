@@ -92,7 +92,7 @@ internal static class Rest
     /// <param name="rawBody">The body, exactly as it should arrive.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="headers">Headers to set on the request.</param>
-    public static Task<HttpResponseMessage> PostRawAsync(
+    public static async Task<HttpResponseMessage> PostRawAsync(
         HttpClient client,
         string path,
         string rawBody,
@@ -102,6 +102,9 @@ internal static class Rest
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(headers);
 
+        // Awaited before the request (and its content) is disposed: a caller that neither awaits
+        // this method nor keeps the request alive would otherwise race the host reading the body
+        // against the `using` block disposing the StreamContent underneath it.
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(path, UriKind.Relative))
         {
             Content = new StringContent(rawBody, Encoding.UTF8, "application/json"),
@@ -112,7 +115,7 @@ internal static class Rest
             request.Headers.TryAddWithoutValidation(name, value);
         }
 
-        return client.SendAsync(request, cancellationToken);
+        return await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Uploads a file through the media endpoints, as a person would.</summary>

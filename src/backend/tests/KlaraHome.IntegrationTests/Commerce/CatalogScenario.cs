@@ -447,6 +447,71 @@ internal sealed class CatalogScenario(HttpClient admin, CancellationToken cancel
         return listingId;
     }
 
+    /// <summary>
+    /// Puts stock behind an offer, so a checkout for it does not refuse with
+    /// <c>CART_ITEM_OUT_OF_STOCK</c>.
+    /// </summary>
+    /// <remarks>
+    /// A listing opens with a stock row and nothing in it — the same honest position the checkout
+    /// itself takes about a hole in a rate card — so a Step 16 test that needs to place a real order
+    /// has to receive stock exactly as a seller would: open a location, then a stock row against it,
+    /// then a purchase receipt. One warehouse is opened per scenario instance and reused, since two
+    /// tests opening "a location called Central" in the same collection must not collide.
+    /// </remarks>
+    /// <param name="listingId">The offer.</param>
+    /// <param name="quantity">How many units to receive.</param>
+    /// <param name="vendorId">The seller the location belongs to, or null for a platform warehouse.</param>
+    public async Task StockAsync(Guid listingId, int quantity, Guid? vendorId = null)
+    {
+        var warehouseId = await WarehouseIdAsync(vendorId);
+
+        var stockItem = await Rest.ReadAsync(
+            await admin.PostAsJsonAsync(
+                "/api/v1/admin/stock",
+                new { listingId, warehouseId },
+                cancellationToken),
+            cancellationToken);
+
+        var stockItemId = stockItem.GetProperty("id").GetGuid();
+
+        await Rest.ReadAsync(
+            await admin.PostAsJsonAsync(
+                "/api/v1/admin/stock/adjustments",
+                new { stockItemId, change = quantity, reason = "Adjustment", note = "Received for a Step 16 test." },
+                cancellationToken),
+            cancellationToken);
+    }
+
+    /// <summary>A warehouse for the given seller (or the platform), opened once and reused.</summary>
+    private async Task<Guid> WarehouseIdAsync(Guid? vendorId)
+    {
+        if (_warehouseIds.TryGetValue(vendorId ?? Guid.Empty, out var existing))
+        {
+            return existing;
+        }
+
+        var created = await Rest.ReadAsync(
+            await admin.PostAsJsonAsync(
+                "/api/v1/admin/warehouses",
+                new
+                {
+                    vendorId,
+                    code = $"WH-{Suffix()}",
+                    name = "Central",
+                    pincode = "500034",
+                    address = (object?)null,
+                    priority = 0,
+                },
+                cancellationToken),
+            cancellationToken);
+
+        var id = created.GetProperty("id").GetGuid();
+        _warehouseIds[vendorId ?? Guid.Empty] = id;
+        return id;
+    }
+
+    private readonly Dictionary<Guid, Guid> _warehouseIds = [];
+
     /// <summary>A short suffix nothing else in the collection is using.</summary>
     private static string Suffix() => Guid.NewGuid().ToString("N")[..8];
 }
