@@ -1,49 +1,41 @@
 # Klara Home — Master Implementation Plan
 
 > **Document owner:** Solution Architecture
-> **Status:** APPROVED — in execution (Step 29, Part 1: Steps 15–18 are next)
-> **Last updated:** 2026-09-09 (**Step 29 Part 1 is a fifth of the way down, and the ledger and the
-> code now agree.** Steps 9 and 10 were worked one at a time; Steps 11–14 were worked by **four
-> agents in parallel git worktrees**, merged into `step29-wave1` and squashed onto `main` as one
-> commit. **116 of 542 debt rows are closed**, each by a named passing
-> test, and the suite stands at **977 unit / 14 architecture / 365 integration — 1356 backend tests
-> with no failures** at 0 build warnings, verified by one run on `main` after the squash.
-> **Line coverage crossed the gate on the way: 70.94%, up from 46.27%, against a committed minimum
-> of 70%** — nobody wrote a test for coverage's sake, it is what closing four steps' behavioural
-> debt through the real API does. The gate is not yet *restored*, though: the per-suite floors still
-> read 941 / 14 / 180 against real counts of 977 / 14 / 365, and `ci.ps1 all` still fails at
-> `format` on two module files. **Twenty-nine real defects have been found and fixed so far, and this is the
-> argument for the step**: the promotion ledger threw on every call, so no order carrying a
-> promotion could be placed or cancelled at all; cash on delivery ran three of its four rules; the
-> gapless invoice series was not gapless under concurrency; no invoice has ever had a PDF, because
-> `CultureInfo.GetCultureInfo("en-IN")` throws under `InvariantGlobalization` and nothing said so;
-> a simultaneous retry of one cart line left stock held by nothing at all; and the append-only stock
-> ledger was editable one partition at a time. **Almost none of these are algorithm defects** — they
-> live in the seams between a module and the database, which is exactly what the sprint deferred
-> proving. **The parallel model has a cost, and it was paid once already**: four suites that were
-> each green alone were not green together, because a sweeper assertion counted every expired hold
-> in a database it now shares. A per-agent green suite is not evidence; only the merged run is.
-> **Fourteen rows were added to the Parking Lot**, all reported rather than fixed, because an agent
-> that edits a module it does not own produces merge conflicts instead of progress. Four of them are
-> correctness defects — availability and the hold disagree about an inactive warehouse, the MRP
-> ceiling is documented but never enforced, a goods receipt double-counts if its transaction is
-> retried, and the audit log's tamper-proofing never fires on `TRUNCATE`. **Three needed a decision
-> from the User rather than a schedule, and all three are now taken** (2026-09-09). Spending store
-> credit at checkout is **deferred to Phase 2** — it is a prepaid wallet the customer already owns,
-> not the shop lending money, so nothing is deleted and the flag stays off. **§5.1's order diagram
-> is corrected**, which turned out to be six missing edges rather than the four the Step 14 report
-> claimed: the table declares 25 and the diagram drew 19. And **`vendor-owner` now holds all five
-> Inventory permissions** — the three its staff already held plus warehouse and purchasing — which
-> the staff role's own comment had already declared the owner's ("opening a warehouse and committing
-> the seller's money to a supplier are the owner's decisions"), making it an omission rather than a
-> policy. It could not have been fixed from the admin console: seeded roles are `IsSystem`, the
-> console refuses to edit one, and the seeder reasserts them on every deploy — which is also why it
-> needs no migration. The oldest unowned row is still there and first —
-> Inventory has no consumer for `Orders.SubOrderCancelled`, so units committed out of stock by an
-> order cancelled after confirmation are never put back. **Parts 2 and 3 are untouched**: coverage
-> against the 70% gate, the restored CI floors, Playwright, k6, and the security and accessibility
-> baselines. Step 30's row is corrected to `🔵 IN PROGRESS` — the design tokens landed early, out of
-> order, and its exit criteria are not met. Step 28B's detail now lives only in its own card)
+> **Status:** APPROVED — in execution (Step 29, Part 1: Steps 19–28 are next)
+> **Last updated:** 2026-09-09 (**Step 29 Part 1 is two-fifths of the way down.** Wave 1 (Steps
+> 9–14) was worked one step at a time and then four in parallel worktrees. **Wave 2 (Steps 15, 16,
+> 16A, 17, 18) was worked by five agents in parallel git worktrees**, one per step, merged onto
+> `main` as five sequential merge commits rather than one squash — each merge's conflicts (mostly
+> the same harness fix rediscovered independently, or a duplicated `TEST_DEBT.md` row) resolved by
+> hand and the build verified clean after every one. **101 more debt rows closed on top of wave
+> 1's 116, for 217 of 542 closed**, each by a named passing test. The suite stands at **1476
+> backend tests — 991 unit, 14 architecture, 485 integration — with no failures** at 0 build
+> warnings, verified by one full `ci.ps1 -Stage test` run on `main` after all five merges landed.
+> **Line coverage is 81.65% (branch 69.05%)**, comfortably past the committed 70% gate — the
+> five new steps' modules (Payments, Shipping, Returns, Settlements) had been dragging the total
+> down since Step 28B. The gate is not yet *restored*: the per-suite floors in `tools/ci.ps1` still
+> read 941 / 14 / 180 against real counts of 991 / 14 / 485, and `ci.ps1 all` still fails at
+> `format` on two module files untouched by this wave. **The merged run again found what no
+> per-agent run could**: a platform-wide, zero-cost shipping rate card that one Payments harness
+> helper created to keep its own tests simple was the cheapest option for every other checkout in
+> the shared database, so three of wave 1's own `CheckoutTests` failed only once wave 2 landed
+> beside them — given a small nonzero base rate instead. A second, similar leak came from a
+> Shipping test's own platform-wide rate card, scoped to its seller instead. One Shipping test's
+> own expectation was simply wrong (it expected cash-on-delivery to be refused only when the
+> shipping options were re-read, when production correctly refuses it at the payment-method step
+> itself) and was corrected. **Real defects found and fixed this wave, all confined to the module
+> that owns them**: the shared Postgres period-boundary arithmetic in Settlements crashed every
+> settlement-period close under `InvariantGlobalization`; a payout that completed without ever
+> being queued never recorded its provider id, violating its own `CHECK` constraint; a newly raised
+> return never told its sub-order it had been raised, because the call landed on the aggregate's
+> own idempotent no-op guard; and the admin credit-note route 404'd for every staff and seller
+> caller because its ownership check only recognised the shopper's own id. **No rows moved to the
+> Parking Lot this wave** — every defect found stayed inside the module that owned it, unlike wave
+> 1's four cross-module reports. Step 16A closes 11 of its 12 rows honestly, the twelfth staying
+> open for want of live Shiprocket credentials, as it must. **Restored alongside this wave**: the
+> `vendor-owner` Inventory-permissions fix from wave 1's third User decision, applied to
+> `PermissionCatalog.cs`. **Parts 2 and 3 remain untouched**: the restored CI floors, Playwright,
+> k6, and the security and accessibility baselines. Steps 19–28 are next.)
 
 ---
 
@@ -193,7 +185,7 @@ Open the **Detail** file for the step you are working on. Do not open the others
 | 28 | Admin — promotions, CMS, reports + Vendor portal | G | ✅ DONE | 2026-09-07 | [card](steps/step-28-admin-promotions-cms-reports-vendor-portal.md) | **The declaration is empty: 52 destinations, 52 real screens, no placeholder left.** Thirty-one screens over eight new services — the promotion builder whose simulator runs the *checkout* quote engine so a rule is tried rather than guessed at; a page composer whose every form is a schema the server sent, so there is no `switch (block.type)` in it and a new block type needs no client change; report screens built from the API's own catalogue; payout runs whose maker–checker the screen only offers and never enforces, because three layers of the server already do; a ledger with no control that sets a balance, because the balance is a sum; and a vendor portal that is the same four panels as the platform's seller record with `canVerify` taken away. TCS and TDS are shown apart everywhere, on their two different bases. 131.9 kB gzipped against 300 kB; 23 projects lint and test green. **One Step 26 row closed (a seller's own name in the top bar); nine gaps parked, the sharpest being a read-only rate card and a report endpoint that declares two response bodies. Nothing proved against an API, a database or a browser: 33 `TEST_DEBT.md` rows, both halves of the headline criterion included** |
 | 28A | **Build repair & boot verification** | H | ✅ DONE | 2026-09-07 | [card](steps/step-28A-build-repair-and-boot-verification.md) | **The build sprint is over and the thing runs.** Assembled for the first time it did not start, and eighteen repairs later it does: eight analyzer errors in Payments; three Dockerfiles whose hand-kept restore list had fallen fourteen modules behind, so **no image had built since Step 8**; one broken comment line that made compose refuse `.env.example` outright; four Catalog collaborators never registered, which failed DI validation; a storage registration that called itself idempotent and was not, which killed the worker on a duplicate health check; **ten sweepers that claimed rows with `SELECT *` and so never returned the `xmin` their concurrency token is mapped to**; a reconciliation query aliased in PascalCase against a snake-case model; a directory that filtered *after* projecting into a record, which EF cannot translate; and a `SeoService` that substituted `{title}` but not `{store}`. **26 migrations apply to an empty database and re-run as a no-op; eight containers up with every health check green; the MVP walk completes by hand** — admin sign-in with TOTP, seller onboarded to Active, product published, COD order `KH-2609-000001` placed at ₹1798 incl. ₹85.62 GST, seen in admin, stock 25 → 23. Both apps build and the storefront server-renders real data. **The module-boundary gate, red across seven step boundaries, is green.** CI floors restored to 941/14/180; coverage 15.84% line is the number Step 29 must return to 70%. 9 parked rows, 11 `TEST_DEBT.md` rows |
 | 28B | **Deferred functional gaps from the build sprint** | H | ✅ DONE | 2026-09-07 | [card](steps/step-28B-deferred-functional-gaps.md) | **Twenty-three of twenty-four built; the twenty-fourth split and half of it re-parked by the User.** Impersonation (parked since Step 7, a named deliverable of Step 26) is time-boxed, reason-carrying, audited at both ends and stated on screen with a countdown; the platform's own commission invoice, Razorpay Route linked accounts and the `transfer.*` webhooks close the money gaps Step 18 named; a supplier screen, a rate-card editor, an entity picker, a schema-driven CMS repeater and a settings form drawn from `GET /admin/settings/schema` close the back-office ones; banners, reviews and questions close the storefront's. **Two resolved by deletion rather than construction, both because the card's premise was wrong**: the duplicate `/admin/reference/*` endpoints were refused by `AdminSurfaceTests` — the generated client is grouped by tag, not by surface, so the back office could always call the store's — and `RequireSignInToCheckout` was never a switch. **Typing nineteen client vocabularies against the generated enums found three values the server would have refused**, wrong for two steps in reviewed screens. Two unasked fixes: query parameters were declared PascalCase against §1's `camelCase` (one transformer, 122 call sites re-keyed), and two integration tests had asserted Step 3's four modules and five settings sections against today's eighteen and thirteen since the sprint began. `build`, `format`, `lint`, `codegen`, `frontend` green; 1148 backend tests pass; coverage 46.27% is Step 29's. **The Parking Lot now carries an owner on every open row** — 443 rows, a `Backlog (post-MVP)` class for the 35 that no remaining step schedules, and exactly one `⛔ NEEDS A STEP`: Inventory still never restocks a sub-order cancelled after confirmation. 26 `TEST_DEBT.md` rows |
-| 29 | Test hardening & performance baseline | H | 🔵 IN PROGRESS | | [card](steps/step-29-test-hardening-and-performance-baseline.md) | **Pays down every row of `TEST_DEBT.md`**, then the NFR/load/security/a11y work. **Part 1: 114 of 542 rows closed and 2 partially** — Steps 9 and 10 one at a time, then Steps 11–14 by four agents working in parallel worktrees and squashed onto `main` as one commit. **Twenty-nine real defects found and fixed**, the worst of them a promotion ledger that threw on every call, so no order carrying a promotion could be placed or cancelled at all. The integration harness migrates all eighteen modules and drives the whole API with only the four network boundaries faked. **977 unit / 14 architecture / 365 integration — 1356 backend tests, no failures, and line coverage at 70.94% against the committed 70% minimum** (was 46.27%). **Parts 2 and 3 are otherwise untouched** — the CI floors still read 941 / 14 / 180 against real counts and `ci.ps1 all` still fails at `format`; Playwright is two skeleton specs, `KlaraHome.LoadTests` is a `.gitkeep`, and the security and a11y baselines have not been started. Fourteen new Parking Lot rows dated 2026-09-09; three of them need a decision from the User rather than a schedule |
+| 29 | Test hardening & performance baseline | H | 🔵 IN PROGRESS | | [card](steps/step-29-test-hardening-and-performance-baseline.md) | **Pays down every row of `TEST_DEBT.md`**, then the NFR/load/security/a11y work. **Part 1: 217 of 542 rows closed, 2 partially.** Wave 1 (Steps 9–14) closed 116; wave 2 (Steps 15, 16, 16A, 17, 18) closed 101 more, five agents working one step each in parallel worktrees, merged onto `main` as five sequential commits. Real defects fixed this wave stayed inside their owning module — a settlement-period close that crashed under `InvariantGlobalization`, a payout completed without ever being queued that skipped its own `CHECK` constraint, a raised return that never told its sub-order, an admin credit-note route that 404'd for every staff and seller caller. The merged run caught two shared-database leaks a per-agent run could not: a Payments test helper's platform-wide, zero-cost shipping rate undercut every other checkout's price, and a Shipping test's own platform-wide rate did the same — both scoped narrower. **991 unit / 14 architecture / 485 integration — 1476 backend tests, no failures, and line coverage at 81.65% against the committed 70% minimum** (was 70.94%). **Parts 2 and 3 are otherwise untouched** — the CI floors still read 941 / 14 / 180 against real counts and `ci.ps1 all` still fails at `format`; Playwright is two skeleton specs, `KlaraHome.LoadTests` is a `.gitkeep`, and the security and a11y baselines have not been started. Fourteen Parking Lot rows from wave 1, all three of its User decisions now taken; wave 2 added none |
 | 30 | **Design system, theming & visual identity** | H | 🔵 IN PROGRESS | | [card](steps/step-30-design-system-theming-and-visual-identity.md) | **The token layer landed early and out of order** — `10-design-system.md` supersedes the placeholder, and the client's warm earth ramp is applied as semantic tokens across storefront and admin, contrast-checked before it was written. **The exit criteria are not met:** no client sign-off on the working application, and the white-label proof (a second theme applied purely by configuration) has not been exercised. Also outstanding: brand assets, email/PDF styling, visual-regression baselines, the stylelint guardrail and responsive QA. Dark mode was declined by the client |
 | 31 | Observability, backups & operational runbook | H | ⬜ NOT STARTED | | [card](steps/step-31-observability-backups-and-operational-runbook.md) | |
 | 32 | Production deployment to VPS | H | ⬜ NOT STARTED | | [card](steps/step-32-production-deployment-to-vps.md) | |
@@ -270,7 +262,7 @@ ones. **This is a deliberate speed-for-rework trade** taken to reach a demo soon
 |---|---|---|
 | Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 461 (+14 from Step 29's first wave; four are correctness defects still owned by Step 29, and all three of the decisions it raised are now taken) |
 | Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 48 |
-| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | **426 open of 542** — 116 closed at Step 29 so far (Steps 9–14). Two of those closed against a Phase 2 deferral rather than a test: the store-credit halves of Step 14's two placement rows |
+| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | **323 open of 542, 2 partially closed** — 217 closed at Step 29 so far (Steps 9–18). Two of those closed against a Phase 2 deferral rather than a test: the store-credit halves of Step 14's two placement rows |
 
 ---
 

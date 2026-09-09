@@ -266,3 +266,89 @@ to the test — that the sweep put back at least one hold, and that this test's 
 `Expired` — which is the pattern `InventoryConcurrencyTests` was already using. Worth stating plainly
 because it is the cost of the parallel model: **a per-agent green suite is not evidence, and only the
 merged run is.**
+
+#### 29.5 — Wave 2 (done): Steps 15, 16, 16A, 17, 18 — 101 rows closed by 154 tests
+
+The second wave, worked the same way as the first but one step per agent rather than four steps
+sharing a squash: five agents in five git worktrees, one step each, merged onto `main` as five
+sequential commits (`8d4f1b4`, `17b5f36`, `dfb89e6`, `e99b7b7`, `3385ae4`) rather than one squash —
+so each merge's conflicts could be resolved and the build re-verified before the next one landed.
+Every agent's own report is the detail:
+
+| Step | Report | Rows | Tests added |
+|---|---|---|---|
+| 15 — Payments (Razorpay) | [`29-reports/step-15-report.md`](29-reports/step-15-report.md) | 25 closed | 30 integration |
+| 16 — Shipping, fulfilment & logistics | [`29-reports/step-16-report.md`](29-reports/step-16-report.md) | 16 closed, 2 partially | 21 integration |
+| 16A — Shiprocket adapter & delivery coverage | [`29-reports/step-16A-report.md`](29-reports/step-16A-report.md) | 11 closed | 15 integration |
+| 17 — Returns, refunds & RMA | [`29-reports/step-17-report.md`](29-reports/step-17-report.md) | 21 closed | 28 integration |
+| 18 — Settlements, commission & payouts | [`29-reports/step-18-report.md`](29-reports/step-18-report.md) | 26 closed | 30 integration |
+
+**The conflicts, resolved by hand at each merge.** Every agent independently rediscovered the same
+handful of harness defects wave 1 had already fixed once — an OTP route that had moved, a mobile
+number in the wrong format, `Rest.PostRawAsync` disposing its own request body mid-send, and a
+per-instance sequence counter in `FakePaymentProvider`/`FakeShippingProvider` that collided across
+tests sharing one database — because a fresh worktree starts from the same base every time. Each
+merge kept the version already on `main` and discarded the duplicate. One genuine add/add
+collision: Step 14's own `OrderScenario.cs` and Step 16's new one both declared a type named
+`OrderScenario`, coincidentally shaped for their own step. Step 16's was renamed
+`ShippingOrderScenario` (and its `PlacedOrder` record `ShippingPlacedOrder`) rather than merged
+into one file — the two scenarios build an order two different ways for two different reasons, and
+forcing them into one class would have made a future change to either read as a change to both.
+Step 15's `PaymentsScenario.cs` declared its own `SellableOffer` and `PlacedOrder` colliding with
+Step 13's `CartScenario.SellableOffer` and the production `Ordering.PlacedOrder` interface type
+respectively — renamed `PaymentsSellableOffer` / `PaymentsPlacedOrder`, local to the one file that
+used them.
+
+**Two defects the merged run found that no per-agent run could — the same lesson wave 1 recorded,
+paid again.** `PaymentsScenario.EnsureShippingRateCardAsync` creates one process-wide, platform-wide
+shipping zone covering every PIN code in the country, with a `baseRate` of `0m` — deliberate, so a
+Payments test never has to think about shipping cost. Once Step 16's tests joined the same shared
+database, that zero-cost, platform-wide rate became the cheapest option for *every* checkout in the
+collection, and three of wave 1's own `CheckoutTests` — which explicitly assert shipping is
+**not** free, because a free basket proves nothing about splitting delivery across two sellers —
+started failing. Given a small nonzero base rate instead; nothing in the Payments suite depended on
+the exact figure. `ShippingConstraintTests` had the same shape of leak in miniature: a
+platform-wide rate created only to make one booking possible, scoped to the test's own seller
+instead. **One test's own expectation was simply wrong**, found by the same run:
+`ShippingServiceabilityTests` expected `PUT .../payment-method` with `method: cod` to succeed and
+only filter the next `shipping-options` read, but production correctly refuses
+`CHECKOUT_COD_UNAVAILABLE` at the payment-method step itself the moment no seller in the basket can
+take cash there — the same rule `CheckoutTests`' own fourth COD rule already proves. The test was
+corrected to expect the refusal.
+
+**Real defects found and fixed, every one confined to the module that owned it** — no Parking Lot
+row was needed this wave, unlike wave 1's four cross-module reports:
+
+- **Settlements.** `CyclePlanner`/`FinancialYear.StartOf` returned period boundaries with a
+  `+05:30` offset rather than UTC, and Npgsql refuses a non-zero-offset `DateTimeOffset` against
+  `timestamptz` — closing a settlement period crashed unconditionally against a real database,
+  which is every caller, including the scheduler. `PayoutItem.Complete` never recorded
+  `ProviderPayoutId` when a transfer completed on its first send rather than being queued first,
+  violating the database's own `ck_payout_items_completed` check constraint.
+- **Returns.** A newly raised return never told its sub-order it had been raised:
+  `RaiseReturnCommandHandler` called `TransitionAsync(Requested)` on an aggregate `Raise` had
+  already constructed sitting in `Requested`, landing on the transition's own idempotent
+  already-there guard — no timeline entry, no sync to `ReturnInProgress`, and the sub-order stuck
+  at `Delivered` for ever. And the admin route for a return's credit note answered every staff and
+  seller caller `404`, because its ownership check compared the return's customer to the *caller's
+  own* id unconditionally — correct for the shopper's own route, wrong for the admin one beside it.
+
+**Suite state: 991 unit, 14 architecture, 485 integration — 1476 backend tests, 0 failures** (was
+977 / 14 / 365), solution builds at 0 warnings. Verified by one full `pwsh tools/ci.ps1 -Stage test
+-CoverageMinimum 0` run on `main` after all five merges and both fixes above landed, in 32:13.
+
+**Line coverage is 81.65% (branch 69.05%), up from 70.94% at the end of wave 1** — the five
+modules this wave closed (Payments, Shipping, Returns, Settlements) were the ones still dragging
+the total down since Step 28B, and closing their behavioural debt through the real API is what
+moved the number, the same as wave 1. The per-suite floors in `tools/ci.ps1` still read
+941 / 14 / **180** against real counts of 991 / 14 / 485, and a full `ci.ps1 all` still fails at
+the `format` stage on the same two files wave 1 found untouched by this wave either. Restoring the
+gates is still Part 2's job.
+
+**One piece of pre-existing work restored alongside this wave, not part of it**: wave 1's third
+User decision — `vendor-owner` gaining the five Inventory permissions their own staff already
+held — had been implemented but not committed before this session began. Committed here
+(`b5cdd19`) once the wave-2 merges landed clean, verified against `InventoryAuthorisationTests` and
+`AdminSurfaceTests`.
+
+Steps 19–28 are next.
