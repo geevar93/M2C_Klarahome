@@ -116,7 +116,12 @@ internal sealed class FakeShippingProvider : IShippingProvider
             Bookings.Add(request);
         }
 
-        var awb = $"AWB{Next():D8}";
+        // Guid-derived rather than the instance sequence alone: every test that books a parcel gets
+        // its own FakeShippingProvider, but the unique index on (tenant, awb) is on the one tenant
+        // the whole collection shares, so two instances that both started counting from one would
+        // collide on their first booking. This was found here, by these tests, the first time
+        // anything in the suite called CreateShipmentAsync twice across different hosts.
+        var awb = $"AWB{Guid.NewGuid():N}"[..15].ToUpperInvariant();
 
         var booking = new CourierBooking(
             "Delhivery Surface",
