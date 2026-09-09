@@ -5,7 +5,7 @@
 > **Last updated:** 2026-09-09 (**Step 29 Part 1 is a fifth of the way down, and the ledger and the
 > code now agree.** Steps 9 and 10 were worked one at a time; Steps 11–14 were worked by **four
 > agents in parallel git worktrees**, merged into `step29-wave1` and squashed onto `main` as one
-> commit. **114 of 542 debt rows are closed and 2 are partially closed**, each by a named passing
+> commit. **116 of 542 debt rows are closed**, each by a named passing
 > test, and the suite stands at **977 unit / 14 architecture / 365 integration — 1356 backend tests
 > with no failures** at 0 build warnings, verified by one run on `main` after the squash.
 > **Line coverage crossed the gate on the way: 70.94%, up from 46.27%, against a committed minimum
@@ -27,10 +27,15 @@
 > that edits a module it does not own produces merge conflicts instead of progress. Four of them are
 > correctness defects — availability and the hold disagree about an inactive warehouse, the MRP
 > ceiling is documented but never enforced, a goods receipt double-counts if its transaction is
-> retried, and the audit log's tamper-proofing never fires on `TRUNCATE`. **Three need a decision
-> from the User rather than a schedule**: store credit is fully built and has no product path to
-> spend it, no seeded vendor role grants the Inventory surface, and §5.1's order-state diagram is
-> missing four implemented edges. The oldest unowned row is still there and still first —
+> retried, and the audit log's tamper-proofing never fires on `TRUNCATE`. **Three needed a decision
+> from the User rather than a schedule, and two are now decided** (2026-09-09): spending store
+> credit at checkout is **deferred to Phase 2** — it is a prepaid wallet the customer already owns,
+> not the shop lending money, so nothing is deleted and the flag stays off — and **§5.1's order
+> diagram is corrected**, which turned out to be six missing edges rather than the four the Step 14
+> report claimed: the table declares 25 and the diagram drew 19. The third is still open: **no
+> seeded vendor role grants the Inventory surface**, and because seeded roles are `IsSystem` and the
+> seeder reasserts them on every deploy, that one cannot be fixed from the admin console — it is a
+> change to `PermissionCatalog.cs` and a deploy. The oldest unowned row is still there and first —
 > Inventory has no consumer for `Orders.SubOrderCancelled`, so units committed out of stock by an
 > order cancelled after confirmation are never put back. **Parts 2 and 3 are untouched**: coverage
 > against the 70% gate, the restored CI floors, Playwright, k6, and the security and accessibility
@@ -260,9 +265,9 @@ ones. **This is a deliberate speed-for-rework trade** taken to reach a demo soon
 
 | Ledger | File | Rows today |
 |---|---|---|
-| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 461 (+14 from Step 29's first wave; four are correctness defects and three need the User's decision) |
-| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 43 |
-| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | **426 open of 542** — 114 closed and 2 partially closed at Step 29 so far (Steps 9–14). The two partial rows are Step 14's, and they are partial because store credit has no product path to drive, not because a test is missing |
+| Parking Lot — out-of-step discoveries | [`PARKING_LOT.md`](PARKING_LOT.md) | 461 (+14 from Step 29's first wave; four are correctness defects, two of the three decisions are taken and one is open) |
+| Specification Change Log | [`CHANGE_LOG.md`](CHANGE_LOG.md) | 47 |
+| Deferred test debt | [`TEST_DEBT.md`](TEST_DEBT.md) | **426 open of 542** — 116 closed at Step 29 so far (Steps 9–14). Two of those closed against a Phase 2 deferral rather than a test: the store-credit halves of Step 14's two placement rows |
 
 ---
 
@@ -271,6 +276,11 @@ ones. **This is a deliberate speed-for-rework trade** taken to reach a demo soon
 Recorded so they are not accidentally built now: native mobile apps, multi-currency and
 international shipping, subscriptions/recurring orders, B2B/wholesale portal with credit terms,
 AI recommendations and semantic search, live chat, affiliate programme, gift cards,
+**spending store credit at checkout** (decided 2026-09-09 — the wallet is built and ships behind
+`pricing.store-credit`, off by default; what is deferred is the product path that would let a
+shopper elect an amount, so `walletApplied` stays `0`. It is a prepaid balance the customer already
+owns — a refund paid as credit, loyalty, or a goodwill adjustment — and never the shop lending
+money),
 multi-language storefront beyond `en-IN`, ONDC integration, marketplace ads / sponsored listings,
 warehouse scanner apps, and true multi-tenant SaaS hosting (single-tenant-per-deployment is the
 v1 redistribution model).

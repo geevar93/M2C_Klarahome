@@ -214,6 +214,7 @@ stateDiagram-v2
   [*] --> PendingPayment
   PendingPayment --> Confirmed: payment captured / COD accepted
   PendingPayment --> PaymentFailed: gateway failure / timeout
+  PendingPayment --> Cancelled: unpaid-order sweeper, or the customer
   PaymentFailed --> PendingPayment: retry
   PaymentFailed --> Cancelled
   Confirmed --> Processing: vendor accepts
@@ -221,16 +222,21 @@ stateDiagram-v2
   Processing --> Packed
   Processing --> Cancelled
   Packed --> Shipped: AWB assigned, picked up
+  Packed --> Cancelled: the last point the customer may cancel
+  Shipped --> Cancelled: Operations recalls the parcel
   Shipped --> OutForDelivery
   OutForDelivery --> Delivered
   OutForDelivery --> DeliveryFailed: NDR
   DeliveryFailed --> OutForDelivery: re-attempt
   DeliveryFailed --> RTOInitiated: exhausted
   RTOInitiated --> RTODelivered
+  RTOInitiated --> Delivered: the courier delivers a parcel it had written off
   Delivered --> Completed: return window closes
   Delivered --> ReturnRequested
   ReturnRequested --> ReturnInProgress
+  ReturnRequested --> Delivered: return refused before collection
   ReturnInProgress --> Returned
+  ReturnInProgress --> Delivered: return refused at QC, goods go back
   Returned --> [*]
   Completed --> [*]
   Cancelled --> [*]
@@ -241,7 +247,14 @@ Rules:
 - Transitions are declared in one table (from, to, allowed roles, guard). Nothing transitions
   by ad-hoc code.
 - Cancellation is allowed up to `Packed` for the customer; Operations may cancel later with a
-  reason and audit entry.
+  reason and audit entry. `Shipped --> Cancelled` is the "later": it is **platform-only**, and it
+  is how a parcel already with the courier is recalled.
+- **Three edges exist to recover from something the world did, not something the shop chose**, and
+  each is platform- or system-driven rather than a customer's: `RTOInitiated --> Delivered` is a
+  courier that delivers a parcel it had already written off, and the two `--> Delivered` edges out
+  of the return states are a return that was refused — before collection (platform or vendor) or at
+  QC (platform) — with the goods going back to the customer. Without them a sub-order that the
+  physical world moved on would be stuck in a state the machine could not leave.
 - Stock is **committed** on `Confirmed` and **returned** on `Cancelled`, `RTODelivered`, or
   `Returned` with QC pass.
 - Settlement eligibility begins at `Delivered` + return window (configurable, default 7 days).
