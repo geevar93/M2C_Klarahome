@@ -88,7 +88,7 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
         var number = mobile ?? NewMobile();
 
         var start = await client.PostAsJsonAsync(
-            "/api/v1/store/auth/otp/start",
+            "/api/v1/store/auth/otp/request",
             new { mobile = number },
             Cancellation);
 
@@ -188,9 +188,12 @@ public abstract class CommerceTestBase(KlaraHomeSchemaFixture fixture) : IDispos
     /// <param name="prefix">A readable hint about which test made it.</param>
     protected static string NewEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@klarahome.test";
 
-    /// <summary>An Indian mobile number no other test is using.</summary>
+    /// <summary>
+    /// An Indian mobile number no other test is using, in the E.164 shape the identity module
+    /// normalises to and dispatches an OTP under.
+    /// </summary>
     protected static string NewMobile()
-        => $"9{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        => "+919" + Random.Shared.Next(100_000_000, 999_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Reads a successful response as JSON, failing with the body when it was not successful.</summary>
     /// <param name="response">The response.</param>
