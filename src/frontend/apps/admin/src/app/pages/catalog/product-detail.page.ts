@@ -11,11 +11,14 @@ import {
   ProductResponse,
   SpecificationPayload,
   VariantResponse,
+  VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
   AuditTrail,
   ConfirmDialog,
+  EntityOption,
+  EntityPicker,
   FormShell,
   HasUnsavedChanges,
   PageHeader,
@@ -25,7 +28,7 @@ import {
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { AuditLogService } from '@klarahome/data-access-admin';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
-import { forkJoin } from 'rxjs';
+import { Observable, forkJoin, map } from 'rxjs';
 
 import { toAuditEntry } from '../../core/audit.mapper';
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -73,6 +76,7 @@ interface CategoryOption {
     Checkbox,
     ConfirmDialog,
     Control,
+    EntityPicker,
     Field,
     FormShell,
     HasPermission,
@@ -588,11 +592,133 @@ interface CategoryOption {
         </section>
 
         <section class="panel">
-          <h2>Offers</h2>
+          <div class="panel-head">
+            <h2>Offers</h2>
+            <button
+              *khHasPermission="'catalog.listing.manage'"
+              khButton
+              type="button"
+              size="sm"
+              (click)="addingOffer.set(!addingOffer())"
+            >
+              <kh-icon name="plus" size="sm" />
+              Add an offer
+            </button>
+          </div>
           <p class="hint">
             What sellers are charging for this product. The buy box picks one of them; editing a price is the
             seller's own screen.
           </p>
+
+          @if (addingOffer()) {
+            <div class="offer-form">
+              <kh-field label="Variant" for="offer-variant">
+                <select
+                  khControl
+                  id="offer-variant"
+                  [value]="offerVariantId()"
+                  (change)="offerVariantId.set($any($event.target).value)"
+                >
+                  <option value="">Choose a variant</option>
+                  @for (variant of current.variants; track variant.id) {
+                    <option [value]="variant.id">
+                      {{ variant.sku }}{{ variant.nameSuffix ? ' — ' + variant.nameSuffix : '' }}
+                    </option>
+                  }
+                </select>
+              </kh-field>
+
+              <kh-entity-picker
+                label="Seller"
+                inputId="offer-vendor-picker"
+                hint="Who is making this offer."
+                [search]="vendorSearch"
+                [value]="offerVendor()"
+                (chose)="offerVendor.set($event)"
+              />
+
+              <div class="pair">
+                <kh-field label="Selling price" for="offer-price">
+                  <input
+                    khControl
+                    khNumeric
+                    id="offer-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    [value]="offerPrice()"
+                    (input)="offerPrice.set($any($event.target).value)"
+                  />
+                </kh-field>
+                <kh-field label="MRP" for="offer-mrp" [optional]="true" hint="Blank uses the variant's own MRP.">
+                  <input
+                    khControl
+                    khNumeric
+                    id="offer-mrp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    [value]="offerMrp()"
+                    (input)="offerMrp.set($any($event.target).value)"
+                  />
+                </kh-field>
+              </div>
+
+              <div class="pair">
+                <kh-field label="Handling time (hours)" for="offer-handling">
+                  <input
+                    khControl
+                    khNumeric
+                    id="offer-handling"
+                    type="number"
+                    min="1"
+                    [value]="offerHandlingHours()"
+                    (input)="offerHandlingHours.set($any($event.target).value)"
+                  />
+                </kh-field>
+                <kh-field label="Max order quantity" for="offer-max-qty" [optional]="true">
+                  <input
+                    khControl
+                    khNumeric
+                    id="offer-max-qty"
+                    type="number"
+                    min="1"
+                    [value]="offerMaxQuantity()"
+                    (input)="offerMaxQuantity.set($any($event.target).value)"
+                  />
+                </kh-field>
+              </div>
+
+              <kh-checkbox
+                label="Accepts cash on delivery"
+                inputId="offer-cod"
+                [checked]="offerCodAllowed()"
+                (checkedChange)="offerCodAllowed.set($event)"
+              />
+
+              @if (offerError(); as message) {
+                <kh-alert tone="danger" heading="That offer could not be opened" [dismissible]="true">{{
+                  message
+                }}</kh-alert>
+              }
+
+              <div class="panel-actions">
+                <button khButton type="button" size="sm" [disabled]="busy()" (click)="cancelOffer()">
+                  Cancel
+                </button>
+                <button
+                  khButton
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  [disabled]="busy()"
+                  (click)="submitOffer()"
+                >
+                  Open offer
+                </button>
+              </div>
+            </div>
+          }
 
           @if (listings.rows().length === 0) {
             <p class="hint">No seller has listed this product yet.</p>
@@ -620,7 +746,7 @@ interface CategoryOption {
                     <td>{{ listing.isCodAllowed ? 'Yes' : 'No' }}</td>
                     <td>
                       <button
-                        *khHasPermission="'catalog.listing.write'"
+                        *khHasPermission="'catalog.listing.manage'"
                         khButton
                         type="button"
                         size="sm"
@@ -745,6 +871,24 @@ interface CategoryOption {
       justify-content: space-between;
     }
 
+    .offer-form {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      margin-block-end: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
+    }
+
+    .panel-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      margin-block-start: var(--space-2);
+    }
+
     .panel h2 {
       margin: 0 0 var(--space-2);
       font-size: var(--text-lg);
@@ -781,6 +925,7 @@ interface CategoryOption {
 export class ProductDetailPage implements HasUnsavedChanges {
   protected readonly catalog = inject(CatalogAdminService);
   private readonly auditLog = inject(AuditLogService);
+  private readonly vendors = inject(VendorsAdminService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
@@ -802,6 +947,16 @@ export class ProductDetailPage implements HasUnsavedChanges {
   protected readonly brands = this.catalog.brands({ activeOnly: true }, 200);
   protected readonly listings = this.catalog.listings({ productId: this.id }, 50);
   protected readonly audit = this.auditLog.forEntity('Product', this.id);
+
+  protected readonly addingOffer = signal(false);
+  protected readonly offerVariantId = signal('');
+  protected readonly offerVendor = signal<EntityOption | null>(null);
+  protected readonly offerPrice = signal('');
+  protected readonly offerMrp = signal('');
+  protected readonly offerHandlingHours = signal('24');
+  protected readonly offerMaxQuantity = signal('');
+  protected readonly offerCodAllowed = signal(true);
+  protected readonly offerError = signal<string | null>(null);
 
   protected readonly media = signal<readonly MediaPayload[]>([]);
   protected readonly specifications = signal<readonly SpecificationPayload[]>([]);
@@ -1069,6 +1224,71 @@ export class ProductDetailPage implements HasUnsavedChanges {
   protected onVariantSaved(): void {
     this.variantOpen.set(false);
     this.load();
+  }
+
+  /** Finds sellers for the "Add an offer" picker. */
+  protected readonly vendorSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.vendors
+      .searchVendors(term)
+      .pipe(
+        map((sellers) =>
+          sellers.map((seller) => ({ id: seller.id, label: seller.displayName, hint: seller.code })),
+        ),
+      );
+
+  protected cancelOffer(): void {
+    this.addingOffer.set(false);
+    this.offerVariantId.set('');
+    this.offerVendor.set(null);
+    this.offerPrice.set('');
+    this.offerMrp.set('');
+    this.offerHandlingHours.set('24');
+    this.offerMaxQuantity.set('');
+    this.offerCodAllowed.set(true);
+    this.offerError.set(null);
+  }
+
+  /**
+   * Opens the offer as a Draft — `CreateListingCommandHandler` never activates one. Activating is
+   * the (now-fixed) button already in the offers table, which is also where the invariants that
+   * only matter for a live offer (seller active, variant sellable, product published) are checked.
+   */
+  protected submitOffer(): void {
+    const variantId = this.offerVariantId();
+    const vendorId = this.offerVendor()?.id;
+    const sellingPrice = Number(this.offerPrice());
+
+    if (!variantId || !vendorId || !sellingPrice) {
+      this.offerError.set('Pick a variant, a seller and a selling price.');
+      return;
+    }
+
+    this.busy.set(true);
+    this.offerError.set(null);
+
+    this.catalog
+      .createListing({
+        variantId,
+        vendorId,
+        mrp: this.offerMrp() ? Number(this.offerMrp()) : null,
+        sellingPrice,
+        vendorSku: null,
+        handlingTimeHours: Number(this.offerHandlingHours()) || 24,
+        isCodAllowed: this.offerCodAllowed(),
+        maxOrderQuantity: this.offerMaxQuantity() ? Number(this.offerMaxQuantity()) : null,
+      })
+      .subscribe({
+        next: () => {
+          this.busy.set(false);
+          this.toasts.success('Offer opened as a draft. Activate it below to put it on the storefront.');
+          this.cancelOffer();
+          this.listings.refresh();
+        },
+        error: (error: unknown) => {
+          this.busy.set(false);
+          this.offerError.set(describeError(error, 'That offer could not be opened.'));
+        },
+      });
   }
 
   protected toggleListing(listing: ListingResponse): void {
