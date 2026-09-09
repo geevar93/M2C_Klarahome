@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
   CommissionPlanResponse,
   IdentityAdminService,
+  ReferenceDataService,
+  VendorBusinessType,
   VendorReadiness,
   VendorResponse,
   VendorsAdminService,
@@ -135,24 +138,124 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
           <section class="panel">
             <h2>The legal record</h2>
             <dl>
-              <dt>Legal name</dt>
-              <dd>{{ current.legalName }}</dd>
-              <dt>Constitution</dt>
-              <dd>{{ current.businessType }}</dd>
-              <dt>PAN</dt>
-              <dd>{{ current.pan ?? '—' }}</dd>
-              <dt>GSTIN</dt>
-              <dd>{{ current.gstin ?? '—' }}</dd>
-              <dt>Registered address</dt>
-              <dd>
-                {{ current.registeredAddress.line1 }}, {{ current.registeredAddress.city }}
-                {{ current.registeredAddress.pincode }}
-              </dd>
               <dt>Code</dt>
               <dd>{{ current.code }}</dd>
               <dt>Storefront</dt>
               <dd>/{{ current.slug }}</dd>
             </dl>
+
+            <kh-field label="Legal name" for="vendor-legal-name">
+              <input
+                khControl
+                id="vendor-legal-name"
+                type="text"
+                [value]="legalName()"
+                (input)="legalName.set($any($event.target).value)"
+              />
+            </kh-field>
+
+            <kh-field label="Constitution" for="vendor-business-type">
+              <select
+                khControl
+                id="vendor-business-type"
+                [value]="businessType()"
+                (change)="businessType.set($any($event.target).value)"
+              >
+                @for (type of businessTypes; track type) {
+                  <option [value]="type">{{ type }}</option>
+                }
+              </select>
+            </kh-field>
+
+            <div class="pair">
+              <kh-field label="PAN" for="vendor-pan" [optional]="true">
+                <input
+                  khControl
+                  id="vendor-pan"
+                  type="text"
+                  maxlength="10"
+                  [value]="pan()"
+                  (input)="pan.set($any($event.target).value)"
+                />
+              </kh-field>
+              <kh-field label="GSTIN" for="vendor-gstin" [optional]="true">
+                <input
+                  khControl
+                  id="vendor-gstin"
+                  type="text"
+                  maxlength="15"
+                  [value]="gstin()"
+                  (input)="gstin.set($any($event.target).value)"
+                />
+              </kh-field>
+            </div>
+
+            <kh-field label="Address line 1" for="vendor-address-line1">
+              <input
+                khControl
+                id="vendor-address-line1"
+                type="text"
+                [value]="addressLine1()"
+                (input)="addressLine1.set($any($event.target).value)"
+              />
+            </kh-field>
+
+            <kh-field label="Address line 2" for="vendor-address-line2" [optional]="true">
+              <input
+                khControl
+                id="vendor-address-line2"
+                type="text"
+                [value]="addressLine2()"
+                (input)="addressLine2.set($any($event.target).value)"
+              />
+            </kh-field>
+
+            <div class="pair">
+              <kh-field label="City" for="vendor-address-city">
+                <input
+                  khControl
+                  id="vendor-address-city"
+                  type="text"
+                  [value]="addressCity()"
+                  (input)="addressCity.set($any($event.target).value)"
+                />
+              </kh-field>
+              <kh-field label="Pincode" for="vendor-address-pincode">
+                <input
+                  khControl
+                  id="vendor-address-pincode"
+                  type="text"
+                  maxlength="6"
+                  [value]="addressPincode()"
+                  (input)="addressPincode.set($any($event.target).value)"
+                />
+              </kh-field>
+            </div>
+
+            <kh-field label="State" for="vendor-address-state">
+              <select
+                khControl
+                id="vendor-address-state"
+                [value]="addressStateId()"
+                (change)="addressStateId.set($any($event.target).value)"
+              >
+                <option value="">Choose a state</option>
+                @for (state of states(); track state.id) {
+                  <option [value]="state.id">{{ state.name }}</option>
+                }
+              </select>
+            </kh-field>
+
+            <button
+              khButton
+              type="button"
+              *khHasPermission="'vendors.vendor.manage'"
+              [disabled]="busy()"
+              (click)="saveLegal()"
+            >
+              Save the legal record
+            </button>
+
             @if (current.statusReason) {
               <p class="note">Last status change: {{ current.statusReason }}</p>
             }
@@ -345,7 +448,19 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
       display: grid;
       grid-template-columns: auto 1fr;
       gap: var(--space-2) var(--space-4);
-      margin: 0;
+      margin: 0 0 var(--space-4);
+    }
+
+    .pair {
+      display: grid;
+      gap: var(--space-3);
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 32rem) {
+      .pair {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     dt {
@@ -431,6 +546,20 @@ export class VendorDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);
 
+  /** The platform's states, so nobody types an identifier (Step 28B, deliverable 3). */
+  protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
+
+  protected readonly businessTypes: readonly VendorBusinessType[] = [
+    'Individual',
+    'SoleProprietorship',
+    'Partnership',
+    'LimitedLiabilityPartnership',
+    'PrivateLimited',
+    'PublicLimited',
+    'HinduUndividedFamily',
+    'Trust',
+  ];
+
   protected readonly dateTime = tableDateTime;
   protected readonly id = this.route.snapshot.paramMap.get('id') ?? '';
 
@@ -447,6 +576,16 @@ export class VendorDetailPage {
   protected readonly commissionPlanId = signal('');
   protected readonly staffUserId = signal('');
   protected readonly staffJobTitle = signal('');
+
+  protected readonly legalName = signal('');
+  protected readonly businessType = signal<VendorBusinessType>('Individual');
+  protected readonly pan = signal('');
+  protected readonly gstin = signal('');
+  protected readonly addressLine1 = signal('');
+  protected readonly addressLine2 = signal('');
+  protected readonly addressCity = signal('');
+  protected readonly addressStateId = signal('');
+  protected readonly addressPincode = signal('');
 
   protected readonly pending = signal<VendorTransition | null>(null);
   protected readonly removingStaff = signal<VendorStaffResponse | null>(null);
@@ -531,6 +670,43 @@ export class VendorDetailPage {
     });
   }
 
+  // ---- The legal record --------------------------------------------------------------------------
+
+  /**
+   * `PUT /vendors/{id}` (`UpdateVendorBusinessCommand`) has always accepted this from platform
+   * staff, at any status — the page simply never had a form for it, only the read-out below.
+   */
+  protected saveLegal(): void {
+    this.busy.set(true);
+    this.actionError.set(null);
+
+    this.vendors
+      .updateVendor(this.id, {
+        legalName: this.legalName(),
+        businessType: this.businessType(),
+        pan: this.pan() || null,
+        gstin: this.gstin() || null,
+        registeredAddress: {
+          line1: this.addressLine1(),
+          line2: this.addressLine2() || null,
+          city: this.addressCity(),
+          stateId: this.addressStateId(),
+          pincode: this.addressPincode(),
+        },
+      })
+      .subscribe({
+        next: (saved) => {
+          this.busy.set(false);
+          this.vendor.set(saved);
+          this.toasts.success('Legal record saved.');
+        },
+        error: (error: unknown) => {
+          this.busy.set(false);
+          this.actionError.set(describeError(error, 'That could not be saved.'));
+        },
+      });
+  }
+
   // ---- Commission -------------------------------------------------------------------------------
 
   protected assignPlan(): void {
@@ -603,6 +779,15 @@ export class VendorDetailPage {
         this.loading.set(false);
         this.vendor.set(vendor);
         this.commissionPlanId.set(vendor.commissionPlanId ?? '');
+        this.legalName.set(vendor.legalName);
+        this.businessType.set(vendor.businessType);
+        this.pan.set(vendor.pan ?? '');
+        this.gstin.set(vendor.gstin ?? '');
+        this.addressLine1.set(vendor.registeredAddress.line1);
+        this.addressLine2.set(vendor.registeredAddress.line2 ?? '');
+        this.addressCity.set(vendor.registeredAddress.city);
+        this.addressStateId.set(vendor.registeredAddress.stateId);
+        this.addressPincode.set(vendor.registeredAddress.pincode);
       },
       error: (error: unknown) => {
         this.loading.set(false);
