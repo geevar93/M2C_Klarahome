@@ -302,7 +302,11 @@ internal sealed class PaymentsScenario(HttpClient admin, CancellationToken cance
                             maxWeightGrams = 100_000,
                             minOrderValue = 0m,
                             maxOrderValue = (decimal?)null,
-                            baseRate = 0m,
+                            // Nonzero on purpose: this all-India, platform-wide rate is the cheapest
+                            // option most checkouts in the collection resolve to, so a free (0m)
+                            // base rate made every other test's basket look free too. A Payments test
+                            // only needs shipping to be cheap and predictable, not literally zero.
+                            baseRate = 39m,
                             perKgRate = 0m,
                             freeAbove = (decimal?)null,
                             codFee = 0m,
