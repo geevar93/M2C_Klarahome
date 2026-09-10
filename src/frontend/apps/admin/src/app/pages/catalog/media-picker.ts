@@ -1,5 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import { MediaFileResponse, MediaLibraryService } from '@klarahome/data-access-admin';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import { CursorList, MediaFileResponse, MediaFilters, MediaLibraryService } from '@klarahome/data-access-admin';
 import { Modal } from '@klarahome/ui-admin';
 import { Alert, Button, EmptyState, Icon, ProductImage, Skeleton } from '@klarahome/ui-primitives';
 import { ImageUrls } from '@klarahome/util';
@@ -225,7 +234,7 @@ import { describeError } from '../../core/describe-error';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MediaPicker {
+export class MediaPicker implements OnInit {
   private readonly media = inject(MediaLibraryService);
   private readonly images = inject(ImageUrls);
 
@@ -245,7 +254,11 @@ export class MediaPicker {
   readonly picked = output<readonly MediaFileResponse[]>();
   readonly closed = output<void>();
 
-  protected readonly list = this.media.files({ visibility: this.visibility() });
+  // Built in `ngOnInit`, not here: a signal input bound from a plain (unbracketed) template
+  // attribute — `visibility="Private"` on this element in the KYC panel — is not yet set when a
+  // field initializer runs, so reading `this.visibility()` at this point always sees its default.
+  // `ngOnInit` is the first lifecycle point Angular guarantees every input has been applied.
+  protected list!: CursorList<MediaFileResponse, MediaFilters>;
   protected readonly uploading = signal(false);
   protected readonly failure = signal<string | null>(null);
   protected readonly skeletons = Array.from({ length: 8 }, (_, index) => index);
@@ -253,7 +266,8 @@ export class MediaPicker {
   private readonly selection = signal<readonly MediaFileResponse[]>([]);
   protected readonly chosen = computed(() => this.selection());
 
-  constructor() {
+  ngOnInit(): void {
+    this.list = this.media.files({ visibility: this.visibility() });
     this.list.load();
   }
 
