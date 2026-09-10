@@ -883,6 +883,11 @@ internal static class SystemRoles
                 PermissionCatalog.CatalogListingManage,
                 PermissionCatalog.CatalogImportRun,
 
+                // A product photo, a KYC document and a profile logo are all the same upload
+                // underneath (`POST /admin/media`) — without this a seller can manage every field
+                // of their own record and catalogue except the one that is a file.
+                PermissionCatalog.MediaFileManage,
+
                 // Step 11. Their own stock, on their own locations, confined by the vendor scope.
                 // The owner holds everything their staff hold and the two decisions that are not
                 // staff's to take: opening a warehouse, and committing the seller's money to a
@@ -940,6 +945,9 @@ internal static class SystemRoles
                 PermissionCatalog.CatalogProductManage,
                 PermissionCatalog.CatalogListingRead,
                 PermissionCatalog.CatalogListingManage,
+
+                // Same catalogue, same need for a product photo (`POST /admin/media`).
+                PermissionCatalog.MediaFileManage,
 
                 // Staff pick, pack and count. Notably absent are the location list and the
                 // purchasing surface: opening a warehouse and committing the seller's money to a

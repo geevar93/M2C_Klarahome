@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentValidation;
 using KlaraHome.Contracts.Media;
 using KlaraHome.Contracts.Platform;
+using KlaraHome.Infrastructure.Authorization;
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Modules.Media.Domain;
@@ -169,7 +170,8 @@ internal sealed class UploadMediaCommandHandler(
 
 /// <param name="context">The Media data context.</param>
 /// <param name="library">Builds URLs and renditions.</param>
-internal sealed class ListMediaQueryHandler(MediaDbContext context, MediaLibrary library)
+/// <param name="caller">Confines a vendor caller to their own files.</param>
+internal sealed class ListMediaQueryHandler(MediaDbContext context, MediaLibrary library, ICallerContext caller)
     : IQueryHandler<ListMediaQuery, PagedResult<MediaFileResponse>>
 {
     public async Task<Result<PagedResult<MediaFileResponse>>> HandleAsync(
@@ -180,6 +182,16 @@ internal sealed class ListMediaQueryHandler(MediaDbContext context, MediaLibrary
 
         var size = Cursor.NormalizeSize(query.Size);
         var files = context.Files.AsNoTracking().Where(file => file.Status != StoredFileStatus.Deleted);
+
+        // The library has no owner column a vendor's own row joins to — a product photo is owned
+        // by the product, a KYC document by the seller itself — so a vendor caller sees only what
+        // was filed directly against their own seller id. Nothing here stops them uploading a fresh
+        // file for a product; it stops them browsing everybody else's library, which is the whole
+        // reason this permission was never granted to a seller before now.
+        if (caller.VendorId is { } vendorId)
+        {
+            files = files.Where(file => file.OwnerId == vendorId);
+        }
 
         if (Enum.TryParse<MediaVisibility>(query.Visibility, ignoreCase: true, out var visibility))
         {
@@ -227,7 +239,8 @@ internal sealed class ListMediaQueryHandler(MediaDbContext context, MediaLibrary
 
 /// <param name="context">The Media data context.</param>
 /// <param name="library">Builds URLs and renditions.</param>
-internal sealed class GetMediaQueryHandler(MediaDbContext context, MediaLibrary library)
+/// <param name="caller">Confines a vendor caller to their own files.</param>
+internal sealed class GetMediaQueryHandler(MediaDbContext context, MediaLibrary library, ICallerContext caller)
     : IQueryHandler<GetMediaQuery, MediaFileResponse>
 {
     public async Task<Result<MediaFileResponse>> HandleAsync(GetMediaQuery query, CancellationToken cancellationToken)
@@ -239,25 +252,49 @@ internal sealed class GetMediaQueryHandler(MediaDbContext context, MediaLibrary 
             .FirstOrDefaultAsync(candidate => candidate.Id == query.FileId, cancellationToken)
             .ConfigureAwait(false);
 
-        return file is null || file.Status == StoredFileStatus.Deleted
+        // Answered as "no such file" rather than "not yours" — the same choice the vendor query
+        // filter makes everywhere else in this codebase, so a seller cannot even confirm another
+        // seller's file id exists.
+        return file is null
+            || file.Status == StoredFileStatus.Deleted
+            || (caller.VendorId is { } vendorId && file.OwnerId != vendorId)
             ? Result.Failure<MediaFileResponse>(MediaErrors.NotFound)
             : Result.Success(MediaProjection.ToResponse(file, library.Project(file)));
     }
 }
 
+/// <param name="context">The Media data context, to check ownership before minting anything.</param>
 /// <param name="library">Mints the signed URL.</param>
 /// <param name="options">Supplies the lifetime, so the response can state when it expires.</param>
 /// <param name="clock">The sanctioned clock.</param>
+/// <param name="caller">Confines a vendor caller to their own files.</param>
 internal sealed class GetMediaLinkQueryHandler(
+    MediaDbContext context,
     IMediaLibrary library,
     Microsoft.Extensions.Options.IOptions<KlaraHome.Infrastructure.Storage.StorageOptions> options,
-    KlaraHome.SharedKernel.Time.IClock clock) : IQueryHandler<GetMediaLinkQuery, MediaLinkResponse>
+    KlaraHome.SharedKernel.Time.IClock clock,
+    ICallerContext caller) : IQueryHandler<GetMediaLinkQuery, MediaLinkResponse>
 {
     public async Task<Result<MediaLinkResponse>> HandleAsync(
         GetMediaLinkQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (caller.VendorId is { } vendorId)
+        {
+            // A signed link is a bearer credential to a private file — minting one for a document a
+            // seller does not own would be a keeper of other people's KYC papers handing out a copy.
+            var owned = await context.Files
+                .AsNoTracking()
+                .AnyAsync(file => file.Id == query.FileId && file.OwnerId == vendorId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!owned)
+            {
+                return Result.Failure<MediaLinkResponse>(MediaErrors.NotFound);
+            }
+        }
 
         var url = await library.GetSignedUrlAsync(query.FileId, cancellationToken).ConfigureAwait(false);
 
@@ -269,10 +306,15 @@ internal sealed class GetMediaLinkQueryHandler(
     }
 }
 
+/// <param name="context">Checked for ownership before a vendor caller may delete anything.</param>
 /// <param name="media">Performs the retirement and the object delete.</param>
 /// <param name="audit">Records it.</param>
-internal sealed class DeleteMediaCommandHandler(MediaStorageService media, IAuditLogger audit)
-    : ICommandHandler<DeleteMediaCommand>
+/// <param name="caller">Confines a vendor caller to their own files.</param>
+internal sealed class DeleteMediaCommandHandler(
+    MediaDbContext context,
+    MediaStorageService media,
+    IAuditLogger audit,
+    ICallerContext caller) : ICommandHandler<DeleteMediaCommand>
 {
     /// <summary>The action recorded in the audit trail for a deletion.</summary>
     public const string AuditAction = "media.file.deleted";
@@ -280,6 +322,19 @@ internal sealed class DeleteMediaCommandHandler(MediaStorageService media, IAudi
     public async Task<Result> HandleAsync(DeleteMediaCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        if (caller.VendorId is { } vendorId)
+        {
+            var owned = await context.Files
+                .AsNoTracking()
+                .AnyAsync(file => file.Id == command.FileId && file.OwnerId == vendorId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!owned)
+            {
+                return Result.Failure(MediaErrors.NotFound);
+            }
+        }
 
         var result = await media.DeleteAsync(command.FileId, cancellationToken).ConfigureAwait(false);
 
