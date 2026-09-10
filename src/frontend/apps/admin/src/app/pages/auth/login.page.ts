@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RouterLink } from '@angular/router';
 import { AuthService, TwoFactorSetupResponse } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
-import { email, formField, formGroup, minLength, numeric, required } from '@klarahome/util';
+import { email, formField, formGroup, matches, minLength, numeric, required } from '@klarahome/util';
 import { firstValueFrom } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -52,7 +52,72 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
     <main class="pane">
       <h1>Klara Home back office</h1>
 
-      @if (step() === 'password') {
+      @if (step() === 'set-password') {
+        <p class="lead">
+          This password was issued by an administrator. Set your own before signing in.
+        </p>
+
+        <form (submit)="submitNewPassword($event)" novalidate>
+          @if (failure(); as message) {
+            <kh-alert tone="danger">{{ message }}</kh-alert>
+          }
+
+          <kh-field
+            label="Temporary password"
+            for="login-current-password"
+            [error]="passwordChangeForm.fields.currentPassword.error()"
+          >
+            <input
+              khControl
+              id="login-current-password"
+              type="password"
+              autocomplete="current-password"
+              [khInvalid]="!!passwordChangeForm.fields.currentPassword.error()"
+              [value]="passwordChangeForm.fields.currentPassword.value()"
+              (input)="passwordChangeForm.fields.currentPassword.set($any($event.target).value)"
+              (touched)="passwordChangeForm.fields.currentPassword.markTouched()"
+            />
+          </kh-field>
+
+          <kh-field
+            label="New password"
+            for="login-new-password"
+            [error]="passwordChangeForm.fields.newPassword.error()"
+          >
+            <input
+              khControl
+              id="login-new-password"
+              type="password"
+              autocomplete="new-password"
+              [khInvalid]="!!passwordChangeForm.fields.newPassword.error()"
+              [value]="passwordChangeForm.fields.newPassword.value()"
+              (input)="passwordChangeForm.fields.newPassword.set($any($event.target).value)"
+              (touched)="passwordChangeForm.fields.newPassword.markTouched()"
+            />
+          </kh-field>
+
+          <kh-field label="Confirm new password" for="login-confirm-password" [error]="confirmField.error()">
+            <input
+              khControl
+              id="login-confirm-password"
+              type="password"
+              autocomplete="new-password"
+              [khInvalid]="!!confirmField.error()"
+              [value]="confirmField.value()"
+              (input)="confirmField.set($any($event.target).value)"
+              (touched)="confirmField.markTouched()"
+            />
+          </kh-field>
+
+          <button khButton type="submit" variant="primary" [block]="true" [disabled]="busy()">
+            {{ busy() ? 'Setting password…' : 'Set password and sign in' }}
+          </button>
+        </form>
+
+        <p class="foot">
+          <button type="button" class="linkish" (click)="backToPassword()">Start again</button>
+        </p>
+      } @else if (step() === 'password') {
         <p class="lead">Sign in with the account your administrator created for you.</p>
 
         <form (submit)="submitPassword($event)" novalidate>
@@ -96,7 +161,7 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
         <p class="foot">
           <a routerLink="/forgot-password">Forgotten your password?</a>
         </p>
-      } @else {
+      } @else if (step() === 'code') {
         @if (setup(); as details) {
           <p class="lead">
             This account needs an authenticator app before it can sign in. Add it below, then enter the code
@@ -247,7 +312,22 @@ export class LoginPage {
   private readonly codeSubmitted = signal(false);
   protected readonly codeField = formField('', [required('Code'), numeric(6)], this.codeSubmitted);
 
-  protected readonly step = signal<'password' | 'code'>('password');
+  private readonly passwordChangeSubmitted = signal(false);
+  protected readonly passwordChangeForm = formGroup(this.passwordChangeSubmitted, {
+    currentPassword: formField('', [required('Your temporary password')], this.passwordChangeSubmitted),
+    newPassword: formField(
+      '',
+      [required('A new password'), minLength(8, 'The new password')],
+      this.passwordChangeSubmitted,
+    ),
+  });
+  protected readonly confirmField = formField(
+    '',
+    [required('A confirmation'), matches(this.passwordChangeForm.fields.newPassword.value, 'The passwords')],
+    this.passwordChangeSubmitted,
+  );
+
+  protected readonly step = signal<'password' | 'code' | 'set-password'>('password');
 
   /**
    * The staged authenticator secret, set only when the second step is an enrolment rather than a
@@ -295,14 +375,15 @@ export class LoginPage {
           return;
         }
 
+        if (challenge.type === CHALLENGE_PASSWORD_CHANGE) {
+          this.beginPasswordChange(password);
+          return;
+        }
+
         // A challenge this screen cannot answer. Saying so is the whole point: falling through to
         // the code box would ask for six digits that cannot satisfy it, and read as a broken login.
         this.challengeToken = null;
-        this.failure.set(
-          challenge.type === CHALLENGE_PASSWORD_CHANGE
-            ? 'This password was issued by an administrator and has to be replaced before you can sign in. Use "Forgotten your password?" below to set your own.'
-            : 'This account needs a step this screen does not support yet. Ask an administrator for help.',
-        );
+        this.failure.set('This account needs a step this screen does not support yet. Ask an administrator for help.');
         return;
       }
 
@@ -342,17 +423,20 @@ export class LoginPage {
         // A correct code can still be answered with a further challenge: enrolling satisfies the
         // second factor without satisfying a first-sign-in obligation the account still carries
         // (`MustChangePassword`, checked after 2FA in `SignInCoordinator.CompleteAsync` precisely
-        // so a leaked temporary password cannot itself unlock a password change). Nothing on this
-        // screen answers that — only the password step's "Forgotten your password?" can — so land
-        // back there rather than calling `completeSignIn` on a sign-in that never finished.
+        // so a leaked temporary password cannot itself unlock a password change). The temporary
+        // password is still sitting in the password step's field — `backToPassword` is the only
+        // thing that clears it — so carry it forward instead of asking for it a second time.
+        if (challenge.type === CHALLENGE_PASSWORD_CHANGE) {
+          // A fresh token: the one that answered the code is spent the moment it is read.
+          this.challengeToken = challenge.challengeToken;
+          this.beginPasswordChange(this.form.fields.password.value());
+          return;
+        }
+
         this.challengeToken = null;
         this.setup.set(null);
         this.step.set('password');
-        this.failure.set(
-          challenge.type === CHALLENGE_PASSWORD_CHANGE
-            ? 'This password was issued by an administrator and has to be replaced before you can sign in. Use "Forgotten your password?" below to set your own.'
-            : 'This account needs a step this screen does not support yet. Ask an administrator for help.',
-        );
+        this.failure.set('This account needs a step this screen does not support yet. Ask an administrator for help.');
         return;
       }
 
@@ -386,6 +470,48 @@ export class LoginPage {
     }
   }
 
+  /**
+   * Moves to the "set a new password" step, with the temporary one already carried over — the
+   * caller has typed it at least once already, on the password step, to get this far.
+   */
+  private beginPasswordChange(temporaryPassword: string): void {
+    this.setup.set(null);
+    this.failure.set(null);
+    this.passwordChangeSubmitted.set(false);
+    this.passwordChangeForm.fields.currentPassword.set(temporaryPassword);
+    this.passwordChangeForm.fields.newPassword.reset();
+    this.confirmField.reset();
+    this.step.set('set-password');
+  }
+
+  protected async submitNewPassword(event: Event): Promise<void> {
+    event.preventDefault();
+    this.confirmField.markTouched();
+    if (!this.passwordChangeForm.submit() || this.confirmField.problem() !== null || this.busy()) return;
+
+    const token = this.challengeToken;
+    if (!token) {
+      // The challenge is gone — a reload, or the component was re-created. Back to the password,
+      // which is the only way to earn another one.
+      this.backToPassword();
+      return;
+    }
+
+    this.busy.set(true);
+    this.failure.set(null);
+    const { currentPassword, newPassword } = this.passwordChangeForm.values();
+
+    try {
+      await firstValueFrom(this.auth.changePassword(token, currentPassword, newPassword));
+      await this.flow.completeSignIn(this.returnUrl());
+    } catch (error) {
+      const unmatched = this.passwordChangeForm.applyServerErrors(fieldErrors(error));
+      this.failure.set(unmatched[0] ?? describeError(error, 'That password could not be set.'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   protected backToPassword(): void {
     this.challengeToken = null;
     // The staged secret is dropped rather than kept for a second attempt: an abandoned enrolment
@@ -394,6 +520,10 @@ export class LoginPage {
     this.failure.set(null);
     this.form.fields.password.reset();
     this.submitted.set(false);
+    this.passwordChangeForm.fields.currentPassword.reset();
+    this.passwordChangeForm.fields.newPassword.reset();
+    this.confirmField.reset();
+    this.passwordChangeSubmitted.set(false);
     this.step.set('password');
   }
 }

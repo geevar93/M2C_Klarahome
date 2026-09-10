@@ -202,6 +202,27 @@ export class AuthService {
   }
 
   /**
+   * Replaces a password and, on success, signs in with it — the route out of an
+   * administrator-issued temporary password that exists precisely because email delivery may be
+   * off (`PasswordChangeFeature.cs`). `challengeToken` is the pending-sign-in token from a
+   * `password-change-required` challenge; pass null for a voluntary change by an already-signed-in
+   * caller.
+   */
+  changePassword(
+    challengeToken: string | null,
+    currentPassword: string,
+    newPassword: string,
+  ): Observable<SignInResponse> {
+    const body = { challengeToken, currentPassword, newPassword };
+    const request =
+      this.surface === 'admin'
+        ? this.identity.adminAuthPasswordChange(body, { skipAuth: true, silentErrors: true })
+        : this.identity.storeAuthPasswordChange(body, { skipAuth: true, silentErrors: true });
+
+    return request.pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
    * The second factor, when a sign-in came back with a challenge instead of a token.
    *
    * Rare on the storefront — a customer with TOTP enrolled — but the response shape allows it on
