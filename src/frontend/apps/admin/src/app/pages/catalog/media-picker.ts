@@ -277,9 +277,17 @@ export class MediaPicker {
     return 'Not available';
   }
 
+  /**
+   * A thumbnail only for a file that can actually render as one: a raster image with a resolved
+   * URL. A KYC document is a PDF and, being private, has no `url` at all (`MediaLibrary.Project`
+   * — a private file's URL is deliberately null); falling back to the file id here would build an
+   * imgproxy URL for a bucket imgproxy is not allowed to read, or ask it to rasterise a PDF, and
+   * either way the tile would show a broken image instead of the extension placeholder below.
+   */
   protected thumb(file: MediaFileResponse) {
+    if (!file.url || !file.contentType.startsWith('image/')) return null;
     return this.images.sourceForImage(
-      { url: file.url, fileId: file.id, width: file.width, height: file.height },
+      { url: file.url, width: file.width, height: file.height },
       file.fileName,
     );
   }
