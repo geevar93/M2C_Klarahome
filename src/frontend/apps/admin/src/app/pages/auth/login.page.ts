@@ -335,7 +335,27 @@ export class LoginPage {
     this.failure.set(null);
 
     try {
-      await firstValueFrom(this.auth.verifyTwoFactor(token, this.codeField.value().trim()));
+      const response = await firstValueFrom(this.auth.verifyTwoFactor(token, this.codeField.value().trim()));
+      const challenge = response.challenge;
+
+      if (challenge) {
+        // A correct code can still be answered with a further challenge: enrolling satisfies the
+        // second factor without satisfying a first-sign-in obligation the account still carries
+        // (`MustChangePassword`, checked after 2FA in `SignInCoordinator.CompleteAsync` precisely
+        // so a leaked temporary password cannot itself unlock a password change). Nothing on this
+        // screen answers that — only the password step's "Forgotten your password?" can — so land
+        // back there rather than calling `completeSignIn` on a sign-in that never finished.
+        this.challengeToken = null;
+        this.setup.set(null);
+        this.step.set('password');
+        this.failure.set(
+          challenge.type === CHALLENGE_PASSWORD_CHANGE
+            ? 'This password was issued by an administrator and has to be replaced before you can sign in. Use "Forgotten your password?" below to set your own.'
+            : 'This account needs a step this screen does not support yet. Ask an administrator for help.',
+        );
+        return;
+      }
+
       this.setup.set(null);
       await this.flow.completeSignIn(this.returnUrl());
     } catch (error) {
