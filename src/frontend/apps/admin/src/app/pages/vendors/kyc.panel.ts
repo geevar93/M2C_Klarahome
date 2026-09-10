@@ -178,6 +178,7 @@ import { KYC_DOCUMENT_TYPES } from './vendor-vocabulary';
       accept="image/*,application/pdf"
       ownerType="VendorKyc"
       [ownerId]="vendorId()"
+      visibility="Private"
       (picked)="chooseFile($event)"
       (closed)="pickerOpen.set(false)"
     />

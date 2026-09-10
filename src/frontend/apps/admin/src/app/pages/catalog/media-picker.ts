@@ -235,11 +235,17 @@ export class MediaPicker {
   /** Attributed on upload, so the library can say what a file belongs to. */
   readonly ownerType = input<string | null>(null);
   readonly ownerId = input<string | null>(null);
+  /**
+   * Which bucket this picker deals in. A KYC document is a government identifier and must never
+   * land in the public bucket, so its caller passes `Private` here — the browse list is filtered
+   * to the same bucket an upload goes into, or a file just uploaded would not even appear.
+   */
+  readonly visibility = input<'Public' | 'Private'>('Public');
 
   readonly picked = output<readonly MediaFileResponse[]>();
   readonly closed = output<void>();
 
-  protected readonly list = this.media.files({ visibility: 'Public' });
+  protected readonly list = this.media.files({ visibility: this.visibility() });
   protected readonly uploading = signal(false);
   protected readonly failure = signal<string | null>(null);
   protected readonly skeletons = Array.from({ length: 8 }, (_, index) => index);
@@ -312,7 +318,11 @@ export class MediaPicker {
     let remaining = files.length;
     for (const file of files) {
       this.media
-        .upload(file, { ownerType: this.ownerType() ?? undefined, ownerId: this.ownerId() ?? undefined })
+        .upload(file, {
+          ownerType: this.ownerType() ?? undefined,
+          ownerId: this.ownerId() ?? undefined,
+          visibility: this.visibility(),
+        })
         .subscribe({
           next: () => {
             remaining -= 1;
