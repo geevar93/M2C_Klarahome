@@ -885,7 +885,12 @@ internal static class SystemRoles
 
                 // A product photo, a KYC document and a profile logo are all the same upload
                 // underneath (`POST /admin/media`) — without this a seller can manage every field
-                // of their own record and catalogue except the one that is a file.
+                // of their own record and catalogue except the one that is a file. Read comes with
+                // it: the media picker's "choose an existing file" list is the same `GET /admin/media`
+                // every other caller browses, and it is safe to grant here because the vendor query
+                // filter in `ListMediaQueryHandler` (and Get/GetLink/Delete alongside it) confines a
+                // vendor caller to files their own seller id owns — never anyone else's library.
+                PermissionCatalog.MediaFileRead,
                 PermissionCatalog.MediaFileManage,
 
                 // Step 11. Their own stock, on their own locations, confined by the vendor scope.
@@ -946,7 +951,10 @@ internal static class SystemRoles
                 PermissionCatalog.CatalogListingRead,
                 PermissionCatalog.CatalogListingManage,
 
-                // Same catalogue, same need for a product photo (`POST /admin/media`).
+                // Same catalogue, same need for a product photo (`POST /admin/media`), and the
+                // matching read is safe for the same reason it is on the owner: the vendor query
+                // filter confines the list/get to their own seller's files.
+                PermissionCatalog.MediaFileRead,
                 PermissionCatalog.MediaFileManage,
 
                 // Staff pick, pack and count. Notably absent are the location list and the
