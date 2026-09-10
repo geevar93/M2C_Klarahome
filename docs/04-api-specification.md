@@ -791,7 +791,7 @@ MIME allow-list and dimension checks enforced server-side.
 | Bucket | Limit |
 |---|---|
 | OTP request | 3 / 10 min per mobile, 20 / hour per IP |
-| Auth (login/refresh) | 10 / min per IP |
+| Auth (login/refresh) | 30 / min per IP |
 | Storefront reads | 300 / min per IP |
 | Cart mutations | 60 / min per session |
 | Place order | 5 / min per customer |
