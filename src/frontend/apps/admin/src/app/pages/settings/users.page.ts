@@ -6,12 +6,15 @@ import {
   RoleResponse,
   UserFilters,
   UserType,
+  VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   DataTable,
   DataTableColumn,
+  EntityOption,
+  EntityPicker,
   FilterBar,
   FilterDefinition,
   FilterValues,
@@ -21,6 +24,7 @@ import {
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService, email as emailRule, formField, formGroup, required } from '@klarahome/util';
+import { Observable, map } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
@@ -57,6 +61,7 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
     Checkbox,
     Control,
     DataTable,
+    EntityPicker,
     Field,
     FilterBar,
     HasPermission,
@@ -177,19 +182,14 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
       </kh-field>
 
       @if (userType() === 'Vendor') {
-        <kh-field
-          label="Seller id"
-          for="user-vendor"
+        <kh-entity-picker
+          label="Seller"
+          inputId="user-vendor"
           hint="Without this the account holds a seller's permissions and has no seller to use them on."
-        >
-          <input
-            khControl
-            id="user-vendor"
-            type="text"
-            [value]="form.fields.vendorId.value()"
-            (input)="form.fields.vendorId.set($any($event.target).value)"
-          />
-        </kh-field>
+          [search]="vendorSearch"
+          [value]="vendorOption()"
+          (chose)="form.fields.vendorId.set($event?.id ?? '')"
+        />
       }
 
       <fieldset>
@@ -256,6 +256,7 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
 })
 export class UsersPage {
   private readonly identity = inject(IdentityAdminService);
+  private readonly vendors = inject(VendorsAdminService);
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
 
@@ -278,6 +279,26 @@ export class UsersPage {
     mobile: formField('', [], this.submitted),
     vendorId: formField('', [], this.submitted),
   });
+
+  /**
+   * A raw-id text box asked for the one thing nobody has memorised. Every other "pick an existing
+   * seller" screen in this app is a search (`vendor-detail.page.ts`, `promotion-detail.page.ts`);
+   * this was the one place left typing a UUID by hand, which reads exactly like a blank field until
+   * the server refuses it.
+   */
+  protected readonly vendorOption = computed<EntityOption | null>(() => {
+    const id = this.form.fields.vendorId.value();
+    return id ? { id, label: id } : null;
+  });
+
+  protected readonly vendorSearch = (term: string): Observable<readonly EntityOption[]> =>
+    this.vendors
+      .searchVendors(term)
+      .pipe(
+        map((sellers) =>
+          sellers.map((seller) => ({ id: seller.id, label: seller.displayName, hint: seller.code })),
+        ),
+      );
 
   protected readonly page = computed(() => ({
     nextCursor: this.list.nextCursor(),
