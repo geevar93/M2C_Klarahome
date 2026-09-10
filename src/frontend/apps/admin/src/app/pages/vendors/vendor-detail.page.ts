@@ -709,11 +709,21 @@ export class VendorDetailPage {
 
   // ---- Commission -------------------------------------------------------------------------------
 
+  /**
+   * "Left on the default" is a promise that the store's default plan applies — it is not supposed
+   * to mean "unassigned". But `AssignCommissionPlanCommandHandler` treats a null id as exactly
+   * that: it clears `CommissionPlanId`, and `VendorReadinessService` requires it non-null. A
+   * vendor whose plan was auto-assigned at creation would fail readiness the moment somebody opened
+   * this panel and clicked Save without changing anything. Resolve the blank option to the
+   * platform's actual default plan id here, so the promise in the hint text is true.
+   */
   protected assignPlan(): void {
     this.busy.set(true);
     this.actionError.set(null);
 
-    this.vendors.assignCommissionPlan(this.id, this.commissionPlanId() || null).subscribe({
+    const planId = this.commissionPlanId() || this.plans().find((plan) => plan.isDefault)?.id || null;
+
+    this.vendors.assignCommissionPlan(this.id, planId).subscribe({
       next: (saved) => {
         this.busy.set(false);
         this.vendor.set(saved);
