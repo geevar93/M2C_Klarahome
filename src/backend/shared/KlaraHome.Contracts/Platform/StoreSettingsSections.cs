@@ -62,6 +62,21 @@ public sealed record BrandingSettings : ISettingsSection<BrandingSettings>
 
     /// <summary>Brand accent colour as a CSS hex triplet.</summary>
     public string AccentColor { get; init; } = "#C08552";
+
+    /// <summary>
+    /// Design-token overrides applied to <c>:root</c> at runtime, keyed by the CSS custom property
+    /// name declared in <c>_tokens.scss</c> (docs/10-design-system.md §6) — for example
+    /// <c>--color-primary</c> or <c>--brand-coffee-600</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is the white-label mechanism itself: the storefront applies every entry to
+    /// <c>document.documentElement</c> once <c>/store/config</c> has answered, so a re-theme is this
+    /// dictionary changing, never a rebuild. Empty by default, which leaves the compiled defaults in
+    /// <c>_tokens.scss</c> — Klara Home's own palette — untouched; a tenant that has never set this
+    /// section still renders correctly.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> ThemeTokens { get; init; } =
+        new Dictionary<string, string>();
 }
 
 /// <summary>

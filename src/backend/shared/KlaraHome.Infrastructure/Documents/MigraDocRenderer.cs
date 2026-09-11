@@ -33,6 +33,49 @@ public sealed class MigraDocRenderer : IDocumentRenderer
     /// <summary>The font family name written into the document; the resolver maps it to a file.</summary>
     private const string FontFamily = "KlaraHome Document";
 
+    /// <summary>
+    /// The design-system colour tokens this renderer is allowed to use (docs/10-design-system.md §1),
+    /// applied to rules, captions and shading only — never to the typeface.
+    /// </summary>
+    /// <remarks>
+    /// Two things this renderer deliberately does <em>not</em> do, both recorded here rather than
+    /// left implicit:
+    /// <list type="bullet">
+    /// <item>
+    /// <b>No Fraunces.</b> The design system's display face ships one weight (600), latin-subset,
+    /// with no bold or italic face — a heading here still needs a real bold, and MigraDoc's
+    /// document-wide "Normal" font is also the body font, so a face with one weight cannot serve
+    /// both. Swapping the interface font (DejaVu/Liberation/Arial, resolved by
+    /// <see cref="FileFontResolver"/>) for a display face on a statutory document was also never
+    /// the intent recorded on the Orders and Returns modules' invoice/credit-note document
+    /// builders: "aesthetics are Step 30's, and a GST invoice is not where they would start
+    /// anyway."
+    /// </item>
+    /// <item>
+    /// <b>No brand accent colours (bronze/coffee) on the item table or totals.</b> Colour here
+    /// replaces what used to be a hard-coded neutral gray with the ramp's own ink-derived neutrals,
+    /// so a shadow or a rule reads as "this brand's document" rather than as generic PDF-library
+    /// gray — the same reasoning §3 of the design doc applies to on-screen shadows. It stops short
+    /// of colouring monetary figures or table headers in the action colour, because a coloured
+    /// total is the one thing on a tax document that must never be mistaken for emphasis or a
+    /// status.
+    /// </item>
+    /// </list>
+    /// </remarks>
+    private static class Tokens
+    {
+        /// <summary>Hairline rules, table borders — <c>--color-border</c> / <c>--brand-tan-300</c>.</summary>
+        public static readonly Color Border = Color.Parse("#ddc2a6");
+
+        /// <summary>Table header shading — <c>--color-surface-sunken</c> / <c>--brand-sand-200</c>.</summary>
+        public static readonly Color SurfaceSunken = Color.Parse("#ecddce");
+
+        /// <summary>Captions, the footer, subtext — <c>--color-text-muted</c> / <c>--brand-coffee-600</c>,
+        /// 7.00:1 on white (docs/10-design-system.md §1.2): a real colour, not a grey wash, and still
+        /// comfortably clear of the 4.5:1 floor for small print.</summary>
+        public static readonly Color TextMuted = Color.Parse("#714c35");
+    }
+
     private static readonly object FontResolverGate = new();
     private static bool _fontResolverInstalled;
 
@@ -162,7 +205,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
 
         var footer = section.Footers.Primary.AddParagraph();
         footer.Format.Font.Size = BodySize - 2;
-        footer.Format.Font.Color = Colors.Gray;
+        footer.Format.Font.Color = Tokens.TextMuted;
         footer.Format.Alignment = ParagraphAlignment.Left;
 
         if (!string.IsNullOrWhiteSpace(definition.FooterText))
@@ -210,7 +253,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
             case DocumentRule:
                 var rule = section.AddParagraph();
                 rule.Format.Borders.Bottom.Width = 0.5;
-                rule.Format.Borders.Bottom.Color = Colors.LightGray;
+                rule.Format.Borders.Bottom.Color = Tokens.Border;
                 rule.Format.SpaceAfter = Unit.FromPoint(8);
                 break;
 
@@ -235,7 +278,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
         }
 
         var subtext = section.AddParagraph(heading.Subtext);
-        subtext.Format.Font.Color = Colors.Gray;
+        subtext.Format.Font.Color = Tokens.TextMuted;
         subtext.Format.SpaceAfter = Unit.FromPoint(8);
     }
 
@@ -278,7 +321,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
 
             var caption = cell.AddParagraph(party.Caption.ToUpperInvariant());
             caption.Format.Font.Size = BodySize - 2;
-            caption.Format.Font.Color = Colors.Gray;
+            caption.Format.Font.Color = Tokens.TextMuted;
             caption.Format.SpaceAfter = Unit.FromPoint(2);
 
             foreach (var line in party.Lines)
@@ -323,7 +366,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
 
             var label = cell.AddParagraph(field.Label.ToUpperInvariant());
             label.Format.Font.Size = BodySize - 2;
-            label.Format.Font.Color = Colors.Gray;
+            label.Format.Font.Color = Tokens.TextMuted;
 
             var value = cell.AddParagraph(field.Value);
             value.Format.SpaceAfter = Unit.FromPoint(6);
@@ -341,7 +384,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
 
         var table = section.AddTable();
         table.Borders.Width = 0.4;
-        table.Borders.Color = Colors.LightGray;
+        table.Borders.Color = Tokens.Border;
         table.Rows.LeftIndent = 0;
 
         var usable = UsableWidth(section);
@@ -356,7 +399,7 @@ public sealed class MigraDocRenderer : IDocumentRenderer
         var header = table.AddRow();
         header.HeadingFormat = true;
         header.Format.Font.Bold = true;
-        header.Shading.Color = Colors.WhiteSmoke;
+        header.Shading.Color = Tokens.SurfaceSunken;
 
         for (var index = 0; index < model.Columns.Count; index++)
         {

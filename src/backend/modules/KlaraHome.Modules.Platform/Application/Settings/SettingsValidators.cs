@@ -38,7 +38,24 @@ internal sealed class BrandingSettingsValidator : AbstractValidator<BrandingSett
 
         RuleFor(branding => branding.AccentColor)
             .Matches(HexColorPattern).WithMessage("Accent colour must be a hex triplet, for example #C08552.");
+
+        // A key that is not a real CSS custom property name would be silently ignored by
+        // `style.setProperty`, which is worse than refusing the save — the operator would believe a
+        // re-theme had happened and it had not. Bounded to keep the document small: the token sheet
+        // in docs/10-design-system.md names on the order of sixty custom properties in total.
+        RuleForEach(branding => branding.ThemeTokens.Keys)
+            .Matches(ThemeTokenKeyPattern)
+            .WithMessage("A theme token name must be a CSS custom property, for example --color-primary.");
+
+        RuleForEach(branding => branding.ThemeTokens.Values).MaximumLength(200);
+
+        RuleFor(branding => branding.ThemeTokens)
+            .Must(tokens => tokens.Count <= 100)
+            .WithMessage("At most one hundred theme token overrides.");
     }
+
+    /// <summary>A CSS custom property name: two leading hyphens, then lower-kebab-case.</summary>
+    internal const string ThemeTokenKeyPattern = "^--[a-z][a-z0-9-]*$";
 }
 
 /// <summary>Rules for the legal identity printed on invoices.</summary>

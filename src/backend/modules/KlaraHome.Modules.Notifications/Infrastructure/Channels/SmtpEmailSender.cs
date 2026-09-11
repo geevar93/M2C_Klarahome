@@ -69,8 +69,23 @@ internal sealed partial class SmtpEmailSender(
         // HTML with a generated plain-text alternative. A text part is not politeness: a
         // multipart message with no text alternative scores worse with every spam filter, and this
         // deployment has no sending reputation to spend.
-        var builder = new BodyBuilder { HtmlBody = message.Body };
+        //
+        // The wrap happens here, once, rather than in every seeded template (Step 30 email/PDF
+        // styling): EmailLayout applies the design tokens and header, the plain-text alternative is
+        // still built from the caller's unwrapped body so it reads as a message rather than as the
+        // chrome around one.
+        var wrapped = EmailLayout.Wrap(branding.StoreName, message.Body);
+        var builder = new BodyBuilder { HtmlBody = wrapped };
         builder.TextBody = HtmlToText(message.Body);
+
+        var mark = builder.LinkedResources.Add(
+            EmailLayout.EmbeddedMark.ResourceName,
+            ReadEmbeddedResource(EmailLayout.EmbeddedMark.ResourceName),
+            cancellationToken);
+        mark.ContentId = EmailLayout.EmbeddedMark.ContentId;
+        mark.ContentType.MediaType = "image";
+        mark.ContentType.MediaSubtype = "png";
+
         mail.Body = builder.ToMessageBody();
 
         using var client = new SmtpClient
@@ -119,6 +134,23 @@ internal sealed partial class SmtpEmailSender(
             // A connection failure, a TLS failure, a timeout. All of them are worth another try.
             return SendOutcome.Transient(exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Reads an assembly-embedded resource in full, for the one header image every email attaches.
+    /// </summary>
+    /// <remarks>
+    /// Small and read once per message rather than cached: the resource is a 1-2 KB PNG, and MailKit
+    /// needs a fresh stream per <see cref="MimeMessage"/> in any case, so caching would trade a
+    /// negligible allocation for a static field to reason about.
+    /// </remarks>
+    private static Stream ReadEmbeddedResource(string resourceName)
+    {
+        var stream = typeof(SmtpEmailSender).Assembly.GetManifestResourceStream(resourceName);
+
+        return stream ?? throw new InvalidOperationException(
+            $"Embedded resource '{resourceName}' was not found in {typeof(SmtpEmailSender).Assembly.FullName}. "
+            + "Check the EmbeddedResource item in KlaraHome.Modules.Notifications.csproj.");
     }
 
     /// <summary>

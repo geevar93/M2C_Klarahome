@@ -37,6 +37,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The email header mark (Step 30 email/PDF styling): embedded into the assembly, not read
+      from disk at runtime, so it needs no Docker image copy step the way the document fonts do
+      (FileFontResolver) — an assembly resource travels with the DLL wherever it runs. Rasterised
+      from src/frontend/apps/storefront/public/brand/mark.svg by build-brand-assets.mjs; re-run
+      that script and re-copy this file if the source SVG changes.
+    -->
+    <EmbeddedResource Include="Assets\mark-email.png" LogicalName="KlaraHome.Modules.Notifications.Assets.mark-email.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="KlaraHome.UnitTests" />
     <InternalsVisibleTo Include="KlaraHome.IntegrationTests" />
   </ItemGroup>
