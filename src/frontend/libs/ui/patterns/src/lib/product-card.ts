@@ -55,7 +55,9 @@ import { ProductCardView } from './catalog.model';
           <a [routerLink]="product().href" (click)="opened.emit(product())">{{ product().name }}</a>
         </h3>
 
-        <kh-price size="sm" [price]="product().price" [mrp]="product().mrp" />
+        @if (product().price !== null) {
+          <kh-price size="sm" [price]="product().price!" [mrp]="product().mrp" />
+        }
 
         @if (product().rating !== null) {
           <kh-rating size="sm" [average]="product().rating" [count]="product().ratingCount" />

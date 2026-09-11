@@ -334,7 +334,7 @@ export class ProductListing {
         this.analytics.track(AnalyticsEvents.addToCart, {
           item_id: product.variantId,
           item_name: product.name,
-          price: product.price.amount,
+          price: product.price?.amount ?? 0,
           quantity: 1,
         });
       },

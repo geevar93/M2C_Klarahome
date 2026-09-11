@@ -1,6 +1,6 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { ProductCardView } from '@klarahome/ui-patterns';
-import { BrowserStorage } from '@klarahome/util';
+import { BrowserStorage, ImageUrls } from '@klarahome/util';
 
 /** Where the trail is kept, and how long it is. */
 const STORAGE_KEY = 'kh.recently-viewed';
@@ -31,6 +31,7 @@ interface RecentEntry {
 @Injectable({ providedIn: 'root' })
 export class RecentlyViewedStore {
   private readonly storage = inject(BrowserStorage);
+  private readonly images = inject(ImageUrls);
   private readonly entries = signal<readonly RecentEntry[]>([]);
 
   /** The trail, most recent first, as product cards. */
@@ -42,9 +43,9 @@ export class RecentlyViewedStore {
       name: entry.name,
       href: `/p/${entry.slug}`,
       brand: null,
-      price: { amount: 0, currency: 'INR' },
+      price: null,
       mrp: null,
-      image: null,
+      image: this.images.sourceForImage({ fileId: entry.imageFileId }, entry.name),
       rating: null,
       ratingCount: 0,
       isPurchasable: false,

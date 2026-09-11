@@ -30,7 +30,8 @@ export interface ProductCardView {
   /** The PDP path, ready for `routerLink`. */
   readonly href: string;
   readonly brand: string | null;
-  readonly price: Money;
+  /** Null when there is no offer to quote — the card omits the price rather than showing ₹0. */
+  readonly price: Money | null;
   readonly mrp: Money | null;
   readonly image: ImageSource | null;
   readonly rating: number | null;
