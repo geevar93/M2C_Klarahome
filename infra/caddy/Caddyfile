@@ -1,0 +1,165 @@
+# =============================================================================
+# Klara Home - Caddy site configuration (production VPS)
+# =============================================================================
+# Caddy runs on the HOST, not in the compose stack. It owns 80 and 443, obtains and renews the
+# certificates, and proxies to the containers, each of which publishes on 127.0.0.1 only
+# (infra/compose/docker-compose.prod.yml). Nothing in the stack is reachable any other way.
+#
+# Install:
+#   sudo cp infra/caddy/Caddyfile /etc/caddy/Caddyfile
+#   sudo mkdir -p /etc/systemd/system/caddy.service.d
+#   printf '[Service]\nEnvironment=KH_DOMAIN=klarahome.example\nEnvironment=KH_ACME_EMAIL=ops@klarahome.example\n' \
+#     | sudo tee /etc/systemd/system/caddy.service.d/override.conf
+#   sudo systemctl daemon-reload
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# KH_DOMAIN must be the same value as DOMAIN in .env.prod, and the ports below the same as the
+# *_PORT values there. Full walkthrough: docs/deployment-vps.md section 5.
+#
+# Five names, five upstreams:
+#   {$KH_DOMAIN}        -> storefront   127.0.0.1:4000   (Node, server-rendered)
+#   www.{$KH_DOMAIN}    -> redirect to the apex, so a page has one canonical URL
+#   api.{$KH_DOMAIN}    -> api          127.0.0.1:8080
+#   admin.{$KH_DOMAIN}  -> admin        127.0.0.1:8081   (static files behind nginx)
+#   cdn.{$KH_DOMAIN}    -> imgproxy     127.0.0.1:8082
+#   s3.{$KH_DOMAIN}     -> MinIO        127.0.0.1:9000
+#
+# All five must have an A record (and an AAAA if the VPS has IPv6) pointing at this machine
+# BEFORE the first reload: Caddy fetches a certificate on demand, and an unresolvable name fails
+# the ACME challenge and is retried with a backoff.
+# =============================================================================
+{
+	# Where Let's Encrypt sends expiry and problem notices.
+	email {$KH_ACME_EMAIL}
+
+	# The admin API is local-only by default; turned off entirely because nothing here uses it.
+	admin off
+}
+
+# Headers asserted at the edge on every HTML surface. The Content-Security-Policy is NOT here:
+# it is owned by the applications, which know their own script and image origins.
+(security_headers) {
+	header {
+		# Two years, and only meaningful over HTTPS - Caddy serves this on the TLS site only.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(self)"
+		# Nothing downstream needs to know what is serving this.
+		-Server
+	}
+}
+
+(logging) {
+	log {
+		output file /var/log/caddy/{args[0]}.log {
+			roll_size 20mb
+			roll_keep 10
+		}
+		format json
+	}
+}
+
+# -----------------------------------------------------------------------------
+# Storefront - the shop.
+# -----------------------------------------------------------------------------
+# The renderer is a Node process that trusts X-Forwarded-* (KH_TRUST_PROXY_HEADERS) and answers
+# only for the hostnames it was given (KH_ALLOWED_HOSTS). Caddy sets X-Forwarded-For, -Proto and
+# -Host on every proxied request, and passes the original Host through unchanged, which is what
+# those two settings expect.
+{$KH_DOMAIN} {
+	import security_headers
+	import logging storefront
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:4000 {
+		# A server-rendered page waits on the API; the default 0 (no timeout) would hold a
+		# connection open forever if the renderer stalled.
+		transport http {
+			response_header_timeout 30s
+		}
+	}
+}
+
+# One canonical URL for every page: www redirects, it does not serve a second copy.
+www.{$KH_DOMAIN} {
+	import logging storefront-www
+	redir https://{$KH_DOMAIN}{uri} permanent
+}
+
+# -----------------------------------------------------------------------------
+# API.
+# -----------------------------------------------------------------------------
+# Rate limiting is NOT done here. The API rate-limits per endpoint class - sign-in, OTP, cart
+# writes, order placement - because only it knows which is which (appsettings.json RateLimiting).
+# Caddy's own limiter is a third-party plugin and is not needed for that.
+#
+# Razorpay and the courier post webhooks to this host; they are ordinary POSTs and need nothing
+# special here beyond reaching the container with the body intact.
+api.{$KH_DOMAIN} {
+	import security_headers
+	import logging api
+	encode zstd gzip
+
+	# The health endpoints are what an uptime check should watch. They are safe to expose:
+	# /health/live says the process is up, /health/ready says its dependencies answer.
+	reverse_proxy 127.0.0.1:8080 {
+		# An import job or a report export can take a while to produce its first byte.
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+}
+
+# -----------------------------------------------------------------------------
+# Admin back office - static files behind nginx, calling the API cross-origin.
+# -----------------------------------------------------------------------------
+# Restricting this to the office IP range is worth doing once the addresses are known:
+#   @office remote_ip 203.0.113.0/24
+#   handle @office { reverse_proxy 127.0.0.1:8081 }
+#   handle { respond 403 }
+admin.{$KH_DOMAIN} {
+	import security_headers
+	import logging admin
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:8081
+}
+
+# -----------------------------------------------------------------------------
+# Image CDN - imgproxy. The URL is the instruction: nothing is stored here.
+# -----------------------------------------------------------------------------
+# No `encode`: every response is an already-compressed image, and re-compressing it costs CPU
+# and saves nothing. imgproxy sets its own long Cache-Control and an ETag.
+cdn.{$KH_DOMAIN} {
+	import security_headers
+	import logging cdn
+
+	reverse_proxy 127.0.0.1:8082
+}
+
+# -----------------------------------------------------------------------------
+# Object storage - MinIO's S3 API.
+# -----------------------------------------------------------------------------
+# This name is public because presigned upload and download URLs are signed for it: SigV4 covers
+# the Host header, so the browser has to reach MinIO under exactly the name the API signed for,
+# and MINIO_SERVER_URL in the compose file names this same host. Caddy passes Host through
+# unchanged, which is what keeps those signatures valid.
+#
+# The MinIO web console is deliberately NOT published: reach it over an SSH tunnel.
+s3.{$KH_DOMAIN} {
+	import logging s3
+
+	# Larger than the biggest upload the platform accepts (25 MB documents, 10 MB images), with
+	# room for multipart overhead. A request bigger than this is refused before it reaches MinIO.
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy 127.0.0.1:9000 {
+		# S3 clients stream; buffering a large upload in Caddy would double the memory cost.
+		flush_interval -1
+	}
+}
