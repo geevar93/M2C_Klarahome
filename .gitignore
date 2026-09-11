@@ -49,6 +49,7 @@ blob-report/
 
 # ---------- Docker / infra ----------
 docker-compose.override.yml
+docker-compose.prod.yml
 .volumes/
 letsencrypt/
 acme.json
