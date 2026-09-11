@@ -87,7 +87,7 @@ import { CatalogMapper } from '../core/catalog.mapper';
 
     .description {
       margin: 0;
-      max-inline-size: 68ch;
+      max-inline-size: var(--measure);
       color: var(--color-text-muted);
     }
 

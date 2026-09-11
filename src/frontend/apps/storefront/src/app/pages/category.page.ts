@@ -66,7 +66,7 @@ import { ProductListing } from './listing/product-listing';
 
     .description {
       margin: var(--space-2) 0 0;
-      max-inline-size: 68ch;
+      max-inline-size: var(--measure);
       color: var(--color-text-muted);
     }
 

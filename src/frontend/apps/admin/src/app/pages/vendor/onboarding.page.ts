@@ -163,7 +163,7 @@ const STAGES: readonly StepperStep[] = [
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 64rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;

@@ -464,7 +464,7 @@ interface ConditionDraft {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 64rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
         align-items: start;
@@ -519,6 +519,7 @@ interface ConditionDraft {
 
     .actions {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin-block-start: var(--space-4);
     }
@@ -557,6 +558,7 @@ interface ConditionDraft {
 
     .hero-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin-inline-start: auto;
     }

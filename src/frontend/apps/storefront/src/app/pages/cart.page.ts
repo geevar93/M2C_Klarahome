@@ -258,15 +258,17 @@ import { CommerceMapper } from '../core/commerce.mapper';
       color: var(--color-success);
     }
 
+    /* Mobile-first: below 'lg' the sticky bar carries the action, so the one in the panel would be
+       a second identical button a few centimetres above it — hidden by default, restored (as the
+       flex box \`khButton [block]\` already renders) from 'lg' up. */
     .checkout-desktop {
+      display: none;
       margin-block-start: var(--space-4);
     }
 
-    /* Below 'lg' the sticky bar carries the action, so the one in the panel would be a second
-       identical button a few centimetres above it. */
-    @media (max-width: 1023px) {
+    @media (min-width: 1024px) {
       .checkout-desktop {
-        display: none;
+        display: flex;
       }
     }
 

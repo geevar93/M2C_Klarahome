@@ -366,13 +366,18 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
       font-size: var(--text-xs);
     }
 
+    /* Two fields side by side — one row here is a pair of \`datetime-local\` inputs, each with a
+       large browser-drawn intrinsic minimum width. Wraps to one per line rather than overflowing a
+       360px screen. */
     .row {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-3);
     }
 
     .row > kh-field {
-      flex: 1;
+      flex: 1 1 12rem;
+      min-inline-size: 0;
     }
 
     .images {
@@ -395,6 +400,7 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
 
     .image-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin-block-start: var(--space-2);
     }

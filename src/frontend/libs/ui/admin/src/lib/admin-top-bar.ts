@@ -119,7 +119,9 @@ export interface AdminIdentityView {
     }
 
     .search {
-      flex: 0 1 24rem;
+      /* Mobile-first: the compact, icon-only form is the default. Restored to its full width from
+         the sidebar's own breakpoint, below. */
+      flex: 0 0 auto;
       justify-content: flex-start;
       min-width: 0;
       margin-inline-start: var(--space-3);
@@ -169,9 +171,22 @@ export interface AdminIdentityView {
     }
 
     .who {
-      display: flex;
+      /* Mobile-first: collapsed to the icon by default (the rule below this block hides it), and
+         restored — still \`display: flex\` — at the sidebar's own breakpoint. */
+      display: none;
       flex-direction: column;
       line-height: var(--leading-tight);
+    }
+
+    /* Below the sidebar's breakpoint the search label and the identity collapse to their icons; a
+       tablet in portrait has room for the controls but not for the words. Mobile-first: this *is*
+       the base state (paired with \`.search\`'s and \`.who\`'s own base rules above), and the
+       min-width query below restores the full desktop form — matching \`admin-shell.ts\`'s sidebar
+       breakpoint, which must move with this one: below it the sidebar is a drawer and there is no
+       room to also spell out the search box and the signed-in name. */
+    .search-label,
+    kbd {
+      display: none;
     }
 
     .name {
@@ -226,17 +241,21 @@ export interface AdminIdentityView {
       background: var(--color-surface);
     }
 
-    /* Below the sidebar's breakpoint the search label and the identity collapse to their icons;
-       a tablet in portrait has room for the controls but not for the words. */
-    @media (max-width: 60rem) {
+    /* The sidebar's own breakpoint (\`admin-shell.ts\`) — the two move as a pair, mobile-first. Below
+       it the sidebar is a drawer and there is no room to also spell out the search box and the
+       signed-in name; at and above it there is. */
+    @media (min-width: 1024px) {
       .search-label,
-      kbd,
+      kbd {
+        display: inline;
+      }
+
       .who {
-        display: none;
+        display: flex;
       }
 
       .search {
-        flex: 0 0 auto;
+        flex: 0 1 24rem;
       }
     }
   `,

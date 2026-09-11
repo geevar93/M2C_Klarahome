@@ -1,6 +1,7 @@
+import { inject } from '@angular/core';
 import { Route } from '@angular/router';
 import { anonymousOnlyGuard, authenticatedGuard } from '@klarahome/data-access-auth';
-import { featureFlagGuard } from '@klarahome/util';
+import { RUNTIME_CONFIG, featureFlagGuard } from '@klarahome/util';
 
 import {
   categoryResolver,
@@ -234,6 +235,23 @@ export const appRoutes: Route[] = [
         data: { seo: { title: 'Reset your password' } },
       },
     ],
+  },
+
+  // ---- Test fixtures, not shopper-facing --------------------------------------------------------
+  // `noIndex: true` (in the component itself), same reasoning as the states below: not linked from
+  // anywhere, not meant to be found, but a real route so `CmsBlockRenderer` can be stress-tested
+  // by a real browser at every breakpoint — see the component's own doc comment for why this
+  // exists instead of an intercepted API response or a page authored through the admin CMS.
+  //
+  // `canMatch` on the environment as well as `noIndex`: a page of deliberately hostile content has
+  // no business being reachable on a deployed storefront at all. Outside `local`/`development` the
+  // route never matches, its chunk is never requested, and the URL falls through to `**` like any
+  // other unknown path. It is left out of `app.routes.server.ts` on purpose, so even where it does
+  // render the server answers it under the catch-all's 404 status rather than a 200.
+  {
+    path: '__test/cms-blocks',
+    canMatch: [() => ['local', 'development'].includes(inject(RUNTIME_CONFIG).environment)],
+    loadComponent: () => import('./pages/dev/cms-stress-test.page').then((m) => m.CmsStressTestPage),
   },
 
   // ---- The states every application needs -----------------------------------------------------

@@ -66,7 +66,7 @@ import { ProductListing } from './listing/product-listing';
 
     .about {
       margin: 0;
-      max-inline-size: 68ch;
+      max-inline-size: var(--measure);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -32,7 +32,7 @@ export class Container {
   protected readonly maxWidth = computed(() => {
     switch (this.size()) {
       case 'narrow':
-        return '68ch';
+        return 'var(--measure)';
       case 'flush':
         return 'none';
       default:

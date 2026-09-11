@@ -674,7 +674,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       gap: var(--space-4);
     }
 
-    @media (min-width: 64rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: minmax(0, 1fr) 20rem;
         align-items: start;

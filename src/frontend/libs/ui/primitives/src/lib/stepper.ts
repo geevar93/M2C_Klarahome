@@ -125,15 +125,27 @@ export interface StepperStep {
 
     /* Below 'sm' the labels are dropped and the markers carry the flow: four words across a 360px
        screen wrap into four lines and push the form below the fold. The "Step 2 of 4" line above
-       still says where the shopper is, and it is what a screen reader was reading anyway. */
-    @media (max-width: 479px) {
+       still says where the shopper is, and it is what a screen reader was reading anyway.
+       Hidden by default and restored from 'sm' up, not the reverse: '_breakpoints.scss' deliberately
+       has no max-width mixin, because a codebase mixing both directions of media query is how a
+       range in the middle ends up unstyled by either. */
+    .label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+    }
+
+    @media (min-width: 480px) {
       .label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
       }
     }
   `,

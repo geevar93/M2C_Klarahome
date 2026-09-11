@@ -147,6 +147,7 @@ import { describeError } from '../../core/describe-error';
   styles: `
     .bar {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       align-items: center;
       margin-block-end: var(--space-3);
@@ -178,7 +179,9 @@ import { describeError } from '../../core/describe-error';
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+      /* \`min(8rem, 100%)\`, not a bare \`8rem\`: the same guard \`kh-grid\` (libs/ui/layout) uses so a
+         floor never overflows a container narrower than itself. */
+      grid-template-columns: repeat(auto-fill, minmax(min(8rem, 100%), 1fr));
       gap: var(--space-3);
       margin: 0;
       padding: 0;
@@ -223,6 +226,7 @@ import { describeError } from '../../core/describe-error';
 
     .pager {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       justify-content: flex-end;
       margin-block-start: var(--space-3);

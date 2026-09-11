@@ -283,7 +283,7 @@ import { MediaManager } from './media-manager';
       gap: var(--space-3);
     }
 
-    @media (min-width: 40rem) {
+    @media (min-width: 768px) {
       .pair {
         grid-template-columns: 1fr 1fr;
       }

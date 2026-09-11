@@ -255,3 +255,68 @@ main:focus {
 .kh-container--narrow {
   max-width: var(--container-narrow);
 }
+
+// ---- Rich text bodies (a richText CMS block, an FAQ answer) -------------------------------------
+// `.rich-body` (CmsBlockRenderer, libs/ui/patterns) wraps sanitised CMS HTML via `[innerHTML]`.
+// These rules have to live here, globally, rather than in that component's own scoped `styles:`:
+// content set through `[innerHTML]` is parsed by the browser directly and never receives the
+// `_ngcontent` attribute Angular's emulated view encapsulation stamps onto everything *it* renders,
+// so a scoped selector reaching for one of `.rich-body`'s descendants compiles to
+// `.rich-body[_ngcontent-X] :where(table[_ngcontent-X])` and can never match — verified by hand
+// after an 8-column stress table's headers rendered with none of the styling below applied, no
+// error from Angular or the browser either. `.kh-prose` two files up solves the identical problem
+// for a product description or a policy page the same way: unscoped, global, no `_ngcontent`
+// requirement to fail to match.
+.rich-body {
+  :where(h2, h3, h4) {
+    margin-block: var(--space-5) var(--space-2);
+    font-size: var(--text-lg);
+  }
+
+  :where(ul, ol) {
+    padding-inline-start: var(--space-5);
+    margin-block-end: var(--space-4);
+  }
+
+  :where(li + li) {
+    margin-block-start: var(--space-2);
+  }
+
+  :where(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+  }
+
+  :where(blockquote) {
+    margin: var(--space-4) 0;
+    padding-inline-start: var(--space-4);
+    border-inline-start: 3px solid var(--color-border-strong);
+    color: var(--color-text-muted);
+  }
+
+  // A merchant-authored table is exactly the kind of block that was never stress-tested at 360px,
+  // and two things had to be verified by hand, not assumed, before this one held up: neither
+  // `display: block` + `overflow-x: auto` alone, nor adding `min-width: max-content` to that,
+  // actually stopped the browser's own table-layout algorithm from shrinking and wrapping plain,
+  // breakable header words to fit the available width first — an 8-column stress table rendered
+  // every header as a vertical stack of single letters either way, with no scrollbar, because a
+  // table's automatic layout still treats its columns as free to shrink even when the box that
+  // contains them is not. `white-space: nowrap` on every cell is what actually stops that: a
+  // column can no longer shrink below its own unbroken content, so the table's total width exceeds
+  // its `max-width: 100%` container and `overflow-x: auto` finally has something real to scroll
+  // instead of squeeze.
+  :where(table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  :where(th, td) {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    text-align: start;
+    white-space: nowrap;
+  }
+}

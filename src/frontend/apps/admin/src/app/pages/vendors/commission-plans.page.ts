@@ -405,7 +405,7 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 60rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: minmax(0, 3fr) minmax(18rem, 1fr);
         align-items: start;

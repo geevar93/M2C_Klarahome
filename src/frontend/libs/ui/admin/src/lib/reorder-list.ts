@@ -174,11 +174,13 @@ export class ReorderItemTemplate {
 
     .label {
       display: block;
+      overflow-wrap: anywhere;
       font-weight: var(--weight-medium);
     }
 
     .sublabel,
     .meta {
+      overflow-wrap: anywhere;
       color: var(--color-text-muted);
       font-size: var(--text-xs);
     }
@@ -189,6 +191,9 @@ export class ReorderItemTemplate {
 
     .controls {
       display: flex;
+      /* Never the thing that gives: three touch targets, not text, so they hold their size while
+         \`.body\` (which has \`min-inline-size: 0\`) is what shrinks and wraps a long label instead. */
+      flex-shrink: 0;
       gap: var(--space-1);
     }
 

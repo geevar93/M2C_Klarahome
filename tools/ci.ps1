@@ -481,15 +481,41 @@ function Test-Coverage {
 }
 
 function Invoke-LintStage {
-    Write-Stage 'lint' 'eslint across every Nx project, module boundaries included'
+    Write-Stage 'lint' 'eslint across every Nx project, module boundaries included, plus the design-token guardrails (colour, spacing/type-scale, breakpoints)'
 
     try {
+        # `nx lint --all` carries three local rules (eslint.config.mjs), all Step 30 guardrails
+        # against exactly the drift a 2026-09-11 review found by hand once and does not want to
+        # find by hand again:
+        #   - local/no-hardcoded-color-in-styles: no hex/rgb()/hsl() colour literal.
+        #   - local/no-hardcoded-spacing-in-styles: no raw px/rem/em on font-size, padding, margin,
+        #     gap, row-gap, column-gap or inset* (a hairline calc() offset alongside a token, e.g.
+        #     `calc(var(--space-3) - 1px)`, is allowed); and no `@media` width outside the token
+        #     breakpoints (480/768/1024/1280/1536px, libs/ui/primitives/src/styles/_breakpoints.scss)
+        #     in that file's own unit (px) — a `max-width` query is always flagged, because that
+        #     file is min-width-only, mobile-first, by design.
+        # Both walk every `styles:` template literal, which is where almost all component styling
+        # in this workspace actually lives; a real .scss file is not a supported target for either
+        # (see the stylelint pass below for those).
         $null = Invoke-Step -Label 'nx lint' -Command 'npx' -WorkingDirectory $FrontendDir `
             -Arguments @('nx', 'run-many', '--target=lint', '--all')
-        Write-Ok 'eslint clean, module boundaries hold'
+        Write-Ok 'eslint clean, module boundaries hold, no hard-coded colour/spacing/type-scale/breakpoint outside a token'
     }
     catch {
         Write-Fail 'eslint reported problems'
+    }
+
+    try {
+        # Step 30: no hard-coded hex/rgb/hsl colour literal outside the token files themselves.
+        # This stylelint pass covers the handful of real .scss files (app.scss, styles.scss,
+        # libs/ui/primitives/src/styles/*.scss) — the inline Angular `styles:` template literals
+        # are the eslint rules' job, above, not this one's.
+        $null = Invoke-Step -Label 'stylelint' -Command 'npm' -WorkingDirectory $FrontendDir `
+            -Arguments @('run', 'stylelint')
+        Write-Ok 'stylelint clean, no hard-coded colour literals outside token files'
+    }
+    catch {
+        Write-Fail 'stylelint reported problems'
     }
 
     Write-StageEnd

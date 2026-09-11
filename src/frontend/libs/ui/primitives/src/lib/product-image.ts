@@ -48,9 +48,14 @@ import { ImageSource } from '@klarahome/util';
 
     img {
       inline-size: 100%;
-      block-size: auto;
+      /* Both overridable from an ancestor's plain CSS (not an Angular \`[style.x]\` binding, which
+         would set them inline and be unbeatable by exactly the kind of external rule that needs to
+         win here) — the CMS hero block is the one caller that needs the image to fill a box whose
+         height *it* does not control, cropping rather than letter-boxing. Every other caller sets
+         neither, and gets exactly the previous hardcoded behaviour. */
+      block-size: var(--kh-image-block-size, auto);
       aspect-ratio: var(--kh-image-ratio, 1 / 1);
-      object-fit: contain;
+      object-fit: var(--kh-image-fit, contain);
       background: var(--color-surface);
       border-radius: var(--radius-md);
     }

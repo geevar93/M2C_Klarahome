@@ -281,7 +281,7 @@ import { tableDateTime } from '../../core/format';
       gap: var(--space-4);
     }
 
-    @media (min-width: 56rem) {
+    @media (min-width: 1024px) {
       .columns {
         grid-template-columns: 1fr 1fr;
       }

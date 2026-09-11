@@ -116,6 +116,12 @@ export type EntitySearch = (term: string) => Observable<readonly EntityOption[]>
       </div>
     }
   `,
+  /* eslint-disable local/no-hardcoded-spacing-in-styles -- '.option's gap: 2px is a deliberate
+     micro-gap between a result's title and subtitle line. The smallest spacing token, --space-1,
+     is 4px; doubling this tight a gap is a visual change of its own and one call site does not
+     justify a new token below --space-1 (Step 30 frontend-visual-consistency-review.md, finding
+     #10). Disabled for the whole block rather than a line: the violation sits deep inside a
+     template literal, where a directive comment cannot be attached to just that line. */
   styles: `
     :host {
       display: block;
@@ -189,6 +195,7 @@ export type EntitySearch = (term: string) => Observable<readonly EntityOption[]>
       background: var(--color-surface-muted);
     }
   `,
+  /* eslint-enable local/no-hardcoded-spacing-in-styles */
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EntityPicker {

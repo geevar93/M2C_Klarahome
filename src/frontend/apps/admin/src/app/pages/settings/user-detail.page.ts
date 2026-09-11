@@ -298,7 +298,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 60rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;

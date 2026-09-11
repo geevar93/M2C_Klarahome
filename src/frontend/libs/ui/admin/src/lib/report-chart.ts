@@ -181,7 +181,7 @@ const MAX_AXIS_LABELS = 12;
     .tick {
       fill: var(--color-text-muted);
       font-family: var(--font-sans);
-      font-size: 11px;
+      font-size: var(--text-xs);
     }
 
     .bar {

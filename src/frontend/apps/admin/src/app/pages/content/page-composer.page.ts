@@ -572,11 +572,15 @@ interface BlockDraft {
     />
   `,
   styles: `
+    /* Nested padded boxes — the admin shell's own gutter, then \`.block\`, then \`.items\`, then
+       \`.item\` — eat the available width fastest at 360px, where there is the least of it to give
+       away. Each one below is a token narrower on a small screen and restores to its full size from
+       'md' up, the same rhythm the rest of the design system uses for section padding. */
     .items {
       display: flex;
       flex-direction: column;
-      gap: var(--space-3);
-      padding: var(--space-3);
+      gap: var(--space-2);
+      padding: var(--space-2);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
     }
@@ -587,20 +591,33 @@ interface BlockDraft {
     }
 
     .item {
-      padding: var(--space-3);
+      padding: var(--space-2);
       border: 1px solid var(--color-border-subtle);
       border-radius: var(--radius-sm);
     }
 
+    @media (min-width: 768px) {
+      .items,
+      .item {
+        padding: var(--space-3);
+      }
+    }
+
+    /* The index, then the Up / Down / Remove buttons — three touch targets that do not fit beside a
+       label at 360px once the item's own padding and the boxes around it are accounted for. Wraps
+       to its own line rather than clipping or squeezing the buttons. */
     .item > header {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
+      gap: var(--space-2);
       margin-block-end: var(--space-2);
     }
 
     .item-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
     }
 
@@ -614,7 +631,7 @@ interface BlockDraft {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 64rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr);
         align-items: start;
@@ -640,10 +657,18 @@ interface BlockDraft {
     .panel,
     .block,
     .library {
-      padding: var(--space-4);
+      padding: var(--space-3);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
       background: var(--color-surface-raised);
+    }
+
+    @media (min-width: 768px) {
+      .panel,
+      .block,
+      .library {
+        padding: var(--space-4);
+      }
     }
 
     .block,
@@ -651,8 +676,11 @@ interface BlockDraft {
       margin-block-start: var(--space-4);
     }
 
+    /* A block type's label can be as long as its schema's \`label\` field allows; the type badge
+       beside it wraps under it rather than squeezing either into an ellipsis. */
     .block header {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       align-items: baseline;
       margin-block-end: var(--space-3);
@@ -678,13 +706,18 @@ interface BlockDraft {
       font-size: var(--text-xs);
     }
 
+    /* Two \`datetime-local\` inputs, each with a large browser-drawn intrinsic minimum width — side
+       by side they overflow a 360px screen well before either one would visually need to shrink.
+       Wraps to one per line instead of clipping the second field or scrolling the page sideways. */
     .row {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-3);
     }
 
     .row > kh-field {
-      flex: 1;
+      flex: 1 1 12rem;
+      min-inline-size: 0;
     }
 
     .cover {
@@ -711,13 +744,20 @@ interface BlockDraft {
       list-style: none;
     }
 
+    /* A version's timestamp/author/restored-from note can run long; the Preview/Restore buttons
+       wrap under it rather than squeezing the text into an unreadable sliver at 360px. */
     .versions li {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       align-items: center;
       justify-content: space-between;
       padding-block: var(--space-2);
       border-block-end: 1px solid var(--color-border);
+    }
+
+    .versions li > div:first-child {
+      min-inline-size: 0;
     }
 
     .version {

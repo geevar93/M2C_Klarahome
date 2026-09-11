@@ -70,6 +70,17 @@ Every pairing below was computed before it was written, not checked afterwards.
 | Focus ring (ink) on the sand band | 13.18:1 | 3.0 |
 | Sand text on the ink footer | 13.18:1 | 4.5 |
 | Every status colour on both grounds | ≥ 5.76:1 | 4.5 |
+| `--color-text-on-image` on the hero scrim, over a *worst-case pure-white* photograph | 9.8:1 | 4.5 (3.0 for the display headline) |
+
+**The hero scrim is the one pairing on this list computed against an input the theme does not
+control.** Every other row sits on a known token background; a CMS hero's background is whatever a
+merchant uploads, from a black product shot to a blown-out white one. So its floor is checked
+against the adversarial case rather than a typical one: `--color-surface-inverse` (ink-900, relative
+luminance ≈ 0.0099) mixed at 92% over pure white (luminance 1.0), blended in linear light per the
+WCAG formula itself, leaves a background luminance of ≈ 0.083 — `--color-text-on-image` (sand-050,
+luminance ≈ 0.926) against that is 9.8:1, clearing both the subheadline's 4.5:1 and the display
+headline's 3.0:1 with margin to spare for a photo that is merely very light rather than literally
+blank. See `CmsBlockRenderer`'s `.scrim` rule for the mix and the gradient it sits inside.
 
 Status colours are warm-shifted to sit in the same world as the brand, and each has a subtle
 companion for alert backgrounds. `--color-info` is desaturated well past the usual notification
@@ -156,14 +167,49 @@ required new structure, and that each such change would be listed explicitly. Th
 | `kh-button--inverse` | The primary button is 3.2:1 against the ink band and would take its own label below the floor. An action on an inverse surface needs a different variant, not a different token. |
 | `::selection`, `hr` | Browser defaults that read as bugs against a warm ground. |
 
+### 5.1 A `richText` CMS block's three width tiers
+
+Added in the 2026-09-11 follow-up review, `CmsBlockRenderer`'s `richText` block's `width` field
+(`'narrow' | 'wide' | 'full'`) now does three different, deliberate things instead of one:
+
+| `width` | Cap | Alignment |
+|---|---|---|
+| `narrow` | `var(--measure)` (68ch) — the reading measure `.kh-prose` and `khContainer`'s own narrow size share. | Centred (`margin-inline: auto`). |
+| `wide` | `var(--container-wide)` (64rem / 1024px, `lg`) — a merchandising page with a wide photograph or a table that still should not run the full container width a listing page needs. | Centred. |
+| `full` | None — the block fills `khContainer`, the same as every other CMS block type. | N/A. |
+
+Both capped tiers are centred rather than left-hugging: a bare `max-inline-size` with no
+`margin-inline` insets a block from the *right* edge only, so next to a full-width hero or banner
+grid above and below it, the page's content would visibly jog left. Centring keeps a narrower block
+symmetrical inside the same container every other block already fills.
+
 ---
 
 ## 6. Theming mechanism
 
-Unchanged, and still the point: every token is a CSS custom property on `:root`, emitted from the
-tenant's theme configuration at runtime — a `<style>` block in the SSR document head plus the
-runtime `config.json` — **not** compiled into the CSS bundle. One Docker image serves every tenant;
-a rebrand is a database and asset change.
+Every token is a CSS custom property on `:root`, so nothing about `_tokens.scss` itself had to
+change to be overridable at runtime. What was missing until the white-label proof (below) is
+narrower than this section used to claim: `BrandingSettings` carried `PrimaryColor`/`AccentColor`,
+but the storefront never read them anywhere — the compiled defaults were the only theme that ever
+rendered. Closed by `BrandingSettings.ThemeTokens`, a validated dictionary of CSS custom-property
+overrides keyed by the same names declared above, and a storefront `ThemeService`
+(`libs/util/src/lib/theme.service.ts`) that applies them to `document.documentElement` during the
+same SSR pass that sets the store name — so the "before" response a crawler receives already
+carries the tenant's palette. One Docker image serves every tenant; a rebrand is now genuinely a
+`platform.store_settings` change, not a rebuild. See the white-label proof note in
+[`steps/step-30-design-system-theming-and-visual-identity.md`](steps/step-30-design-system-theming-and-visual-identity.md)
+and `infra/scripts/verify-white-label-theming.sh`.
+
+**Now also true of the admin app.** The admin has no SSR pass to piggy-back on — it is CSR-only
+(no `server` build target: `docs/05-frontend-architecture.md` §4.1) — so it reuses the same
+`StoreConfigService`/`ThemeService` pair from a `provideAppInitializer` in
+`apps/admin/src/app/app.config.ts` instead: the tokens are applied before the router activates the
+first route, rather than during a server render. `verify-white-label-theming.sh` proves this too,
+but necessarily differently in kind — there is no rendered HTML response to grep, so it drives a
+real headless browser (`src/frontend/scripts/check-admin-theme-tokens.mjs`) against the sign-in
+screen and asserts the tokens land on `document.documentElement` after bootstrap. That check needs
+the admin Docker image rebuilt once to carry this wiring — the same one-time rebuild the storefront
+and API images needed when `ThemeService` itself was introduced.
 
 ---
 
@@ -173,14 +219,45 @@ a rebrand is a database and asset change.
   role and no component reads the ramp directly — but the client's decision was light only for
   now. Adding it means redefining the semantic block under `prefers-color-scheme` and re-running
   §1.2 against the dark grounds.
-- **Brand assets.** The wordmark is still text (`.kh-wordmark`, in the display face) pending the
-  client's SVG logo. Favicon set, app icons, PWA manifest and OG images follow from that.
+- **Brand assets: done.** A hand-authored mark/wordmark SVG, favicon set (SVG + ICO + 16/32/48
+  PNG), PWA icons (192/512, including maskable), `manifest.webmanifest`, a default OG image and
+  404/500 art now live under `src/frontend/apps/storefront/public/brand/` (favicon also copied to
+  `apps/admin/public/brand/`), built from this document's exact palette and Fraunces, with no new
+  colours or typeface introduced. The wordmark *in the header* stays text on purpose — see the
+  brand-assets note in
+  [`steps/step-30-design-system-theming-and-visual-identity.md`](steps/step-30-design-system-theming-and-visual-identity.md)
+  for why a tenant's store name can't be baked into an SVG without breaking §6's white-label
+  mechanism, and for what was and wasn't rasterised and with what tool.
 - **Photography.** Products render through `.kh-placeholder-media`, now a warm tinted box at the
   correct aspect ratio rather than a grey one. Layout and CLS behave as they will with real images.
+- **Email and PDF template styling: done.** Transactional email is wrapped in a shared inline-CSS
+  shell (`EmailLayout.Wrap()`, `KlaraHome.Modules.Notifications`) carrying the exact colour tokens
+  from §1 and an email-safe fallback of `--font-display` (Fraunces itself does not travel with a
+  mail message); the header mark is a CID-embedded PNG rather than a remote image, since there is
+  no public origin to host one at yet. Generated PDFs (invoices, credit notes, commission invoices
+  — all through the one shared `MigraDocRenderer`) use the same border/surface/text-muted tokens on
+  rules, captions and table shading, deliberately without Fraunces or an accent colour on monetary
+  figures — see the step-30 note and the remarks on `MigraDocRenderer` for why. Verified against a
+  real send through the dev stack's Mailpit and a real rendered PDF, not simulated.
 - **Visual-regression baselines.** Not yet captured. The placeholder document deferred them to
   after theming precisely so they would not be thrown away; they can now be taken.
-- **The hard-coded-value lint rule** described in the placeholder's §6 was never implemented.
-  There is no stylelint configuration in the workspace, so "never hard-code a colour" is currently
-  a convention rather than a guardrail.
-- **White-label proof.** The formal exit criterion — a second, visually distinct demo theme applied
-  end-to-end purely by swapping token values — has not been exercised against this palette.
+- **The hard-coded-value lint rule: done, in two parts.** stylelint (`.stylelintrc.json`) covers
+  the handful of real `.scss` files. Almost all component styling in this workspace, though, lives
+  in the `styles:` template literal of an Angular `@Component` decorator, which stylelint's usual
+  CSS-in-JS bridge (`postcss-styled-syntax`) does not reach — it parses tagged templates like
+  `styled.div\`...\`` and does not recognise a plain `styles: \`...\`` property. Two eslint rules
+  close that gap instead (`eslint.config.mjs`, both a plain AST walk over `styles:` template
+  literals rather than a CSS parser): `local/no-hardcoded-color-in-styles` forbids a hex/`rgb()`/
+  `hsl()` colour literal, and `local/no-hardcoded-spacing-in-styles` (added in the 2026-09-11
+  follow-up review) forbids a raw `px`/`rem`/`em` literal on `font-size`, `padding`, `margin`,
+  `gap`, `row-gap`, `column-gap` or `inset*` — `0` is always fine, and a hairline offset inside
+  `calc()` alongside a token (`calc(var(--space-3) - 1px)`, `order-timeline.ts`) is allowed, since
+  that pattern exists to shim a border's width off a token, not to skip the token — and forbids an
+  `@media` width outside the six token breakpoints in `_breakpoints.scss`'s own unit
+  (`docs/05-frontend-architecture.md` §3.3), always flagging a `max-width` query outright since
+  that file is `min-width`-only by design. Both are AST-based rather than real CSS parsers, so a rare accepted exception is an
+  `eslint-disable` block comment with a reason (`libs/ui/admin/src/lib/entity-picker.ts`'s
+  `.option`'s 2px title/subtitle gap, below the smallest spacing token) rather than a weakened rule.
+- **White-label proof: done for both the storefront and the admin app.** See §6 — the admin's
+  proof is a headless-browser DOM check rather than a server-rendered-HTML check, because the admin
+  is CSR-only.

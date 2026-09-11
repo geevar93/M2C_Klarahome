@@ -65,6 +65,13 @@
   --color-text-subtle: var(--brand-olive-700); // 10.86:1 — quieter in tone, not in contrast
   --color-text-inverse: var(--brand-sand-050);
   --color-text-on-brand: #ffffff;
+  // A distinct role from `--color-text-inverse`, even though the two start at the same value: that
+  // one's contract is "legible on --color-surface-inverse", a fixed, known background. This one's
+  // is "legible over the CMS hero block's scrim, on top of a merchant's photograph the theme has
+  // never seen" — a re-theme is free to diverge them (a lighter or more saturated value here, say)
+  // without touching every inverse surface in the product. See the scrim contrast note in
+  // docs/10-design-system.md §1.2.
+  --color-text-on-image: var(--brand-sand-050);
 
   // ---- Primary action ---------------------------------------------------------------------------
   // Coffee rather than bronze, because white on bronze is 4.45:1 and a primary button carries the
@@ -213,6 +220,11 @@
   // ---- Layout -----------------------------------------------------------------------------------
   --container-max: 1280px;
   --container-narrow: 46rem; // one column of prose, or a form
+  // A richText CMS block's middle tier, between the measure (`narrow`) and the full container
+  // (`full`) — a merchandising page with a wide photograph or a table that still should not run the
+  // full 1280px width a listing page needs. `lg` in rem (`_breakpoints.scss`'s canonical scale), not
+  // a number invented for this one class.
+  --container-wide: 64rem;
   --header-height: 56px; // mobile
   --bottom-bar-height: 60px;
   --z-header: 100;

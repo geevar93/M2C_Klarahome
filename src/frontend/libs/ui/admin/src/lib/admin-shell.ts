@@ -13,9 +13,10 @@ import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
  * which is not the storefront's rule inverted, but a different rule. Vendors do dispatch on
  * tablets in a warehouse, standing up, so the layout has one break and it is a real one:
  *
- *  - **Above 60rem** the sidebar is a column of the page grid. Collapsing it narrows the column to
- *    a rail of icons; the content reflows into the space, and the choice is remembered by the app.
- *  - **At or below 60rem** the sidebar is not in the grid at all — it becomes a `kh-drawer`, with
+ *  - **Above 1024px (`lg`, `libs/ui/primitives/src/styles/_breakpoints.scss`)** the sidebar is a
+ *    column of the page grid. Collapsing it narrows the column to a rail of icons; the content
+ *    reflows into the space, and the choice is remembered by the app.
+ *  - **Below 1024px** the sidebar is not in the grid at all — it becomes a `kh-drawer`, with
  *    the focus trapping, Escape handling and scroll locking that a panel over content needs and a
  *    column does not. It closes on navigation, because a drawer still covering the page you have
  *    just navigated to is the most irritating thing a responsive shell does.
@@ -112,7 +113,7 @@ import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
       display: none;
     }
 
-    @media (min-width: 60.0625rem) {
+    @media (min-width: 1024px) {
       .layout {
         grid-template-columns: 16rem 1fr;
         align-items: start;
@@ -140,7 +141,7 @@ import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
       }
     }
 
-    @media (min-width: 90rem) {
+    @media (min-width: 1536px) {
       main {
         /* A line of text 200 characters wide is unreadable; a data table is not text. The cap is
            generous and applies to the column, not to a table inside it, which scrolls. */
