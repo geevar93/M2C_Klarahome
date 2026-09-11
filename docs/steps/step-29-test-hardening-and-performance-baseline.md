@@ -351,4 +351,51 @@ held — had been implemented but not committed before this session began. Commi
 (`b5cdd19`) once the wave-2 merges landed clean, verified against `InventoryAuthorisationTests` and
 `AdminSurfaceTests`.
 
-Steps 19–28 are next.
+#### 29.6 — Step 19 (done): 25 of 26 rows closed by 29 tests
+
+Worked alone, one step in one session, unlike waves 1 and 2's parallel worktrees. Full detail is in
+[`29-reports/step-19-report.md`](29-reports/step-19-report.md); this is the summary.
+
+`SearchProjectionTests` (6), `SearchEventTests` (5), `SearchIndexRebuildTests` (3),
+`SearchInsightsTests` (5) and `SearchAuthorisationTests` (5) — twenty-four integration tests under
+`tests/KlaraHome.IntegrationTests/Commerce/` — plus `SearchEngineRegistryTests` (5, unit) close every
+Step 19 row except the single k6 performance row (263), which stays open for want of the
+large-catalogue load-test harness Part 3 builds. `ListingPublished`, `ListingDeactivated` and
+`StockLevelChanged` are proved through the real API and a real `OutboxDrain`, exactly as Steps 9–18's
+event rows were; `PriceChanged` and `SubOrderConfirmed` — owned by Pricing and Orders respectively —
+are reached the way Step 18 reached `IOrderSettlement`: a new `SearchScenario.DispatchAsync<TEvent>`
+resolves the real, unmodified `SearchProjectionHandlers` and calls it directly, so what is proved is
+Search's own reaction to the fact rather than a second module's ability to produce one.
+
+**No defect was found in the Search module itself** — the first Step 29 wave for which that is true.
+**Two real defects were found and fixed in this suite's own harness**, both before they reached
+`main`. First: `PriceChanged` and `SubOrderConfirmed` each have subscribers outside Search (Reviews,
+Payments, Reporting, Shipping all implement one or the other), and a first draft of `DispatchAsync`
+resolved the handler with a plain `GetRequiredService`, which silently hands back whichever module's
+registration happened to be added last rather than Search's own. Three tests failed cleanly against
+it — the row never moved, no exception, no Search log line — which is what made the mistake findable
+rather than a false positive. Fixed by resolving `SearchProjectionHandlers` itself, the same shape
+production's own module registration already uses. Second, and found only by the full collection run
+described below: `SearchIndexRebuildTests`'s own resumable-rebuild test walked the *whole* shared
+database rather than its own five variants, and a page budget sized for five rows failed once
+hundreds of other tests' variants joined it. Fixed by starting the walk's cursor just after the
+highest variant id that existed before the test's own five — variant ids are UuidV7 and therefore
+time-ordered, so this reaches only the test's own rows regardless of the collection's size. Worth
+restating for whoever closes Reviews', Payments', Reporting's or Shipping's rows next, since the same
+multi-subscriber events are on their list too, and for whoever writes the next full-catalogue-walk
+test against this same shared database.
+
+**Suite state: 982 unit, 14 architecture, 509 integration — 1505 backend tests.** Unit and
+architecture fully green; a full, unfiltered `KlaraHome.IntegrationTests` run completed at **505 of
+509 passing** in 1h 02m. Of the four failures: one was the rebuild test above (fixed after this run,
+then reconfirmed green in two further `~Search`-filtered runs, 28 of 28 both times); the other three
+are pre-existing and outside this step's own module — `ShippingProviderSelectionTests`
+(a `401` token-expiry shape of failure after roughly thirty-two minutes of collection runtime,
+consistent with the shared-collection cost prior waves already documented) and two
+`DeliveryCoverageTests` methods, neither Shipping nor Platform settings being anything this step
+touched. **The unit count corrects a standing discrepancy**: this session's full run reads 977 before
+this wave, not the 991 this file and the plan's status header previously cited — nothing in the tree
+between wave 2 landing and this step starting changed the unit suite, so the 991 figure appears to
+have been wrong when it was written. The totals above use the number the suite actually reports.
+
+Steps 20–28 are next.

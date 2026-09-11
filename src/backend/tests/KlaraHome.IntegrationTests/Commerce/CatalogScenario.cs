@@ -12,6 +12,7 @@ namespace KlaraHome.IntegrationTests.Commerce;
 /// <param name="ColourId">A <c>select</c> attribute flagged as a variant axis.</param>
 /// <param name="ColourOptionIds">Its options, in the order they were declared.</param>
 /// <param name="MaterialId">A <c>text</c> attribute, which is deliberately not an axis.</param>
+/// <param name="ColourCode">The colour attribute's machine code, for a Step 19 attribute filter.</param>
 internal sealed record CatalogTaxonomy(
     Guid RootCategoryId,
     Guid CategoryId,
@@ -20,7 +21,8 @@ internal sealed record CatalogTaxonomy(
     string BrandSlug,
     Guid ColourId,
     IReadOnlyList<Guid> ColourOptionIds,
-    Guid MaterialId);
+    Guid MaterialId,
+    string ColourCode = "");
 
 /// <summary>A product that exists, and the ids a test needs to act on it.</summary>
 /// <param name="Id">The product.</param>
@@ -81,7 +83,8 @@ internal sealed class CatalogScenario(HttpClient admin, CancellationToken cancel
             brand.Slug,
             colour.GetProperty("id").GetGuid(),
             [.. colour.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("id").GetGuid())],
-            material.GetProperty("id").GetGuid());
+            material.GetProperty("id").GetGuid(),
+            colour.GetProperty("code").GetString() ?? string.Empty);
     }
 
     /// <summary>Creates a category, optionally beneath another.</summary>
@@ -232,11 +235,17 @@ internal sealed class CatalogScenario(HttpClient admin, CancellationToken cancel
     /// <param name="vendorId">The seller it belongs to, or null for a platform-owned product.</param>
     /// <param name="compliant">Whether to supply the mandatory disclosures at all.</param>
     /// <param name="client">The client to create it through. Defaults to the scenario's own.</param>
+    /// <param name="name">
+    /// The product's title, or null for the scenario's own default. Named so a test that needs a
+    /// particular token in the product's own name — to prove a weighted rank against the same token
+    /// appearing only in a category or a brand — can ask for one without writing the whole product.
+    /// </param>
     public async Task<DraftedProduct> DraftAsync(
         CatalogTaxonomy taxonomy,
         Guid? vendorId = null,
         bool compliant = true,
-        HttpClient? client = null)
+        HttpClient? client = null,
+        string? name = null)
     {
         ArgumentNullException.ThrowIfNull(taxonomy);
 
@@ -248,7 +257,7 @@ internal sealed class CatalogScenario(HttpClient admin, CancellationToken cancel
                 "/api/v1/admin/products",
                 new
                 {
-                    name = $"Cotton Cushion Cover {suffix}",
+                    name = $"{name ?? "Cotton Cushion Cover"} {suffix}",
                     slug = (string?)null,
                     categoryId = taxonomy.CategoryId,
                     brandId = taxonomy.BrandId,
