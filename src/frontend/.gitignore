@@ -50,4 +50,11 @@ Thumbs.db
 .nx/migrate-runs
 .angular
 
-__screenshots__/
+# Playwright visual-regression baselines (apps/*-e2e/src/__screenshots__/) are committed on
+# purpose — Step 30 — so __screenshots__ is deliberately NOT ignored here.
+
+# Playwright run artifacts: the responsive-qa sweep's risk-area review screenshots
+# (test-output/responsive-review/, Step 30) and default test-results/ failure traces are QA
+# artifacts to look at locally, not baselines to commit — unlike __screenshots__ above.
+/test-output
+test-results

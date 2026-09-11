@@ -1,0 +1,10 @@
+<!--
+  Favicon source — the mark alone, redrawn slightly bolder (thicker legs, no space cut away)
+  so the shape survives down to 16px. Same arc radius (20) and fill as mark.svg; only the leg
+  width and canvas differ.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="kh-favicon-title">
+  <title id="kh-favicon-title">Klara Home</title>
+  <rect width="48" height="48" rx="10" fill="#faf6f1" />
+  <path d="M9 40 V21 A15 15 0 0 1 39 21 V40 Z" fill="#714c35" />
+</svg>

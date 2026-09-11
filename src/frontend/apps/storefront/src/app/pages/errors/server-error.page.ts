@@ -15,6 +15,9 @@ import { SeoService } from '@klarahome/util';
   imports: [Button, EmptyState, RouterLink],
   template: `
     <h1 class="kh-visually-hidden">Something went wrong</h1>
+    <!-- Outside kh-empty-state for the same reason noted on the 404 page: the component's own
+         rule is plain text and a single action, no illustration. -->
+    <img class="art" src="brand/error-500.svg" alt="" width="240" height="160" />
     <kh-empty-state
       heading="Something went wrong at our end"
       message="This is not your fault, and nothing you were doing has been lost. Try again in a moment."
@@ -26,6 +29,12 @@ import { SeoService } from '@klarahome/util';
     </kh-empty-state>
   `,
   styles: `
+    .art {
+      display: block;
+      margin-inline: auto;
+      margin-block-start: var(--space-6);
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;

@@ -4,7 +4,7 @@ import { ProductSearchService } from '@klarahome/data-access-catalog';
 import { StoreConfigService, StoreContentService } from '@klarahome/data-access-content';
 import { SessionStore } from '@klarahome/data-access-auth';
 import { BannerView, MiniCartLine, NavItem, SuggestionView } from '@klarahome/ui-patterns';
-import { SeoService } from '@klarahome/util';
+import { SeoService, ThemeService } from '@klarahome/util';
 import { money } from '@klarahome/domain';
 import { Subject, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 
@@ -42,6 +42,7 @@ export class ShellStore {
   private readonly cart = inject(CartSummaryStore);
   private readonly session = inject(SessionStore);
   private readonly seo = inject(SeoService);
+  private readonly theme = inject(ThemeService);
   private readonly search = inject(ProductSearchService);
   private readonly mapper = inject(CatalogMapper);
   private readonly recentSearches = inject(RecentSearchesStore);
@@ -124,6 +125,10 @@ export class ShellStore {
       // the two answers second completes the pair instead of overwriting it.
       this.seo.configure({ storeName: this.storeName() });
       this.publishSiteStructuredData();
+      // The white-label mechanism (docs/10-design-system.md §6): whatever token overrides this
+      // tenant's branding section carries are applied to `:root` now, during the same SSR pass
+      // that renders the header with this tenant's name.
+      this.theme.apply(this.config.branding().themeTokens);
     });
     this.content
       .banners('AnnouncementBar')

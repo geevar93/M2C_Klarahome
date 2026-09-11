@@ -1,0 +1,18 @@
+<!--
+  Klara Home wordmark — the mark (mark.svg) plus "Klara Home" set in Fraunces 600, the display
+  face (docs/10-design-system.md §2). Ink for the type, the same ratio the token doc verifies for
+  body text on the page ground (16.28:1). This file assumes Fraunces is already loaded on the
+  page it is embedded in; opened on its own it falls back to the metric-adjusted fallback stack.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" role="img" aria-labelledby="kh-wordmark-title">
+  <title id="kh-wordmark-title">Klara Home</title>
+  <path d="M8 52 V28 A20 20 0 0 1 44 28 V52 Z" fill="#714c35" />
+  <text
+    x="60"
+    y="43"
+    font-family="Fraunces, 'Fraunces Fallback', Georgia, serif"
+    font-weight="600"
+    font-size="34"
+    fill="#340c00"
+  >Klara Home</text>
+</svg>

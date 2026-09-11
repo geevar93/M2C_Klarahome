@@ -2,7 +2,9 @@
   "name": "@klarahome/frontend",
   "version": "0.0.0",
   "license": "UNLICENSED",
-  "scripts": {},
+  "scripts": {
+    "stylelint": "stylelint \"libs/**/*.scss\" \"apps/**/*.scss\" --ignore-path .stylelintignore"
+  },
   "private": true,
   "devDependencies": {
     "@angular-devkit/core": "~22.1.0",
@@ -41,7 +43,10 @@
     "jsdom": "^27.1.0",
     "msw": "2.15.0",
     "nx": "23.2.0",
+    "postcss-styled-syntax": "0.7.2",
     "prettier": "^3.8.1",
+    "stylelint": "17.15.0",
+    "stylelint-config-standard-scss": "17.0.0",
     "ts-jest": "^29.4.7",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/stylelintrc.json",
+  "customSyntax": "postcss-scss",
+  "rules": {
+    "color-no-hex": [true, { "message": "Use a design token (var(--color-*) / var(--brand-*)) instead of a hard-coded hex colour — see docs/10-design-system.md §1." }],
+    "function-disallowed-list": [
+      ["rgb", "rgba", "hsl", "hsla"],
+      { "message": "Use a design token instead of a hard-coded rgb()/hsl() colour literal — see docs/10-design-system.md §1." }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/styles/_tokens.scss", "**/_tokens.scss"],
+      "rules": {
+        "color-no-hex": null,
+        "function-disallowed-list": null
+      }
+    }
+  ]
+}

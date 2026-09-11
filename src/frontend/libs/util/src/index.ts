@@ -11,4 +11,5 @@ export * from './lib/runtime-config';
 export * from './lib/runtime-config.server';
 export * from './lib/seo';
 export * from './lib/storage';
+export * from './lib/theme.service';
 export * from './lib/toasts';

@@ -74,6 +74,15 @@ const DEFAULT_SITE_CONFIG: SeoSiteConfig = {
 /** The attribute every tag this service owns is marked with, so it can find its own again. */
 const OWNED = 'data-kh-seo';
 
+/**
+ * The site-wide fallback share image, used whenever a page supplies none of its own — most pages
+ * that are not a product or a vendor. `apps/storefront/public/brand/og-default.png`, 1200x630,
+ * generated from `og-default.svg` (docs/steps/step-30-design-system-theming-and-visual-identity.md,
+ * brand assets). A path, not a hardcoded host, so it resolves against whichever origin the
+ * deployment's `canonicalBaseUrl` names.
+ */
+const DEFAULT_OG_IMAGE_PATH = '/brand/og-default.png';
+
 @Injectable({ providedIn: 'root' })
 export class SeoService {
   private readonly document = inject(DOCUMENT);
@@ -139,7 +148,7 @@ export class SeoService {
     this.setTag('property', 'og:description', description);
     this.setTag('property', 'og:type', metadata.ogType ?? 'website');
     this.setTag('property', 'og:url', this.absolute(metadata.canonicalPath));
-    this.setTag('property', 'og:image', metadata.imageUrl ?? '');
+    this.setTag('property', 'og:image', metadata.imageUrl ?? this.absolute(DEFAULT_OG_IMAGE_PATH));
     this.setTag('name', 'twitter:card', this.site.twitterCardType);
   }
 

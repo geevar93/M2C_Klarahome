@@ -1,0 +1,25 @@
+<!--
+  Default Open Graph / social-share image — 1200x630, the size every crawler that ignores
+  og:image:width still assumes. Wordmark on the sand ground with the bronze/olive ramp as a
+  quiet band, nothing photographic (docs/10-design-system.md's imagery rules: products are the
+  only photography this store shows, and this image has no product to show).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="kh-og-title">
+  <title id="kh-og-title">Klara Home</title>
+  <rect width="1200" height="630" fill="#faf6f1" />
+  <rect x="0" y="0" width="1200" height="14" fill="#9e6d43" />
+  <rect x="0" y="616" width="1200" height="14" fill="#47351f" />
+
+  <!-- The mark, scaled up, offset left of the wordmark type. -->
+  <path d="M470 420 V300 A130 130 0 0 1 730 300 V420 Z" fill="#714c35" />
+
+  <text
+    x="600"
+    y="500"
+    text-anchor="middle"
+    font-family="Fraunces, 'Fraunces Fallback', Georgia, serif"
+    font-weight="600"
+    font-size="86"
+    fill="#340c00"
+  >Klara Home</text>
+</svg>

@@ -1,0 +1,10 @@
+<!--
+  Maskable variant — full-bleed background (no baked-in corner radius; the OS applies its own
+  mask shape) with the glyph shrunk to sit inside the ~80% "safe zone" maskable icons require, so
+  a circular or squircle mask never clips the arch.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="kh-icon-maskable-title">
+  <title id="kh-icon-maskable-title">Klara Home</title>
+  <rect width="64" height="64" fill="#f4ece2" />
+  <path d="M17 47 V33 A15 15 0 0 1 47 33 V47 Z" fill="#714c35" />
+</svg>

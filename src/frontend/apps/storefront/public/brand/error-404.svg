@@ -1,0 +1,20 @@
+<!--
+  404 art — typographic and geometric only, no photography or illustrated icon, matching the
+  store's imagery rules. Two arches drawn slightly apart, one of them missing its base, standing
+  in for a doorway that does not lead anywhere. Used above kh-empty-state on the not-found page;
+  kh-empty-state itself stays plain text/actions (docs/10-design-system-placeholder.md §3), so
+  this art sits outside it rather than inside it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-hidden="true">
+  <path d="M40 140 V80 A40 40 0 0 1 120 80 V140" fill="none" stroke="#cda887" stroke-width="8" stroke-linecap="round" />
+  <path d="M150 140 V100 A40 40 0 0 1 230 100" fill="none" stroke="#9e6d43" stroke-width="8" stroke-linecap="round" />
+  <text
+    x="120"
+    y="158"
+    text-anchor="middle"
+    font-family="Fraunces, 'Fraunces Fallback', Georgia, serif"
+    font-weight="600"
+    font-size="28"
+    fill="#340c00"
+  >404</text>
+</svg>

@@ -1,0 +1,10 @@
+<!--
+  App icon source (non-maskable) — the favicon tile at a larger canvas, used to derive the
+  192x192 / 512x512 PWA icons. Background radius is the token doc's `--radius-lg` (14px at this
+  scale), sand-100 fill so a coffee-brown glyph sits on the theme's own raised surface.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="kh-icon-title">
+  <title id="kh-icon-title">Klara Home</title>
+  <rect width="64" height="64" rx="14" fill="#f4ece2" />
+  <path d="M12 52 V32 A20 20 0 0 1 52 32 V52 Z" fill="#714c35" />
+</svg>

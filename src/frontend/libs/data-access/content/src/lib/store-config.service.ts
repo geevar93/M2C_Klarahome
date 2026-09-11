@@ -7,6 +7,12 @@ import { Observable, catchError, of, shareReplay, tap } from 'rxjs';
 export interface StoreBranding {
   readonly storeName: string;
   readonly tagline: string;
+  /**
+   * Design-token overrides for this tenant, keyed by CSS custom property name — the white-label
+   * mechanism (docs/10-design-system.md §6). Empty for a tenant that has never set them, which
+   * leaves the compiled `_tokens.scss` defaults in place. Applied by `ThemeService`, not read here.
+   */
+  readonly themeTokens: Readonly<Record<string, string>>;
 }
 
 /**
@@ -31,10 +37,13 @@ export class StoreConfigService {
 
   /** Branding, with the defaults the API itself declares — never a blank header. */
   readonly branding: Signal<StoreBranding> = computed(() => {
-    const branding = (this.sections()['branding'] ?? {}) as Partial<StoreBranding>;
+    const branding = (this.sections()['branding'] ?? {}) as Partial<StoreBranding> & {
+      themeTokens?: Readonly<Record<string, string>>;
+    };
     return {
       storeName: branding.storeName?.trim() || 'Klara Home',
       tagline: branding.tagline?.trim() || '',
+      themeTokens: branding.themeTokens ?? {},
     };
   });
 

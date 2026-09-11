@@ -18,6 +18,9 @@ import { SeoService } from '@klarahome/util';
   imports: [Button, EmptyState, RouterLink],
   template: `
     <h1 class="kh-visually-hidden">Page not found</h1>
+    <!-- The art sits outside kh-empty-state, not inside it: the component's own rule is plain
+         text and a single action, no illustration (docs/10-design-system-placeholder.md §3). -->
+    <img class="art" src="brand/error-404.svg" alt="" width="240" height="160" />
     <kh-empty-state
       heading="We could not find that page"
       message="The link may be old, or the product may no longer be listed. Search for what you were looking for, or start again from the home page."
@@ -29,6 +32,12 @@ import { SeoService } from '@klarahome/util';
     </kh-empty-state>
   `,
   styles: `
+    .art {
+      display: block;
+      margin-inline: auto;
+      margin-block-start: var(--space-6);
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;

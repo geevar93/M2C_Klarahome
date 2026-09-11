@@ -1,0 +1,20 @@
+<!--
+  500 art — same visual language as error-404.svg: geometric, not illustrated. One arch, drawn
+  with a broken keystone, standing in for something that failed structurally rather than a page
+  that was never there. Used above kh-empty-state on the server-error page, outside the component
+  for the same reason noted in error-404.svg.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-hidden="true">
+  <path d="M60 140 V80 A40 40 0 0 1 96 42" fill="none" stroke="#9e6d43" stroke-width="8" stroke-linecap="round" />
+  <path d="M124 42 A40 40 0 0 1 140 80 V140" fill="none" stroke="#9e6d43" stroke-width="8" stroke-linecap="round" />
+  <circle cx="110" cy="42" r="6" fill="#47351f" />
+  <text
+    x="120"
+    y="158"
+    text-anchor="middle"
+    font-family="Fraunces, 'Fraunces Fallback', Georgia, serif"
+    font-weight="600"
+    font-size="28"
+    fill="#340c00"
+  >500</text>
+</svg>

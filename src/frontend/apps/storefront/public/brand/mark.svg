@@ -1,0 +1,14 @@
+<!--
+  Klara Home mark — a single abstract arch/doorway, built from the design system's own radius
+  scale (docs/10-design-system.md §3): the top of the arch is one arc of radius 20, the largest
+  step on the `--radius-xl` scale, not a bespoke curve. No illustrated icon, no photography —
+  the imagery rule the token doc records for this store.
+
+  Source of truth for every derived asset (favicon, app icons, OG image, wordmark mark). Edit
+  here and re-derive the rest; do not hand-edit the copies under apps/admin/public/brand or the
+  rasterised PNG/ICO files.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="kh-mark-title">
+  <title id="kh-mark-title">Klara Home</title>
+  <path d="M4 44 V20 A20 20 0 0 1 44 20 V44 Z" fill="#714c35" />
+</svg>

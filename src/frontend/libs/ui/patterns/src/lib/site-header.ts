@@ -35,8 +35,12 @@ import { NavItem, isInternalHref } from './navigation.model';
         <kh-icon name="menu" />
       </button>
 
-      <!-- The logo slot is a text wordmark read from store settings; no brand assets before
-           Step 30 (docs/10-design-system-placeholder.md §1.3). -->
+      <!-- Text wordmark, deliberately: the header reads the store's *name* from settings, which
+           for a second white-labelled tenant is not "Klara Home" — a wordmark SVG baked with this
+           tenant's name would break the mechanism proven in docs/10-design-system.md §6. The
+           standalone brand mark (apps/storefront/public/brand/mark.svg) is tenant-agnostic and
+           deliberately not used here for the same reason; it is used where the brand, not the
+           tenant, is being identified (favicon, PWA icons, OG image, error art). -->
       <a class="wordmark" routerLink="/">{{ storeName() }}</a>
 
       <nav class="primary" [attr.aria-label]="'Primary'">
