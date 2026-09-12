@@ -92,10 +92,30 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
 
+    /* A bottom sheet is a phone idiom. From 'md' (768px, _breakpoints.scss) the same panel is a
+       centred dialog: a form stretched across a 1440px window is a form nobody can scan. */
+    @media (min-width: 768px) {
+      :host([data-side='bottom']) .panel {
+        inset: 50% auto auto 50%;
+        width: min(32rem, calc(100vw - var(--space-12)));
+        max-height: min(90vh, 48rem);
+        border-radius: var(--radius-lg);
+        transform: translate(-50%, -50%);
+        animation-name: kh-dialog-in;
+      }
+    }
+
     @keyframes kh-drawer-in {
       from {
         opacity: 0.6;
         transform: translateY(var(--space-4));
+      }
+    }
+
+    @keyframes kh-dialog-in {
+      from {
+        opacity: 0.6;
+        transform: translate(-50%, calc(-50% + var(--space-4)));
       }
     }
 

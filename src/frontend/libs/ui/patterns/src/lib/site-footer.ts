@@ -11,56 +11,74 @@ import { NavItem, isInternalHref } from './navigation.model';
  * else (docs/07-security-compliance.md §5). The menu is CMS-driven so a compliance page can be
  * added without a deploy, and the copyright line is computed rather than typed so it does not
  * quietly say 2026 for ever.
+ *
+ * The content sits in the same `.kh-container` the page body uses, so the first column starts on
+ * the same vertical line as the content above it; the link columns are rendered only when there is
+ * a menu, so a store that has not built one yet gets a one-line footer rather than an empty band.
  */
 @Component({
   selector: 'kh-site-footer',
   imports: [RouterLink],
   template: `
-    <footer>
-      <div class="inner">
-        @for (group of menu(); track group.label) {
-          <nav class="group" [attr.aria-label]="group.label">
-            <h2 class="group-title">{{ group.label }}</h2>
-            <ul>
-              @for (item of group.children ?? []; track item.label) {
-                <li>
-                  @if (isInternal(item.href)) {
-                    <a [routerLink]="item.href">{{ item.label }}</a>
-                  } @else if (item.href) {
-                    <a
-                      [href]="item.href"
-                      [attr.target]="item.opensInNewTab ? '_blank' : null"
-                      rel="noopener"
-                      >{{ item.label }}</a
-                    >
-                  } @else {
-                    <span>{{ item.label }}</span>
+    <footer [class.clears-sticky-bar]="clearsStickyBar()">
+      <div class="kh-container">
+        @if (menu().length > 0) {
+          <div class="groups">
+            @for (group of menu(); track group.label) {
+              <nav class="group" [attr.aria-label]="group.label">
+                <h2 class="group-title">{{ group.label }}</h2>
+                <ul>
+                  @for (item of group.children ?? []; track item.label) {
+                    <li>
+                      @if (isInternal(item.href)) {
+                        <a [routerLink]="item.href">{{ item.label }}</a>
+                      } @else if (item.href) {
+                        <a
+                          [href]="item.href"
+                          [attr.target]="item.opensInNewTab ? '_blank' : null"
+                          rel="noopener"
+                          >{{ item.label }}</a
+                        >
+                      } @else {
+                        <span>{{ item.label }}</span>
+                      }
+                    </li>
                   }
-                </li>
-              }
-            </ul>
-          </nav>
+                </ul>
+              </nav>
+            }
+          </div>
         }
-      </div>
 
-      <p class="legal">© {{ year }} {{ storeName() }}. All rights reserved.</p>
+        <div class="bottom">
+          <p class="legal">© {{ year }} {{ storeName() }}. All rights reserved.</p>
+          @if (poweredBy(); as vendor) {
+            <p class="powered">Powered by <span class="vendor">{{ vendor }}</span></p>
+          }
+        </div>
+      </div>
     </footer>
   `,
   styles: `
     footer {
       border-block-start: 1px solid var(--color-border);
       background: var(--color-surface);
-      padding: var(--space-8) var(--space-4) var(--space-6);
-      /* Clears the sticky action bar on a phone, so the last link is reachable. */
+      padding-block: var(--space-6);
+    }
+
+    /* Reserved only while a page has registered a sticky action, the same rule as the shell's
+       \`main.has-sticky-action\`: an empty bar reserves nothing. */
+    footer.clears-sticky-bar {
       padding-block-end: calc(var(--bottom-bar-height) + var(--space-6));
     }
 
-    .inner {
+    .groups {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(12rem, 100%), 1fr));
       gap: var(--space-6);
-      max-width: var(--container-max);
-      margin-inline: auto;
+      margin-block-end: var(--space-6);
+      padding-block-end: var(--space-6);
+      border-block-end: 1px solid var(--color-border);
     }
 
     .group-title {
@@ -95,15 +113,29 @@ import { NavItem, isInternalHref } from './navigation.model';
       text-decoration: underline;
     }
 
-    .legal {
-      max-width: var(--container-max);
-      margin: var(--space-8) auto 0;
+    .bottom {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-2) var(--space-4);
+    }
+
+    .legal,
+    .powered {
+      margin: 0;
       color: var(--color-text-muted);
       font-size: var(--text-xs);
     }
 
+    .vendor {
+      font-weight: var(--weight-medium);
+      color: var(--color-text);
+    }
+
+    /* 1024px is the 'lg' breakpoint, where the sticky bar stops being fixed. */
     @media (min-width: 1024px) {
-      footer {
+      footer.clears-sticky-bar {
         padding-block-end: var(--space-6);
       }
     }
@@ -114,6 +146,10 @@ export class SiteFooter {
   readonly storeName = input('Klara Home');
   /** Top-level items are column headings; their children are the links. */
   readonly menu = input<readonly NavItem[]>([]);
+  /** Whether the page has a sticky action bar the last line has to clear. */
+  readonly clearsStickyBar = input(false);
+  /** The platform vendor's credit. Empty hides the line. */
+  readonly poweredBy = input('Stardust Technologies');
 
   protected readonly year = new Date().getFullYear();
   protected readonly isInternal = isInternalHref;

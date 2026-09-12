@@ -19,8 +19,8 @@ internal sealed record GetStorePageQuery(string? Slug) : IQuery<StorePageRespons
 /// <summary>Reads the published home page.</summary>
 internal sealed record GetHomePageQuery : IQuery<StorePageResponse>;
 
-/// <summary>Reads one menu by its code.</summary>
-/// <param name="Code">Its stable key.</param>
+/// <summary>Reads one menu by its code, or failing that by the placement the code names.</summary>
+/// <param name="Code">Its stable key, or a placement such as <c>header</c>.</param>
 internal sealed record GetStoreMenuQuery(string? Code) : IQuery<StoreMenuResponse>;
 
 /// <summary>Reads the banners that should render in one placement right now.</summary>
@@ -130,10 +130,26 @@ internal sealed class GetStoreMenuQueryHandler(ContentDbContext context, MenuCom
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        var code = query.Code?.Trim() ?? string.Empty;
+
+        // The placement is matched as a literal, so a code arriving from the URL cannot widen it.
+        var placement = code
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+
+        // By code first, which is the contract; by placement second, because the storefront asks for
+        // "header" and an editor who called their navigation "Cosmetics" and placed it in the header
+        // meant it for the header. The alternative is a live shop with an empty navigation bar.
         var menu = await context.Menus
             .AsNoTracking()
             .Include(row => row.Items)
-            .FirstOrDefaultAsync(row => row.Code == query.Code && row.IsActive, cancellationToken)
+            .Where(row => row.IsActive
+                && (row.Code == code
+                    || (row.Placement != null && EF.Functions.ILike(row.Placement, placement, "\\"))))
+            .OrderBy(row => row.Code == code ? 0 : 1)
+            .ThenBy(row => row.Id)
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
         if (menu is null)

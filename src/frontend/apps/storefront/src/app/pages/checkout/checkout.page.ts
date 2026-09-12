@@ -281,6 +281,11 @@ const SESSION_KEY = 'kh.checkout.session';
       margin-block-end: var(--space-4);
     }
 
+    .step kh-alert {
+      display: block;
+      margin-block-end: var(--space-4);
+    }
+
     .review-block {
       padding-block: var(--space-4);
       border-block-end: 1px solid var(--color-border);

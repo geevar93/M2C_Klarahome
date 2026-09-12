@@ -89,6 +89,17 @@ export const MENU_LINK_TYPES: readonly Choice<MenuLinkType>[] = [
   { value: 'None', label: 'Nothing — a heading', hint: 'A label with children under it.' },
 ];
 
+/**
+ * Where the storefront draws a menu.
+ *
+ * The storefront asks for `header` and `footer` by code, and falls back to a menu *placed* there
+ * whatever its code — so an editor who names their navigation "Cosmetics" still gets a header.
+ */
+export const MENU_PLACEMENTS: readonly Choice[] = [
+  { value: 'header', label: 'Header', hint: 'The primary navigation, and the mobile drawer.' },
+  { value: 'footer', label: 'Footer', hint: 'Columns of links: each top-level item is a heading.' },
+];
+
 export const COLLECTION_KINDS: readonly Choice<CollectionKind>[] = [
   { value: 'Manual', label: 'Chosen by hand' },
   { value: 'Rule', label: 'Filled by a rule' },

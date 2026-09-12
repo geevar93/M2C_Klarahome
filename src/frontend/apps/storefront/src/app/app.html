@@ -65,7 +65,11 @@
   <router-outlet />
 </main>
 
-<kh-site-footer [storeName]="shell.storeName()" [menu]="shell.footerMenu()" />
+<kh-site-footer
+  [storeName]="shell.storeName()"
+  [menu]="shell.footerMenu()"
+  [clearsStickyBar]="hasStickyAction()"
+/>
 
 <kh-sticky-action-bar />
 <kh-toast-host />

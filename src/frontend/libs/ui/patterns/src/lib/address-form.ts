@@ -75,39 +75,41 @@ export interface AddressFormValue {
   imports: [Button, Checkbox, Control, Field],
   template: `
     <form (submit)="submit($event)" novalidate>
-      <kh-field label="Full name" for="addr-name" [error]="form.fields.recipientName.error()">
-        <input
-          khControl
-          id="addr-name"
-          type="text"
-          autocomplete="name"
-          [khInvalid]="!!form.fields.recipientName.error()"
-          [value]="form.fields.recipientName.value()"
-          (input)="form.fields.recipientName.set($any($event.target).value)"
-          (touched)="form.fields.recipientName.markTouched()"
-        />
-      </kh-field>
+      <div class="pair">
+        <kh-field label="Full name" for="addr-name" [error]="form.fields.recipientName.error()">
+          <input
+            khControl
+            id="addr-name"
+            type="text"
+            autocomplete="name"
+            [khInvalid]="!!form.fields.recipientName.error()"
+            [value]="form.fields.recipientName.value()"
+            (input)="form.fields.recipientName.set($any($event.target).value)"
+            (touched)="form.fields.recipientName.markTouched()"
+          />
+        </kh-field>
 
-      <kh-field
-        label="Mobile number"
-        for="addr-mobile"
-        hint="We send delivery updates to this number."
-        [error]="form.fields.mobile.error()"
-      >
-        <input
-          khControl
-          khNumeric
-          id="addr-mobile"
-          type="tel"
-          inputmode="numeric"
-          maxlength="13"
-          autocomplete="tel-national"
-          [khInvalid]="!!form.fields.mobile.error()"
-          [value]="form.fields.mobile.value()"
-          (input)="form.fields.mobile.set($any($event.target).value)"
-          (touched)="form.fields.mobile.markTouched()"
-        />
-      </kh-field>
+        <kh-field
+          label="Mobile number"
+          for="addr-mobile"
+          hint="We send delivery updates to this number."
+          [error]="form.fields.mobile.error()"
+        >
+          <input
+            khControl
+            khNumeric
+            id="addr-mobile"
+            type="tel"
+            inputmode="numeric"
+            maxlength="13"
+            autocomplete="tel-national"
+            [khInvalid]="!!form.fields.mobile.error()"
+            [value]="form.fields.mobile.value()"
+            (input)="form.fields.mobile.set($any($event.target).value)"
+            (touched)="form.fields.mobile.markTouched()"
+          />
+        </kh-field>
+      </div>
 
       <kh-field
         label="PIN code"
@@ -278,12 +280,13 @@ export interface AddressFormValue {
 
     .pair {
       display: grid;
-      gap: var(--space-4);
+      gap: 0 var(--space-4);
     }
 
     @media (min-width: 480px) {
       .pair {
         grid-template-columns: 1fr 1fr;
+        align-items: start;
       }
     }
 

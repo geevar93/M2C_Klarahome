@@ -272,6 +272,17 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./pages/errors/offline.page').then((m) => m.OfflinePage),
   },
 
+  // A CMS page at the site root — `/about`, `/returns-policy` — which is the address the admin shows
+  // an editor and the one they will paste into a WhatsApp message. Declared after every fixed route
+  // so `/cart` stays the cart, and before the catch-all so an unknown slug still ends on `/404`
+  // through the resolver's redirect. `/pages/:slug` stays the canonical address.
+  {
+    path: ':slug',
+    loadComponent: () => import('./pages/cms-page.page').then((m) => m.CmsPage),
+    resolve: { page: cmsPageResolver },
+    data: { breadcrumb: 'Page' },
+  },
+
   // Anything else is a 404 — and it is answered with a real 404 status, because `**` is declared
   // that way in `app.routes.server.ts`.
   {

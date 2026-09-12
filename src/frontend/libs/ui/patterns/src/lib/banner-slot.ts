@@ -62,6 +62,8 @@ import { BannerView } from './banner.model';
 
     .slot {
       position: relative;
+      /* On the slot, not the host, so an empty placement reserves nothing (see above). */
+      margin-block-start: var(--space-4);
     }
 
     .media {

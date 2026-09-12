@@ -15,7 +15,7 @@ import { Alert, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarah
 import { ToastService } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
-import { MENU_LINK_TYPES } from './content-vocabulary';
+import { MENU_LINK_TYPES, MENU_PLACEMENTS } from './content-vocabulary';
 
 /** One item as the editor holds it. Position comes from the array; depth from `parentId`. */
 interface ItemDraft {
@@ -239,15 +239,23 @@ interface ItemDraft {
             />
           </kh-field>
 
-          <kh-field label="Placement" for="menu-placement" [optional]="true">
-            <input
+          <kh-field
+            label="Placement"
+            for="menu-placement"
+            [optional]="true"
+            hint="Where the storefront draws it. A menu that is not placed is not shown anywhere."
+          >
+            <select
               khControl
               id="menu-placement"
-              type="text"
-              maxlength="60"
               [value]="placement()"
-              (input)="setPlacement($any($event.target).value)"
-            />
+              (change)="setPlacement($any($event.target).value)"
+            >
+              <option value="">Not placed</option>
+              @for (choice of placements; track choice.value) {
+                <option [value]="choice.value">{{ choice.label }} — {{ choice.hint }}</option>
+              }
+            </select>
           </kh-field>
 
           <kh-checkbox
@@ -356,6 +364,7 @@ export class MenuEditorPage implements HasUnsavedChanges {
   private readonly toasts = inject(ToastService);
 
   protected readonly linkTypes = MENU_LINK_TYPES;
+  protected readonly placements = MENU_PLACEMENTS;
   private readonly id = this.route.snapshot.paramMap.get('id') ?? '';
 
   protected readonly menu = signal<MenuResponse | null>(null);

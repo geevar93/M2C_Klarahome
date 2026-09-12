@@ -7,6 +7,7 @@ import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
+import { MENU_PLACEMENTS } from './content-vocabulary';
 
 /**
  * The storefront's menus.
@@ -93,9 +94,28 @@ import { tableDateTime } from '../../core/format';
       </kh-field>
 
       <kh-field
+        label="Placement"
+        for="menu-placement"
+        [optional]="true"
+        hint="Where the storefront draws it. A menu that is not placed is not shown anywhere."
+      >
+        <select
+          khControl
+          id="menu-placement"
+          [value]="form.fields.placement.value()"
+          (change)="setPlacement($any($event.target).value)"
+        >
+          <option value="">Not placed</option>
+          @for (choice of placements; track choice.value) {
+            <option [value]="choice.value">{{ choice.label }} — {{ choice.hint }}</option>
+          }
+        </select>
+      </kh-field>
+
+      <kh-field
         label="Code"
         for="menu-code"
-        hint="How the storefront asks for it. Not editable afterwards — a deployed page is already calling it."
+        hint="How the storefront asks for it: the header is 'header', the footer is 'footer'. Not editable afterwards — a deployed page is already calling it."
         [error]="form.fields.code.error()"
       >
         <input
@@ -105,17 +125,6 @@ import { tableDateTime } from '../../core/format';
           maxlength="60"
           [value]="form.fields.code.value()"
           (input)="form.fields.code.set($any($event.target).value)"
-        />
-      </kh-field>
-
-      <kh-field label="Placement" for="menu-placement" [optional]="true" hint="Header, footer, drawer.">
-        <input
-          khControl
-          id="menu-placement"
-          type="text"
-          maxlength="60"
-          [value]="form.fields.placement.value()"
-          (input)="form.fields.placement.set($any($event.target).value)"
         />
       </kh-field>
 
@@ -154,6 +163,7 @@ export class MenusPage {
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
 
+  protected readonly placements = MENU_PLACEMENTS;
   protected readonly menus = signal<readonly MenuSummaryResponse[]>([]);
   protected readonly loading = signal(false);
   protected readonly loadError = signal<string | null>(null);
@@ -194,6 +204,15 @@ export class MenusPage {
     this.createError.set(null);
     this.form.reset({ name: '', code: '', placement: '' });
     this.creating.set(true);
+  }
+
+  /** The code follows the placement until the editor types one of their own. */
+  protected setPlacement(value: string): void {
+    const code = this.form.fields.code.value();
+    this.form.fields.placement.set(value);
+    if (!code || this.placements.some((choice) => choice.value === code)) {
+      this.form.fields.code.set(value);
+    }
   }
 
   protected create(): void {

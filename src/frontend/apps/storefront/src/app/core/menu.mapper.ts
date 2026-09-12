@@ -22,8 +22,9 @@ export function toNavItems(items: readonly StoreMenuItemResponse[] | undefined):
  * The menu codes the storefront asks for.
  *
  * A menu's code is free text an editor chooses, so these two are a convention rather than a
- * contract the API enforces — and a typo in the admin screen is a header with no navigation in
- * it. Named here, once, so there is somewhere to look.
+ * contract the API enforces. The API answers by code first and by *placement* second, so a menu an
+ * editor named "cosmetics" but placed in the header still arrives here. Named once, so there is
+ * somewhere to look.
  */
 export const MENU_CODES = {
   header: 'header',
