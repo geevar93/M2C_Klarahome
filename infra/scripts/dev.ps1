@@ -28,7 +28,25 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $ComposeFile = Join-Path $RepoRoot 'infra/compose/docker-compose.dev.yml'
 $EnvFile = Join-Path $RepoRoot '.env'
 
+$LocalOverride = Join-Path $RepoRoot 'infra/compose/docker-compose.local.yml'
+
+function Get-EnvValue {
+    param([string]$Key, [string]$Default)
+    if (Test-Path $EnvFile) {
+        $match = Select-String -Path $EnvFile -Pattern "^\s*$Key\s*=\s*(.+?)\s*$" | Select-Object -First 1
+        if ($match) { return $match.Matches[0].Groups[1].Value }
+    }
+    return $Default
+}
+
+# Which reverse proxy fronts the stack. `caddy` (the default) is plain http on port 80 in the
+# production topology; `traefik` is the original https edge with the self-signed certificate.
+$Edge = (Get-EnvValue 'DEV_EDGE' 'caddy').ToLowerInvariant()
+if ($Edge -notin @('caddy', 'traefik')) { throw "DEV_EDGE must be 'caddy' or 'traefik' (got '$Edge')." }
+$Scheme = if ($Edge -eq 'caddy') { 'http' } else { 'https' }
+
 $compose = @('compose', '-f', $ComposeFile)
+if ($Edge -eq 'caddy') { $compose += @('-f', $LocalOverride) }
 if (Test-Path $EnvFile) {
     $compose += @('--env-file', $EnvFile)
 }
@@ -46,15 +64,6 @@ function Invoke-Compose {
     finally { Pop-Location }
 }
 
-function Get-EnvValue {
-    param([string]$Key, [string]$Default)
-    if (Test-Path $EnvFile) {
-        $match = Select-String -Path $EnvFile -Pattern "^\s*$Key\s*=\s*(.+?)\s*$" | Select-Object -First 1
-        if ($match) { return $match.Matches[0].Groups[1].Value }
-    }
-    return $Default
-}
-
 function Show-Urls {
     $domain = Get-EnvValue 'DEV_DOMAIN' 'klarahome.localhost'
     $bind = Get-EnvValue 'BIND_ADDRESS' '127.0.0.1'
@@ -67,23 +76,28 @@ function Show-Urls {
 
     Write-Host ''
     Write-Host 'Klara Home applications' -ForegroundColor Cyan
-    Write-Host "  Storefront         https://$domain"
-    Write-Host "  Admin back office  https://admin.$domain"
-    Write-Host "  API                https://api.$domain"
+    Write-Host "  Storefront         ${Scheme}://$domain"
+    Write-Host "  Admin back office  ${Scheme}://admin.$domain"
+    Write-Host "  API                ${Scheme}://api.$domain"
     Write-Host ''
     Write-Host 'Klara Home dev services' -ForegroundColor Cyan
-    Write-Host "  Traefik dashboard  https://traefik.$domain"
-    Write-Host "  MinIO console      https://minio.$domain   (or http://${bind}:$console)"
-    Write-Host "  MinIO S3 API       https://s3.$domain      (or http://${bind}:$s3)"
-    Write-Host "  Mailpit            https://mail.$domain    (or http://${bind}:$mailUi)"
+    if ($Edge -eq 'traefik') { Write-Host "  Traefik dashboard  https://traefik.$domain" }
+    Write-Host "  MinIO console      ${Scheme}://minio.$domain   (or http://${bind}:$console)"
+    Write-Host "  MinIO S3 API       ${Scheme}://s3.$domain      (or http://${bind}:$s3)"
+    Write-Host "  Mailpit            ${Scheme}://mail.$domain    (or http://${bind}:$mailUi)"
     Write-Host "  PostgreSQL         ${bind}:$pg"
     Write-Host "  Redis              ${bind}:$redis"
     Write-Host "  SMTP (Mailpit)     ${bind}:$smtp"
     Write-Host ''
-    Write-Host 'The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md.' -ForegroundColor DarkGray
-    Write-Host 'Accept it on api.' -NoNewline -ForegroundColor DarkGray
-    Write-Host "$domain too" -NoNewline -ForegroundColor DarkGray
-    Write-Host ' - the two apps call it with XHR, which gets no warning to click and just fails.' -ForegroundColor DarkGray
+    if ($Edge -eq 'caddy') {
+        Write-Host 'Edge: Caddy, plain http on port 80 (DEV_EDGE=caddy). No certificate to trust.' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host 'The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md.' -ForegroundColor DarkGray
+        Write-Host 'Accept it on api.' -NoNewline -ForegroundColor DarkGray
+        Write-Host "$domain too" -NoNewline -ForegroundColor DarkGray
+        Write-Host ' - the two apps call it with XHR, which gets no warning to click and just fails.' -ForegroundColor DarkGray
+    }
 }
 
 switch ($Command) {
@@ -92,7 +106,7 @@ switch ($Command) {
         # minio-init is a one-shot that exits 0. Start everything first, then wait
         # only on the long-running services.
         Invoke-Compose (@('up', '-d', '--remove-orphans') + $Rest)
-        Invoke-Compose @('up', '-d', '--no-recreate', '--wait', 'traefik', 'postgres', 'redis', 'minio', 'mailpit')
+        Invoke-Compose @('up', '-d', '--no-recreate', '--wait', $Edge, 'postgres', 'redis', 'minio', 'mailpit')
         Invoke-Compose @('ps')
         Show-Urls
     }

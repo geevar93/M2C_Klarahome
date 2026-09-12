@@ -1,0 +1,116 @@
+# Klara Home - local edge: Caddy on plain HTTP, in the production topology
+#
+# An OVERRIDE, applied on top of the dev stack:
+#
+#   docker compose -f infra/compose/docker-compose.dev.yml \
+#                  -f infra/compose/docker-compose.local.yml --env-file .env up -d
+#
+# or `DEV_EDGE=caddy` in .env and the usual `./infra/scripts/dev.ps1 up`.
+#
+# What it changes, and nothing else:
+#   * Traefik is parked behind a profile and Caddy takes port 80 - the same reverse proxy, the
+#     same one-hostname-per-surface layout, and the same container-network reach as the VPS
+#     (docker-compose.prod.yml, infra/caddy/Caddyfile).
+#   * Every URL a browser or a container is told about becomes http://. The self-signed dev
+#     certificate is what broke the local stack: Chrome refuses an XHR or an <img> from a host
+#     whose certificate it does not trust, silently, so the shop looked empty, sign-in did
+#     nothing and every image was a broken icon. Over http there is nothing to trust.
+#   * Same volumes, same database, same containers otherwise: switching edges loses no data.
+#
+# Values are set outright rather than `${VAR:-default}` where .env already carries an https
+# default for the Traefik edge (KH_API_BASE_URL, Storage__PublicBaseUrl and friends), so that a
+# stale https value in .env cannot leak into the http stack.
+
+services:
+  # Parked, not removed: a compose override cannot delete a service, but a service in a profile
+  # nobody enables is never started. `--profile traefik` brings it back.
+  traefik:
+    profiles: ["traefik"]
+
+  caddy:
+    # The dev file's `*defaults` anchor is not visible from an override file, so spelled out.
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    image: caddy:2.10-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-caddy
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-80}:80"
+    environment:
+      KH_DOMAIN: ${DEV_DOMAIN:-klarahome.localhost}
+    volumes:
+      - ../caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      edge:
+        # The storefront renders on the server and fetches the API by its public hostname (see
+        # the note on the traefik service in docker-compose.dev.yml). Inside the compose network
+        # those names have to resolve to the edge, which is now this container.
+        aliases:
+          - ${DEV_DOMAIN:-klarahome.localhost}
+          - www.${DEV_DOMAIN:-klarahome.localhost}
+          - api.${DEV_DOMAIN:-klarahome.localhost}
+          - admin.${DEV_DOMAIN:-klarahome.localhost}
+          - img.${DEV_DOMAIN:-klarahome.localhost}
+          - s3.${DEV_DOMAIN:-klarahome.localhost}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header=Host: api.${DEV_DOMAIN:-klarahome.localhost}", "http://127.0.0.1/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+  minio:
+    environment:
+      MINIO_BROWSER_REDIRECT_URL: http://minio.${DEV_DOMAIN:-klarahome.localhost}
+      MINIO_SERVER_URL: http://s3.${DEV_DOMAIN:-klarahome.localhost}
+
+  api:
+    environment:
+      Auth__External__CallbackBaseUrl: http://api.${DEV_DOMAIN:-klarahome.localhost}
+      Auth__External__AllowedReturnUrls__0: http://${DEV_DOMAIN:-klarahome.localhost}
+      Auth__External__DefaultReturnUrl: http://${DEV_DOMAIN:-klarahome.localhost}/
+      # Cookies cannot be Secure on an http origin or the browser drops them on the floor.
+      Auth__Tokens__RefreshCookieSecure: "false"
+      Carts__CartCookieSecure: "false"
+      Cors__AllowedOrigins__0: http://${DEV_DOMAIN:-klarahome.localhost}
+      Cors__AllowedOrigins__1: http://admin.${DEV_DOMAIN:-klarahome.localhost}
+      Storage__PublicBaseUrl: http://s3.${DEV_DOMAIN:-klarahome.localhost}/${STORAGE_PUBLIC_BUCKET:-media-public}
+      Storage__SignedUrlEndpoint: http://s3.${DEV_DOMAIN:-klarahome.localhost}
+      Media__Imgproxy__BaseUrl: http://img.${DEV_DOMAIN:-klarahome.localhost}
+
+  worker:
+    environment:
+      Storage__PublicBaseUrl: http://s3.${DEV_DOMAIN:-klarahome.localhost}/${STORAGE_PUBLIC_BUCKET:-media-public}
+      Storage__SignedUrlEndpoint: http://s3.${DEV_DOMAIN:-klarahome.localhost}
+
+  storefront:
+    depends_on:
+      caddy:
+        condition: service_started
+    environment:
+      KH_API_BASE_URL: http://api.${DEV_DOMAIN:-klarahome.localhost}
+      KH_ALLOWED_HOSTS: ${DEV_DOMAIN:-klarahome.localhost},www.${DEV_DOMAIN:-klarahome.localhost},localhost,127.0.0.1
+      # Plain http between the renderer and the API: there is no certificate to reject.
+      NODE_TLS_REJECT_UNAUTHORIZED: "1"
+
+  admin:
+    environment:
+      KH_API_BASE_URL: http://api.${DEV_DOMAIN:-klarahome.localhost}
+
+volumes:
+  caddy-data:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-caddy-data
+  caddy-config:
+    name: ${COMPOSE_PROJECT_NAME:-klarahome-dev}-caddy-config

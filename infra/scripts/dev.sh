@@ -10,16 +10,9 @@ REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 COMPOSE_FILE="$REPO_ROOT/infra/compose/docker-compose.dev.yml"
 ENV_FILE="$REPO_ROOT/.env"
 
+LOCAL_OVERRIDE="$REPO_ROOT/infra/compose/docker-compose.local.yml"
 COMMAND=${1:-up}
 [ $# -gt 0 ] && shift
-
-compose() {
-    if [ -f "$ENV_FILE" ]; then
-        (cd "$REPO_ROOT" && docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@")
-    else
-        (cd "$REPO_ROOT" && docker compose -f "$COMPOSE_FILE" "$@")
-    fi
-}
 
 env_value() {
     # env_value KEY DEFAULT
@@ -28,6 +21,25 @@ env_value() {
         value=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*\)$/\1/p" "$ENV_FILE" | head -n 1)
     fi
     [ -n "$value" ] && printf '%s' "$value" || printf '%s' "$2"
+}
+
+# Which reverse proxy fronts the stack. `caddy` (the default) is plain http on port 80 in the
+# production topology; `traefik` is the original https edge with the self-signed certificate.
+EDGE=$(env_value DEV_EDGE caddy | tr '[:upper:]' '[:lower:]')
+case "$EDGE" in
+    caddy)   SCHEME=http;  FILES="-f $COMPOSE_FILE -f $LOCAL_OVERRIDE" ;;
+    traefik) SCHEME=https; FILES="-f $COMPOSE_FILE" ;;
+    *) echo "DEV_EDGE must be 'caddy' or 'traefik' (got '$EDGE')." >&2; exit 64 ;;
+esac
+
+compose() {
+    # $FILES is deliberately unquoted: it is two or four separate arguments.
+    # shellcheck disable=SC2086
+    if [ -f "$ENV_FILE" ]; then
+        (cd "$REPO_ROOT" && docker compose $FILES --env-file "$ENV_FILE" "$@")
+    else
+        (cd "$REPO_ROOT" && docker compose $FILES "$@")
+    fi
 }
 
 show_urls() {
@@ -42,23 +54,27 @@ show_urls() {
     cat <<EOF
 
 Klara Home applications
-  Storefront         https://$domain
-  Admin back office  https://admin.$domain
-  API                https://api.$domain
+  Storefront         $SCHEME://$domain
+  Admin back office  $SCHEME://admin.$domain
+  API                $SCHEME://api.$domain
 
 Klara Home dev services
-  Traefik dashboard  https://traefik.$domain
-  MinIO console      https://minio.$domain   (or http://$bind:$console)
-  MinIO S3 API       https://s3.$domain      (or http://$bind:$s3)
-  Mailpit            https://mail.$domain    (or http://$bind:$mail_ui)
+  MinIO console      $SCHEME://minio.$domain   (or http://$bind:$console)
+  MinIO S3 API       $SCHEME://s3.$domain      (or http://$bind:$s3)
+  Mailpit            $SCHEME://mail.$domain    (or http://$bind:$mail_ui)
   PostgreSQL         $bind:$pg
   Redis              $bind:$rd
   SMTP (Mailpit)     $bind:$smtp
 
-The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md.
-Accept it on api.$domain too: the two apps call it with XHR, which gets no
-warning to click and simply fails.
 EOF
+    if [ "$EDGE" = caddy ]; then
+        echo "Edge: Caddy, plain http on port 80 (DEV_EDGE=caddy). No certificate to trust."
+    else
+        echo "  Traefik dashboard  https://traefik.$domain"
+        echo "The TLS certificate is self-signed - accept the browser warning, or see docs/dev-setup.md."
+        echo "Accept it on api.$domain too: the two apps call it with XHR, which gets no"
+        echo "warning to click and simply fails."
+    fi
 }
 
 case "$COMMAND" in
@@ -67,7 +83,7 @@ case "$COMMAND" in
         # minio-init is a one-shot that exits 0. Start everything first, then wait
         # only on the long-running services.
         compose up -d --remove-orphans "$@"
-        compose up -d --no-recreate --wait traefik postgres redis minio mailpit
+        compose up -d --no-recreate --wait "$EDGE" postgres redis minio mailpit
         compose ps
         show_urls
         ;;

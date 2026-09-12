@@ -1,0 +1,99 @@
+# =============================================================================
+# Klara Home - Caddy site configuration (LOCAL, plain HTTP)
+# =============================================================================
+# The local edge, in the same shape as production (infra/caddy/Caddyfile): one Caddy in front,
+# one hostname per surface, every container reached only through it. Two deliberate differences:
+#
+#   * Plain HTTP on port 80, no TLS. The `*.klarahome.localhost` names resolve to the loopback in
+#     every browser with no hosts-file entry, and over http there is no certificate to trust. That
+#     is the whole reason this file exists: the self-signed dev certificate is refused by Chrome
+#     for every XHR and every <img> from a subdomain, with no interstitial to click through, and
+#     the symptom is an empty shop, a sign-in button that does nothing, and broken images.
+#   * Upstreams are compose service names, not 127.0.0.1 ports: this Caddy is a container on the
+#     same network (docker-compose.local.yml), exactly as the shared `web` network on the VPS.
+#
+# Seven names, seven upstreams:
+#   {$KH_DOMAIN}        -> storefront:4000   (Node, server-rendered)
+#   www.{$KH_DOMAIN}    -> redirect to the apex
+#   api.{$KH_DOMAIN}    -> api:8080
+#   admin.{$KH_DOMAIN}  -> admin:8080        (static files behind nginx)
+#   img.{$KH_DOMAIN}    -> imgproxy:8080     (production calls this cdn.; both answer here)
+#   s3.{$KH_DOMAIN}     -> minio:9000
+#   mail.{$KH_DOMAIN}   -> mailpit:8025      (every outbound email, captured)
+#   minio.{$KH_DOMAIN}  -> minio:9001        (the object-store console)
+# =============================================================================
+{
+	admin off
+	# Plain HTTP everywhere: no certificates are issued, and nothing is redirected to https.
+	auto_https off
+}
+
+(security_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(self)"
+		-Server
+	}
+}
+
+http://{$KH_DOMAIN} {
+	import security_headers
+	encode zstd gzip
+
+	reverse_proxy storefront:4000 {
+		transport http {
+			response_header_timeout 30s
+		}
+	}
+}
+
+http://www.{$KH_DOMAIN} {
+	redir http://{$KH_DOMAIN}{uri} permanent
+}
+
+http://api.{$KH_DOMAIN} {
+	import security_headers
+	encode zstd gzip
+
+	reverse_proxy api:8080 {
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+}
+
+http://admin.{$KH_DOMAIN} {
+	import security_headers
+	encode zstd gzip
+
+	reverse_proxy admin:8080
+}
+
+# imgproxy. `img.` is the dev name the API is configured with; `cdn.` is what production uses.
+http://img.{$KH_DOMAIN}, http://cdn.{$KH_DOMAIN} {
+	import security_headers
+
+	reverse_proxy imgproxy:8080
+}
+
+# MinIO's S3 API. Presigned URLs are signed for this exact host (MINIO_SERVER_URL names it), so
+# the Host header is passed through unchanged.
+http://s3.{$KH_DOMAIN} {
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy minio:9000 {
+		flush_interval -1
+	}
+}
+
+http://minio.{$KH_DOMAIN} {
+	reverse_proxy minio:9001
+}
+
+http://mail.{$KH_DOMAIN} {
+	reverse_proxy mailpit:8025
+}

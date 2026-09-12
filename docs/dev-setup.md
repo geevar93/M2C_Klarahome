@@ -503,7 +503,42 @@ queue; `POST /api/v1/admin/ndr/{id}/action` takes `Reattempt`, `Rescheduled`, `A
 ## 5. Hostnames and TLS
 
 Chromium and Firefox resolve `*.localhost` to the loopback address on their own, so
-`https://mail.klarahome.localhost` works in a browser with **no hosts-file entry**.
+`http://mail.klarahome.localhost` works in a browser with **no hosts-file entry**.
+
+### The default edge: Caddy, plain HTTP (`DEV_EDGE=caddy`)
+
+The stack is fronted by **Caddy on port 80 with no TLS at all**, in the same topology as the VPS
+(one reverse proxy container, one hostname per surface, `infra/caddy/Caddyfile.local` next to the
+production `Caddyfile`). `docker-compose.local.yml` is an override on the dev file: it parks
+Traefik behind a profile, adds Caddy, and rewrites every URL the containers and the browser are
+told about to `http://`. Same volumes, same database — switching edges loses nothing.
+
+```
+docker compose -f infra/compose/docker-compose.dev.yml \
+               -f infra/compose/docker-compose.local.yml --env-file .env up -d
+```
+
+or simply `./infra/scripts/dev.ps1 up` (it reads `DEV_EDGE` from `.env`).
+
+Plain HTTP is the point. The self-signed certificate below is refused by Chrome for **every XHR
+and every `<img>`** from a subdomain it has not been told to trust, silently, with no interstitial
+to click through: the shop looks empty, sign-in does nothing, and every product image is a broken
+icon. Over HTTP there is nothing to trust, so every one of these works first time:
+
+| Surface | URL |
+|---|---|
+| Storefront | `http://klarahome.localhost` |
+| Admin back office | `http://admin.klarahome.localhost` |
+| API | `http://api.klarahome.localhost` |
+| Images (imgproxy) | `http://img.klarahome.localhost` (also `cdn.`) |
+| Object storage (S3 API) | `http://s3.klarahome.localhost` |
+| MinIO console | `http://minio.klarahome.localhost` |
+| Mailpit | `http://mail.klarahome.localhost` |
+
+The cookies are issued without `Secure` on this edge (`Auth__Tokens__RefreshCookieSecure`,
+`Carts__CartCookieSecure`), because a browser drops a Secure cookie set over http.
+
+### The original edge: Traefik, self-signed HTTPS (`DEV_EDGE=traefik`)
 
 The certificate is **self-signed by Traefik**, so the browser shows a warning the first time.
 Either accept it, or issue a locally-trusted certificate with
