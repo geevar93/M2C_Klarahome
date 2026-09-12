@@ -24,7 +24,7 @@ import {
 } from '@klarahome/ui-patterns';
 import { BreadcrumbTrail, ToastService } from '@klarahome/util';
 
-import { CommerceMapper } from '../../core/commerce.mapper';
+import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
 import { describeError } from '../../core/describe-error';
 
 /**
@@ -364,7 +364,9 @@ export class OrderDetailPage {
   protected readonly needsPayment = computed(() => {
     const order = this.order();
     if (!order) return false;
-    return order.paymentMethod !== 'COD' && order.paymentStatus !== 'Paid' && order.status !== 'Cancelled';
+    return (
+      !isCashOnDelivery(order.paymentMethod) && order.paymentStatus !== 'Paid' && order.status !== 'Cancelled'
+    );
   });
 
   protected readonly deliverTo = computed(() => {

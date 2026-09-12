@@ -44,26 +44,37 @@ internal static class InvoiceDocumentBuilder
     /// <param name="order">The order it belongs to.</param>
     /// <param name="subOrder">The seller's part it covers.</param>
     /// <param name="invoice">The invoice, already numbered and taxed.</param>
+    /// <param name="branding">The store's name and tagline, which head the page.</param>
     /// <param name="legal">The operator's own legal identity, for the operator block.</param>
     /// <param name="support">Where a customer complains, which is a statutory publication.</param>
     public static DocumentDefinition Build(
         Order order,
         SubOrder subOrder,
         Invoice invoice,
+        BrandingSettings branding,
         LegalSettings legal,
         SupportSettings support)
     {
         ArgumentNullException.ThrowIfNull(order);
         ArgumentNullException.ThrowIfNull(subOrder);
         ArgumentNullException.ThrowIfNull(invoice);
+        ArgumentNullException.ThrowIfNull(branding);
         ArgumentNullException.ThrowIfNull(legal);
         ArgumentNullException.ThrowIfNull(support);
 
         var lines = subOrder.Lines.Where(line => !line.IsFullyCancelled).ToArray();
 
+        // The marketplace's own name heads the page. The seller is the supplier of record and is
+        // named in the party row below, but the customer bought from the store, and an invoice
+        // with no store name on it reads as if it came from nowhere - which was the case until
+        // this heading existed and the legal entity name was left blank.
+        var storeName = string.IsNullOrWhiteSpace(branding.StoreName) ? "Klara Home" : branding.StoreName.Trim();
+        var operatorName = string.IsNullOrWhiteSpace(legal.LegalEntityName) ? storeName : legal.LegalEntityName.Trim();
+
         List<DocumentBlock> blocks =
         [
-            new DocumentHeading("Tax Invoice", $"{invoice.InvoiceNumber} · {order.OrderNumber}"),
+            new DocumentHeading(storeName, string.IsNullOrWhiteSpace(branding.Tagline) ? null : branding.Tagline.Trim()),
+            new DocumentHeading("Tax Invoice", $"{invoice.InvoiceNumber} · {order.OrderNumber}", Level: 2),
             new DocumentFieldGrid(
                 [
                     new DocumentField("Invoice number", invoice.InvoiceNumber),
@@ -90,15 +101,12 @@ internal static class InvoiceDocumentBuilder
                 Small: true),
         ];
 
-        if (!string.IsNullOrWhiteSpace(legal.LegalEntityName))
-        {
-            blocks.Add(new DocumentParagraph(
-                $"Sold through {legal.LegalEntityName}"
-                + (string.IsNullOrWhiteSpace(legal.Gstin) ? string.Empty : $", GSTIN {legal.Gstin}")
-                + ", acting as an electronic-commerce operator under section 52 of the CGST Act. "
-                + "The seller named above is the supplier of these goods.",
-                Small: true));
-        }
+        blocks.Add(new DocumentParagraph(
+            $"Sold through {operatorName}"
+            + (string.IsNullOrWhiteSpace(legal.Gstin) ? string.Empty : $", GSTIN {legal.Gstin}")
+            + ", acting as an electronic-commerce operator under section 52 of the CGST Act. "
+            + "The seller named above is the supplier of these goods.",
+            Small: true));
 
         if (!string.IsNullOrWhiteSpace(support.GrievanceOfficerName))
         {
@@ -120,8 +128,8 @@ internal static class InvoiceDocumentBuilder
             $"Tax invoice {invoice.InvoiceNumber}",
             blocks,
             DocumentPageSize.A4Portrait,
-            FooterText: $"{invoice.InvoiceNumber} · {order.OrderNumber}",
-            Author: string.IsNullOrWhiteSpace(legal.LegalEntityName) ? null : legal.LegalEntityName);
+            FooterText: $"{storeName} · {invoice.InvoiceNumber} · {order.OrderNumber}",
+            Author: operatorName);
     }
 
     /// <summary>

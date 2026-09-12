@@ -165,10 +165,11 @@ internal sealed partial class InvoiceService(
     {
         try
         {
+            var branding = await settings.GetAsync<BrandingSettings>(cancellationToken).ConfigureAwait(false);
             var legal = await settings.GetAsync<LegalSettings>(cancellationToken).ConfigureAwait(false);
             var support = await settings.GetAsync<SupportSettings>(cancellationToken).ConfigureAwait(false);
 
-            var document = InvoiceDocumentBuilder.Build(order, subOrder, invoice, legal, support);
+            var document = InvoiceDocumentBuilder.Build(order, subOrder, invoice, branding, legal, support);
 
             var file = await documents
                 .RenderAsync(

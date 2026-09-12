@@ -6,6 +6,7 @@ import {
   PlaceOrderResponse,
   VendorShippingOptionsResponse,
 } from '@klarahome/data-access-api';
+import { newUuid } from '@klarahome/util';
 import { Observable, catchError, finalize, of, tap, throwError } from 'rxjs';
 
 /** The four screens of the checkout, in the order they are walked. */
@@ -43,6 +44,14 @@ export class CheckoutStore {
   private readonly busy = signal(false);
   private readonly starting = signal(false);
   private readonly failure = signal<string | null>(null);
+
+  /**
+   * The `Idempotency-Key` for placing this session's order, minted on the first attempt and reused
+   * on every retry. The API refuses a placement without one and treats the same key twice as the
+   * same order once — which is only true if a double tap, a timeout and a "try again" all send the
+   * key the first attempt did. Keyed by session so a new checkout never inherits an old key.
+   */
+  private placementKey: { readonly sessionId: string; readonly key: string } | null = null;
 
   readonly current: Signal<CheckoutResponse | null> = this.session.asReadonly();
   readonly paymentMethods: Signal<readonly PaymentMethodResponse[]> = this.methods.asReadonly();
@@ -166,7 +175,11 @@ export class CheckoutStore {
     this.busy.set(true);
     this.failure.set(null);
 
-    return this.api.storePlaceOrder(id, { silentErrors: true }).pipe(
+    if (this.placementKey?.sessionId !== id) {
+      this.placementKey = { sessionId: id, key: newUuid() };
+    }
+
+    return this.api.storePlaceOrder(id, { silentErrors: true, idempotencyKey: this.placementKey.key }).pipe(
       catchError((error: unknown) => this.fail(error)),
       finalize(() => this.busy.set(false)),
     );
@@ -175,6 +188,7 @@ export class CheckoutStore {
   /** Abandons the session on the server. Called when the shopper goes back to the cart to edit it. */
   abandon(): void {
     const id = this.session()?.id;
+    this.placementKey = null;
     this.session.set(null);
     this.methods.set([]);
     this.shipping.set([]);
@@ -186,6 +200,7 @@ export class CheckoutStore {
 
   /** Forgets the local session without touching the server's. Called once an order is placed. */
   finish(): void {
+    this.placementKey = null;
     this.session.set(null);
     this.methods.set([]);
     this.shipping.set([]);

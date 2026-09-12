@@ -1,12 +1,16 @@
 using KlaraHome.Infrastructure.Http;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Infrastructure.RateLimiting;
+using KlaraHome.Modules.Orders.Application;
 using KlaraHome.Modules.Orders.Application.Invoices;
 using KlaraHome.Modules.Orders.Application.Orders;
 using KlaraHome.Modules.Orders.Infrastructure.Lifecycle;
+using KlaraHome.Modules.Orders.Infrastructure.Persistence;
+using KlaraHome.SharedKernel.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace KlaraHome.Modules.Orders.Endpoints;
 
@@ -67,10 +71,25 @@ internal static class StoreOrderEndpoints
             .WithSummary("The caller's own orders, newest first.")
             .Produces<PagedResult<OrderSummaryResponse>>();
 
-        group.MapGet("/{id:guid}", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+        // `{reference}` rather than `{id:guid}`: the storefront's URLs carry the order NUMBER -
+        // `/checkout/confirmation/KH-2609-000002`, `/account/orders/KH-2609-000002` - because that
+        // is what a shopper bookmarks, screenshots and reads out over the phone, and the same
+        // string is what it asks the API for. A guid-only route answered 404 to every one of them
+        // before any handler ran. Both forms are accepted; ownership is still checked by the handler.
+        group.MapGet("/{reference}", async (
+                string reference,
+                OrdersDbContext orders,
+                IDispatcher dispatcher,
+                HttpContext context) =>
             {
+                var id = await ResolveAsync(orders, reference, context.RequestAborted).ConfigureAwait(false);
+                if (id is null)
+                {
+                    return Result.Failure<OrderResponse>(NotFound()).ToOk(context);
+                }
+
                 var result = await dispatcher
-                    .QueryAsync(new GetMyOrderQuery(id), context.RequestAborted)
+                    .QueryAsync(new GetMyOrderQuery(id.Value), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
@@ -79,10 +98,20 @@ internal static class StoreOrderEndpoints
             .WithSummary("One of the caller's own orders in full, with a section per seller.")
             .Produces<OrderResponse>();
 
-        group.MapGet("/{id:guid}/timeline", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+        group.MapGet("/{reference}/timeline", async (
+                string reference,
+                OrdersDbContext orders,
+                IDispatcher dispatcher,
+                HttpContext context) =>
             {
+                var id = await ResolveAsync(orders, reference, context.RequestAborted).ConfigureAwait(false);
+                if (id is null)
+                {
+                    return Result.Failure<IReadOnlyList<OrderEventResponse>>(NotFound()).ToOk(context);
+                }
+
                 var result = await dispatcher
-                    .QueryAsync(new GetMyOrderTimelineQuery(id), context.RequestAborted)
+                    .QueryAsync(new GetMyOrderTimelineQuery(id.Value), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
@@ -91,14 +120,21 @@ internal static class StoreOrderEndpoints
             .WithSummary("What has happened to the order, oldest first. Internal entries are not included.")
             .Produces<IReadOnlyList<OrderEventResponse>>();
 
-        group.MapPost("/{id:guid}/cancel", async (
-                Guid id,
+        group.MapPost("/{reference}/cancel", async (
+                string reference,
                 CancelOrderBody? body,
+                OrdersDbContext orders,
                 IDispatcher dispatcher,
                 HttpContext context) =>
             {
+                var id = await ResolveAsync(orders, reference, context.RequestAborted).ConfigureAwait(false);
+                if (id is null)
+                {
+                    return Result.Failure<OrderResponse>(NotFound()).ToOk(context);
+                }
+
                 var result = await dispatcher
-                    .SendAsync(new CancelMyOrderCommand(id, body?.Reason), context.RequestAborted)
+                    .SendAsync(new CancelMyOrderCommand(id.Value, body?.Reason), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
@@ -108,10 +144,20 @@ internal static class StoreOrderEndpoints
             .RequireRateLimiting(RateLimitPolicies.CartWrite)
             .Produces<OrderResponse>();
 
-        group.MapGet("/{id:guid}/invoices", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+        group.MapGet("/{reference}/invoices", async (
+                string reference,
+                OrdersDbContext orders,
+                IDispatcher dispatcher,
+                HttpContext context) =>
             {
+                var id = await ResolveAsync(orders, reference, context.RequestAborted).ConfigureAwait(false);
+                if (id is null)
+                {
+                    return Result.Failure<IReadOnlyList<InvoiceResponse>>(NotFound()).ToOk(context);
+                }
+
                 var result = await dispatcher
-                    .QueryAsync(new ListOrderInvoicesQuery(id), context.RequestAborted)
+                    .QueryAsync(new ListOrderInvoicesQuery(id.Value), context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
@@ -163,4 +209,38 @@ internal static class StoreOrderEndpoints
 
         return store;
     }
+
+    /// <summary>
+    /// Turns a route reference into an order id: a guid as it is, anything else as an order
+    /// number. Only the id is resolved here; whether the caller may see the order is the
+    /// handler's decision, so an order number that is not theirs answers exactly what a guessed
+    /// guid would.
+    /// </summary>
+    private static async Task<Guid?> ResolveAsync(
+        OrdersDbContext orders,
+        string reference,
+        CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(reference, out var id))
+        {
+            return id;
+        }
+
+        var number = reference.Trim().ToUpperInvariant();
+        if (number.Length == 0)
+        {
+            return null;
+        }
+
+        var found = await orders.Orders
+            .AsNoTracking()
+            .Where(order => order.OrderNumber == number)
+            .Select(order => (Guid?)order.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return found;
+    }
+
+    private static Error NotFound() => OrdersErrors.NotFound("order");
 }

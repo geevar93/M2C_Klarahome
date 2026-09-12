@@ -8,7 +8,7 @@ import { Alert, Badge, Button, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { AddressCard, OrderSummary, StatusTone } from '@klarahome/ui-patterns';
 import { ToastService } from '@klarahome/util';
 
-import { CommerceMapper } from '../../core/commerce.mapper';
+import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
 
 /**
  * Order confirmation — `/checkout/confirmation/:orderNumber`.
@@ -208,7 +208,7 @@ export class OrderConfirmationPage {
   protected readonly loading = signal(true);
   protected readonly retrying = signal(false);
 
-  protected readonly isCod = computed(() => this.order()?.paymentMethod === 'COD');
+  protected readonly isCod = computed(() => isCashOnDelivery(this.order()?.paymentMethod));
 
   protected readonly isPaid = computed(() => {
     const status = this.order()?.paymentStatus;
@@ -323,7 +323,8 @@ export class OrderConfirmationPage {
         this.loading.set(false);
         // Asked once, not polled: a webhook that has not landed yet resolves in seconds, and the
         // order page is where somebody who waited longer than that would look.
-        if (order.paymentMethod !== 'COD' && order.paymentStatus !== 'Paid') this.confirmPayment(order);
+        if (!isCashOnDelivery(order.paymentMethod) && order.paymentStatus !== 'Paid')
+          this.confirmPayment(order);
       },
       error: () => {
         this.order.set(null);

@@ -140,6 +140,17 @@ public sealed class InvoiceDocumentTests
     /// <summary>An invoiced sub-order, priced, with one line and one seller.</summary>
     /// <param name="intraState">Whether the supply is intra-state.</param>
     /// <param name="lineTotal">What the single line comes to.</param>
+    [Fact]
+    public void Document_is_headed_by_the_store_name()
+    {
+        var document = Build(intraState: true);
+
+        var first = Assert.IsType<DocumentHeading>(document.Blocks[0]);
+        Assert.Equal("Klara Home", first.Text);
+        Assert.Equal(1, first.Level);
+        Assert.StartsWith("Klara Home", document.FooterText, StringComparison.Ordinal);
+    }
+
     private static DocumentDefinition Build(bool intraState, decimal lineTotal = 1998m)
     {
         var order = Order.Place(
@@ -232,6 +243,7 @@ public sealed class InvoiceDocumentTests
             order,
             subOrder,
             invoice,
+            new BrandingSettings { StoreName = "Klara Home", Tagline = "Everything for a home you love." },
             new LegalSettings { LegalEntityName = "Klara Home Retail Pvt Ltd", Gstin = "36AAACK9999A1Z1" },
             new SupportSettings
             {

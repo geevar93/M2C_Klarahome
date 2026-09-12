@@ -434,6 +434,18 @@ function humanise(value: string): string {
 }
 
 /**
+ * Whether a payment method is cash on delivery.
+ *
+ * The Orders API names the method `CashOnDelivery` (its `OrderPaymentMethod` enum) while the
+ * checkout's payment-method list says `COD`, and this is the one place that knows both — every
+ * screen used to compare against `COD` alone, so a cash order read as prepaid, offered "Pay now",
+ * and the API refused it with "there is nothing to pay for this order".
+ */
+export function isCashOnDelivery(method: string | null | undefined): boolean {
+  return method === 'COD' || method === 'CashOnDelivery';
+}
+
+/**
  * "Cash on delivery" or "Paid online" — the two facts as one line.
  *
  * The method alone is not enough: a prepaid order that has not been paid for is the case the
@@ -441,6 +453,6 @@ function humanise(value: string): string {
  */
 function paymentLabel(method: string, status: string): string {
   const paid = status === 'Paid' || status === 'Captured';
-  if (method === 'COD') return paid ? 'Paid on delivery' : 'Cash on delivery';
+  if (isCashOnDelivery(method)) return paid ? 'Paid on delivery' : 'Cash on delivery';
   return paid ? 'Paid online' : `Payment ${humanise(status).toLowerCase()}`;
 }

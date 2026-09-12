@@ -121,10 +121,10 @@ export class OrdersApiClient {
 
   /**
    * Cancels every part of the order that may still be cancelled, and says what could not.
-   * `POST /api/v1/store/orders/{id}/cancel`
+   * `POST /api/v1/store/orders/{reference}/cancel`
    */
-  storeCancelOrder(id: string, body?: null | Models.CancelOrderBody, options?: ApiRequestOptions): Observable<Models.OrderResponse> {
-    return this.http.request<Models.OrderResponse>('POST', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(id))}/cancel`, body, undefined, options);
+  storeCancelOrder(reference: string, body?: null | Models.CancelOrderBody, options?: ApiRequestOptions): Observable<Models.OrderResponse> {
+    return this.http.request<Models.OrderResponse>('POST', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(reference))}/cancel`, body, undefined, options);
   }
 
   /**
@@ -145,26 +145,26 @@ export class OrdersApiClient {
 
   /**
    * One of the caller's own orders in full, with a section per seller.
-   * `GET /api/v1/store/orders/{id}`
+   * `GET /api/v1/store/orders/{reference}`
    */
-  storeGetOrder(id: string, options?: ApiRequestOptions): Observable<Models.OrderResponse> {
-    return this.http.request<Models.OrderResponse>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(id))}`, undefined, undefined, options);
+  storeGetOrder(reference: string, options?: ApiRequestOptions): Observable<Models.OrderResponse> {
+    return this.http.request<Models.OrderResponse>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(reference))}`, undefined, undefined, options);
   }
 
   /**
    * What has happened to the order, oldest first. Internal entries are not included.
-   * `GET /api/v1/store/orders/{id}/timeline`
+   * `GET /api/v1/store/orders/{reference}/timeline`
    */
-  storeGetOrderTimeline(id: string, options?: ApiRequestOptions): Observable<Models.OrderEventResponse[]> {
-    return this.http.request<Models.OrderEventResponse[]>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(id))}/timeline`, undefined, undefined, options);
+  storeGetOrderTimeline(reference: string, options?: ApiRequestOptions): Observable<Models.OrderEventResponse[]> {
+    return this.http.request<Models.OrderEventResponse[]>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(reference))}/timeline`, undefined, undefined, options);
   }
 
   /**
    * The tax invoices raised against the order, one per seller.
-   * `GET /api/v1/store/orders/{id}/invoices`
+   * `GET /api/v1/store/orders/{reference}/invoices`
    */
-  storeListOrderInvoices(id: string, options?: ApiRequestOptions): Observable<Models.InvoiceResponse[]> {
-    return this.http.request<Models.InvoiceResponse[]>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(id))}/invoices`, undefined, undefined, options);
+  storeListOrderInvoices(reference: string, options?: ApiRequestOptions): Observable<Models.InvoiceResponse[]> {
+    return this.http.request<Models.InvoiceResponse[]>('GET', `${this.baseUrl}/api/v1/store/orders/${encodeURIComponent(String(reference))}/invoices`, undefined, undefined, options);
   }
 
   /**

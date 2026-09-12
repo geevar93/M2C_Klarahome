@@ -172,11 +172,22 @@ public sealed partial class S3FileStorage : IFileStorage, IDisposable
 
         var client = _signingClient ?? Required();
 
+        // The presigner does not take its scheme from ServiceURL: it defaults to https whatever the
+        // endpoint says, and a URL signed for https://s3.example is refused by the same host over
+        // http (SigV4 does not cover the scheme, but the browser cannot connect). The local edge
+        // is plain http (docker-compose.local.yml), so the scheme follows the endpoint it was
+        // signed for.
+        var signedFor = _signingClient is null ? _options.Endpoint : _options.SignedUrlEndpoint;
+        var protocol = signedFor.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            ? Protocol.HTTP
+            : Protocol.HTTPS;
+
         var request = new GetPreSignedUrlRequest
         {
             BucketName = BucketFor(visibility),
             Key = key,
             Verb = HttpVerb.GET,
+            Protocol = protocol,
             Expires = DateTime.UtcNow.Add(lifetime),
         };
 

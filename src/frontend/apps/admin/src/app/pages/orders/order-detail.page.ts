@@ -210,7 +210,9 @@ interface CancelDraft {
                   <span class="what">
                     {{ event.message || describe(event) }}
                     @if (event.isCustomerVisible) {
-                      <kh-badge tone="info">Seen by the customer</kh-badge>
+                      <!-- \`isCustomerVisible\` is what the customer's own timeline includes, not
+                           evidence they have looked: nothing records a read. -->
+                      <kh-badge tone="info">Shown to the customer</kh-badge>
                     }
                   </span>
                   <span class="note">{{ event.actorType }}</span>

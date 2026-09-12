@@ -5,7 +5,7 @@ import { OrdersService } from '@klarahome/data-access-orders';
 import { Alert, Button, Skeleton } from '@klarahome/ui-primitives';
 import { OrderCard, OrderCardView } from '@klarahome/ui-patterns';
 
-import { CommerceMapper } from '../../core/commerce.mapper';
+import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
 
 /**
  * The account dashboard — `/account`.
@@ -110,7 +110,8 @@ export class AccountDashboardPage {
    */
   protected readonly unpaid = computed(
     () =>
-      this.rows().find((order) => order.paymentMethod !== 'COD' && order.paymentStatus !== 'Paid') ?? null,
+      this.rows().find((order) => !isCashOnDelivery(order.paymentMethod) && order.paymentStatus !== 'Paid') ??
+      null,
   );
 
   constructor() {
