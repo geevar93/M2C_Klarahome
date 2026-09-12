@@ -71,6 +71,7 @@ internal sealed record UpdateMenuBody(
 /// <param name="MediaFileId">The desktop image.</param>
 /// <param name="MobileMediaFileId">The mobile image.</param>
 /// <param name="Message">The words, for an announcement bar.</param>
+/// <param name="IsMarquee">Whether the words scroll across the strip. Announcement bar only.</param>
 /// <param name="AltText">Its alt text.</param>
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
@@ -85,6 +86,7 @@ internal sealed record BannerBody(
     Guid? MediaFileId,
     Guid? MobileMediaFileId,
     string? Message,
+    bool IsMarquee,
     string? AltText,
     string? Link,
     string? CtaLabel,
@@ -503,6 +505,7 @@ internal static class AdminContentEndpoints
                     body.MediaFileId,
                     body.MobileMediaFileId,
                     body.Message,
+                    body.IsMarquee,
                     body.AltText,
                     body.Link,
                     body.CtaLabel,
@@ -534,6 +537,7 @@ internal static class AdminContentEndpoints
                     body.MediaFileId,
                     body.MobileMediaFileId,
                     body.Message,
+                    body.IsMarquee,
                     body.AltText,
                     body.Link,
                     body.CtaLabel,

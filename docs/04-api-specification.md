@@ -234,15 +234,18 @@ For COD, `payment` is `null` and the order is already `Confirmed`.
 ```
 GET    /store/orders                       ?status= &cursor= &size= → the caller's own orders,
                                              newest first, each with its per-seller breakdown
-GET    /store/orders/{id}                  → one order in full: a section per seller, the frozen
-                                             lines and tax, and the visible timeline
-GET    /store/orders/{id}/timeline         → what has happened, oldest first. Internal entries are
+GET    /store/orders/{ref}                 → one order in full: a section per seller, the frozen
+                                             lines and tax, and the visible timeline. `{ref}` on
+                                             every /store/orders route is the order id OR the
+                                             order number (KH-2609-000002): the number is what a
+                                             shopper's URLs, bookmarks and emails carry
+GET    /store/orders/{ref}/timeline        → what has happened, oldest first. Internal entries are
                                              never included
-POST   /store/orders/{id}/cancel           { reason? } cancels every part that may still be
+POST   /store/orders/{ref}/cancel          { reason? } cancels every part that may still be
                                              cancelled, and the response says which could not
 POST   /store/sub-orders/{id}/cancel       { reason?, lines? } cancels one seller's part, or the
                                              units `lines` names
-GET    /store/orders/{id}/invoices         → the tax invoices raised against it, one per seller
+GET    /store/orders/{ref}/invoices        → the tax invoices raised against it, one per seller
 GET    /store/invoices/{id}/download       → { url } a short-lived signed link to the PDF
 ```
 
@@ -392,6 +395,10 @@ GET /store/content/seo/structured-data ?path= -> the schema.org @graph for one p
 GET /store/config                     → public store config (branding refs, currency, policies,
                                         feature flags, enabled payment methods)
 GET /store/pincodes/{pincode}         → city/state autofill (platform reference data)
+GET /store/media/{fileId}/image       ?width=  302 to the public rendition nearest that width
+                                        (imgproxy, or the original); 404 for a private or
+                                        missing file. How a client renders an image it knows
+                                        only by file id — a catalogue projection carries no URL
 ```
 
 ### 3.8 Delivery

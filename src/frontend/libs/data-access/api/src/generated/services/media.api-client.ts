@@ -27,6 +27,11 @@ export interface AdminMediaUploadQuery {
   ownerId?: string;
 }
 
+/** Query string for `storeMediaImage`. */
+export interface StoreMediaImageQuery {
+  width?: number;
+}
+
 /** `Media` endpoints, generated from the API's OpenAPI document. */
 @Injectable({ providedIn: 'root' })
 export class MediaApiClient {
@@ -71,5 +76,13 @@ export class MediaApiClient {
    */
   adminMediaUpload(body: { file: Blob }, query?: AdminMediaUploadQuery, options?: ApiRequestOptions): Observable<Models.MediaFileResponse> {
     return this.http.request<Models.MediaFileResponse>('POST', `${this.baseUrl}/api/v1/admin/media`, toFormData(body), query, options);
+  }
+
+  /**
+   * Redirects to the rendition of a public image nearest the requested width.
+   * `GET /api/v1/store/media/{id}/image`
+   */
+  storeMediaImage(id: string, query?: StoreMediaImageQuery, options?: ApiRequestOptions): Observable<void> {
+    return this.http.request<void>('GET', `${this.baseUrl}/api/v1/store/media/${encodeURIComponent(String(id))}/image`, undefined, query, options);
   }
 }

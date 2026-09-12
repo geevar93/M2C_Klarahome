@@ -171,6 +171,12 @@ export class MediaManager {
   readonly idPrefix = input('media');
   readonly ownerType = input<string | null>(null);
   readonly ownerId = input<string | null>(null);
+  /**
+   * URLs the owner already knows, by file id — the product response resolves each image's URL
+   * and the payload shape this edits does not carry it. Without them a reload rendered every saved
+   * image from its id alone.
+   */
+  readonly urls = input<Readonly<Record<string, string | null>>>({});
 
   protected readonly pickerOpen = signal(false);
 
@@ -179,7 +185,11 @@ export class MediaManager {
 
   protected thumb(item: MediaPayload) {
     return this.images.sourceForImage(
-      { url: this.resolved.get(item.fileId) ?? null, fileId: item.fileId, alt: item.altText },
+      {
+        url: this.resolved.get(item.fileId) ?? this.urls()[item.fileId] ?? null,
+        fileId: item.fileId,
+        alt: item.altText,
+      },
       'Product image',
     );
   }

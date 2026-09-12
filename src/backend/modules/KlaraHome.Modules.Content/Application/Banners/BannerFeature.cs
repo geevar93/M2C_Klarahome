@@ -33,6 +33,7 @@ internal sealed record GetBannerQuery(Guid Id) : IQuery<BannerResponse>;
 /// <param name="MediaFileId">The desktop image.</param>
 /// <param name="MobileMediaFileId">The mobile image.</param>
 /// <param name="Message">The words, for an announcement bar.</param>
+/// <param name="IsMarquee">Whether the words scroll across the strip.</param>
 /// <param name="AltText">Its alt text.</param>
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
@@ -47,6 +48,7 @@ internal sealed record CreateBannerCommand(
     Guid? MediaFileId,
     Guid? MobileMediaFileId,
     string? Message,
+    bool IsMarquee,
     string? AltText,
     string? Link,
     string? CtaLabel,
@@ -62,6 +64,7 @@ internal sealed record CreateBannerCommand(
 /// <param name="MediaFileId">The desktop image.</param>
 /// <param name="MobileMediaFileId">The mobile image.</param>
 /// <param name="Message">The words, for an announcement bar.</param>
+/// <param name="IsMarquee">Whether the words scroll across the strip.</param>
 /// <param name="AltText">Its alt text.</param>
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
@@ -76,6 +79,7 @@ internal sealed record UpdateBannerCommand(
     Guid? MediaFileId,
     Guid? MobileMediaFileId,
     string? Message,
+    bool IsMarquee,
     string? AltText,
     string? Link,
     string? CtaLabel,
@@ -236,6 +240,7 @@ internal sealed class CreateBannerCommandHandler(ContentDbContext context, Conte
             command.MediaFileId,
             command.MobileMediaFileId,
             command.Message,
+            command.IsMarquee,
             command.AltText,
             command.Link,
             command.CtaLabel,
@@ -291,6 +296,7 @@ internal sealed class UpdateBannerCommandHandler(ContentDbContext context, Conte
             command.MediaFileId,
             command.MobileMediaFileId,
             command.Message,
+            command.IsMarquee,
             command.AltText,
             command.Link,
             command.CtaLabel,
@@ -391,6 +397,7 @@ internal static class BannerImages
         Guid? mediaFileId,
         Guid? mobileMediaFileId,
         string? message,
+        bool isMarquee,
         string? altText,
         string? link,
         string? ctaLabel,
@@ -432,6 +439,7 @@ internal static class BannerImages
             placement == BannerPlacement.AnnouncementBar ? null : mediaFileId,
             placement == BannerPlacement.AnnouncementBar ? null : mobileMediaFileId,
             placement == BannerPlacement.AnnouncementBar ? message!.Trim() : null,
+            placement == BannerPlacement.AnnouncementBar && isMarquee,
             string.IsNullOrWhiteSpace(altText) ? null : altText.Trim(),
             string.IsNullOrWhiteSpace(link) ? null : link.Trim(),
             string.IsNullOrWhiteSpace(ctaLabel) ? null : ctaLabel.Trim(),

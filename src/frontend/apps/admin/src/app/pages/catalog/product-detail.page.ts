@@ -28,7 +28,7 @@ import {
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { AuditLogService } from '@klarahome/data-access-admin';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
-import { Observable, forkJoin, map } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 
 import { toAuditEntry } from '../../core/audit.mapper';
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -59,8 +59,13 @@ interface CategoryOption {
  * not — which is exactly when the API will refuse it.
  *
  * **The lifecycle buttons come off the status, and each is a different permission.** Submit,
- * approve, reject, publish, unpublish and archive are six endpoints, and `*khHasPermission` hides
- * the ones this user cannot use rather than offering a row of buttons that answer 403.
+ * approve, reject, publish, unpublish and archive are six endpoints; the header shows only the
+ * ones the product's current status allows (`Product.IsTransitionAllowed`), and `*khHasPermission`
+ * hides the ones this user cannot use. Six buttons at once, most of them answering 409 or 403, is
+ * what this screen used to be.
+ *
+ * **One save.** The images go to their own endpoint, but "Save changes" sends them after the
+ * details when they changed. A separate "Save images" button was the one that got missed.
  *
  * **A new product is the same screen with less of it.** Variants, media and offers need a product
  * id, so they appear once there is one. The alternative — a separate "create" page — is the same
@@ -96,67 +101,89 @@ interface CategoryOption {
       @if (product(); as current) {
         <kh-status-badge [status]="current.status" />
 
-        <button
-          *khHasPermission="'catalog.product.manage'"
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="busy()"
-          (click)="run(catalog.submitProduct(current.id), 'Sent for review.')"
-        >
-          Submit for review
-        </button>
+        <!-- One row of buttons, and only the moves the state machine allows from here
+             (Product.IsTransitionAllowed): a draft is submitted or published, a submission is
+             approved or rejected, a live product is unpublished, a withdrawn one re-published. -->
+        @if (current.status === 'Draft') {
+          <button
+            *khHasPermission="'catalog.product.manage'"
+            khButton
+            type="button"
+            size="sm"
+            variant="primary"
+            [disabled]="busy()"
+            (click)="run(catalog.submitProduct(current.id), 'Sent for review.')"
+          >
+            Submit for review
+          </button>
+        }
 
-        <button
-          *khHasPermission="'catalog.product.moderate'"
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="busy()"
-          (click)="run(catalog.approveProduct(current.id, null), 'Approved.')"
-        >
-          Approve
-        </button>
+        @if (current.status === 'PendingApproval') {
+          <button
+            *khHasPermission="'catalog.product.moderate'"
+            khButton
+            type="button"
+            size="sm"
+            variant="primary"
+            [disabled]="busy()"
+            (click)="run(catalog.approveProduct(current.id, null), 'Approved.')"
+          >
+            Approve
+          </button>
 
-        <button
-          *khHasPermission="'catalog.product.moderate'"
-          khButton
-          type="button"
-          size="sm"
-          variant="danger"
-          [disabled]="busy()"
-          (click)="rejecting.set(true)"
-        >
-          Reject
-        </button>
+          <button
+            *khHasPermission="'catalog.product.moderate'"
+            khButton
+            type="button"
+            size="sm"
+            variant="danger"
+            [disabled]="busy()"
+            (click)="rejecting.set(true)"
+          >
+            Reject
+          </button>
+        }
 
-        <button
-          *khHasPermission="'catalog.product.moderate'"
-          khButton
-          type="button"
-          size="sm"
-          variant="primary"
-          [disabled]="busy()"
-          (click)="
-            current.status === 'Active'
-              ? run(catalog.unpublishProduct(current.id), 'Taken off the storefront.')
-              : run(catalog.publishProduct(current.id), 'Live on the storefront.')
-          "
-        >
-          {{ current.status === 'Active' ? 'Unpublish' : 'Publish' }}
-        </button>
+        @if (current.status === 'Draft' || current.status === 'Inactive') {
+          <button
+            *khHasPermission="'catalog.product.moderate'"
+            khButton
+            type="button"
+            size="sm"
+            [variant]="current.status === 'Inactive' ? 'primary' : 'secondary'"
+            [disabled]="busy()"
+            (click)="run(catalog.publishProduct(current.id), 'Live on the storefront.')"
+          >
+            {{ current.status === 'Inactive' ? 'Publish again' : 'Publish now' }}
+          </button>
+        }
 
-        <button
-          *khHasPermission="'catalog.product.manage'"
-          khButton
-          type="button"
-          size="sm"
-          variant="danger"
-          [disabled]="busy()"
-          (click)="archiving.set(true)"
-        >
-          Archive
-        </button>
+        @if (current.status === 'Active') {
+          <button
+            *khHasPermission="'catalog.product.moderate'"
+            khButton
+            type="button"
+            size="sm"
+            [disabled]="busy()"
+            (click)="run(catalog.unpublishProduct(current.id), 'Taken off the storefront.')"
+          >
+            Unpublish
+          </button>
+        }
+
+        @if (current.status !== 'Archived') {
+          <button
+            *khHasPermission="'catalog.product.manage'"
+            khButton
+            type="button"
+            size="sm"
+            variant="tertiary"
+            [disabled]="busy()"
+            (click)="archiving.set(true)"
+          >
+            Archive
+          </button>
+        }
       }
     </kh-page-header>
 
@@ -228,11 +255,16 @@ interface CategoryOption {
             >
               <option value="">Choose a category</option>
               @for (option of categoryOptions(); track option.id) {
-                <option [value]="option.id">{{ option.label }}</option>
+                <option [value]="option.id" [selected]="option.id === form.fields.categoryId.value()">
+                  {{ option.label }}
+                </option>
               }
             </select>
           </kh-field>
 
+          <!-- \`[selected]\` on each option as well as \`[value]\` on the select: the brands and
+               categories arrive after the product does, and a \`<select>\` given a value it has
+               no option for yet drops it — the product looked brandless on every reload. -->
           <kh-field label="Brand" for="product-brand" [optional]="true">
             <select
               khControl
@@ -241,8 +273,10 @@ interface CategoryOption {
               (change)="onEdit(); form.fields.brandId.set($any($event.target).value)"
             >
               <option value="">No brand</option>
-              @for (brand of brands.rows(); track brand.id) {
-                <option [value]="brand.id">{{ brand.name }}</option>
+              @for (brand of brandOptions(); track brand.id) {
+                <option [value]="brand.id" [selected]="brand.id === form.fields.brandId.value()">
+                  {{ brand.name }}
+                </option>
               }
             </select>
           </kh-field>
@@ -531,18 +565,15 @@ interface CategoryOption {
       @if (product(); as current) {
         <section class="panel">
           <h2>Images</h2>
-          <p class="hint">Saved with the images, immediately — not by the form above.</p>
-          <kh-media-manager [(media)]="media" idPrefix="product" ownerType="Product" [ownerId]="current.id" />
-          <button
-            khButton
-            type="button"
-            size="sm"
-            variant="primary"
-            [disabled]="busy()"
-            (click)="saveMedia()"
-          >
-            Save images
-          </button>
+          <p class="hint">Saved together with the details above by "Save changes".</p>
+          <kh-media-manager
+            [media]="media()"
+            (mediaChange)="onMediaChange($event)"
+            [urls]="mediaUrls()"
+            idPrefix="product"
+            ownerType="Product"
+            [ownerId]="current.id"
+          />
         </section>
 
         <section class="panel">
@@ -650,7 +681,12 @@ interface CategoryOption {
                     (input)="offerPrice.set($any($event.target).value)"
                   />
                 </kh-field>
-                <kh-field label="MRP" for="offer-mrp" [optional]="true" hint="Blank uses the variant's own MRP.">
+                <kh-field
+                  label="MRP"
+                  for="offer-mrp"
+                  [optional]="true"
+                  hint="Blank uses the variant's own MRP."
+                >
                   <input
                     khControl
                     khNumeric
@@ -1006,6 +1042,26 @@ export class ProductDetailPage implements HasUnsavedChanges {
     flatten(this.categories(), 0),
   );
 
+  /**
+   * The brands to offer. The list is the active ones; a product already on a brand that has since
+   * been retired keeps it selectable, or the select would silently read "No brand" and the next
+   * save would clear it.
+   */
+  protected readonly brandOptions = computed<readonly { id: string; name: string }[]>(() => {
+    const rows = this.brands.rows();
+    const current = this.product()?.brandId;
+    if (!current || rows.some((brand) => brand.id === current)) return rows;
+    return [...rows, { id: current, name: 'Current brand (no longer active)' }];
+  });
+
+  /** The image URLs the product response resolved, so a saved image renders without a resizer. */
+  protected readonly mediaUrls = computed<Readonly<Record<string, string | null>>>(() =>
+    Object.fromEntries((this.product()?.media ?? []).map((item) => [item.fileId, item.url])),
+  );
+
+  /** The images as last saved, so a save knows whether they need sending at all. */
+  private readonly savedMedia = signal<string>('[]');
+
   /** Only variant-defining attributes may be a variant axis, and the API says which those are. */
   protected readonly variantAxes = computed(() =>
     this.attributes().filter((attribute) => attribute.isVariantDefining),
@@ -1173,16 +1229,39 @@ export class ProductDetailPage implements HasUnsavedChanges {
     const current = this.product();
     const request = current ? this.catalog.updateProduct(current.id, body) : this.catalog.createProduct(body);
 
-    request.subscribe({
-      next: (saved) => {
+    // The images are their own endpoint, but one "Save changes" is the only button an editor
+    // should need: a product is one record to them, and a separate "Save images" was the button
+    // that got missed — pictures chosen, form saved, reload, pictures gone.
+    const withMedia: Observable<{ saved: ProductResponse; mediaFailed: boolean }> =
+      current && this.mediaChanged()
+        ? request.pipe(
+            switchMap((saved) =>
+              this.catalog.setProductMedia(saved.id, { media: [...this.media()] }).pipe(
+                map((withImages) => ({ saved: withImages, mediaFailed: false })),
+                catchError((error: unknown) => {
+                  // The details did save; say precisely what did not, and keep the chosen images
+                  // on screen and dirty so the next save sends them again.
+                  this.actionError.set(
+                    describeError(error, 'The details were saved, but the images were not.'),
+                  );
+                  return of({ saved, mediaFailed: true });
+                }),
+              ),
+            ),
+          )
+        : request.pipe(map((saved) => ({ saved, mediaFailed: false })));
+
+    withMedia.subscribe({
+      next: ({ saved, mediaFailed }) => {
         this.saving.set(false);
-        this.dirty.set(false);
         this.toasts.success(current ? 'Product saved.' : 'Product created.');
 
         if (current) {
-          this.apply(saved);
+          this.apply(saved, { keepMedia: mediaFailed });
+          if (mediaFailed) this.dirty.set(true);
           return;
         }
+        this.dirty.set(false);
         // A created product changes the URL, because everything below the form needs an id.
         this.router.navigate(['/catalog/products', saved.id], { replaceUrl: true });
       },
@@ -1198,22 +1277,14 @@ export class ProductDetailPage implements HasUnsavedChanges {
     });
   }
 
-  protected saveMedia(): void {
-    const current = this.product();
-    if (!current) return;
+  protected onMediaChange(media: readonly MediaPayload[]): void {
+    this.dirty.set(true);
+    this.media.set(media);
+  }
 
-    this.busy.set(true);
-    this.catalog.setProductMedia(current.id, { media: [...this.media()] }).subscribe({
-      next: (saved) => {
-        this.busy.set(false);
-        this.apply(saved);
-        this.toasts.success('Images saved.');
-      },
-      error: (error: unknown) => {
-        this.busy.set(false);
-        this.actionError.set(describeError(error, 'The images could not be saved.'));
-      },
-    });
+  /** Whether the images differ from what the server last confirmed. Position is part of it. */
+  private mediaChanged(): boolean {
+    return JSON.stringify(this.media()) !== this.savedMedia();
   }
 
   protected editVariant(variant: VariantResponse | null): void {
@@ -1362,8 +1433,13 @@ export class ProductDetailPage implements HasUnsavedChanges {
     });
   }
 
-  /** Puts a server response into the form. The one place the two representations meet. */
-  private apply(loaded: ProductResponse): void {
+  /**
+   * Puts a server response into the form. The one place the two representations meet.
+   *
+   * `keepMedia` leaves the image list as the editor has it — for the save where the details went
+   * through and the images did not, so their choice is not thrown away with the error.
+   */
+  private apply(loaded: ProductResponse, { keepMedia = false } = {}): void {
     this.product.set(loaded);
     this.isNew.set(false);
     this.dirty.set(false);
@@ -1387,14 +1463,14 @@ export class ProductDetailPage implements HasUnsavedChanges {
     this.isReturnable.set(loaded.isReturnable);
     this.noIndex.set(loaded.seo.noIndex);
     this.specifications.set(loaded.specifications);
-    this.media.set(
-      loaded.media.map((item) => ({
-        fileId: item.fileId,
-        kind: item.kind,
-        altText: item.altText,
-        position: item.position,
-      })),
-    );
+    const media = loaded.media.map((item) => ({
+      fileId: item.fileId,
+      kind: item.kind,
+      altText: item.altText,
+      position: item.position,
+    }));
+    this.savedMedia.set(JSON.stringify(media));
+    if (!keepMedia) this.media.set(media);
     this.partyValues.set({
       manufacturer: fromParty(loaded.manufacturer),
       packer: fromParty(loaded.packer),

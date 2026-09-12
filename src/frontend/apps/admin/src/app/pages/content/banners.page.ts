@@ -20,7 +20,7 @@ import {
   FormShell,
   PageHeader,
 } from '@klarahome/ui-admin';
-import { Alert, Badge, Button, Control, Field, Icon, ProductImage } from '@klarahome/ui-primitives';
+import { Alert, Badge, Button, Checkbox, Control, Field, Icon, ProductImage } from '@klarahome/ui-primitives';
 import { ImageUrls, ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -52,6 +52,7 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
     Badge,
     Button,
     CellTemplate,
+    Checkbox,
     ConfirmDialog,
     Control,
     DataTable,
@@ -174,70 +175,89 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
             </select>
           </kh-field>
 
-          <kh-field
-            label="Message"
-            for="banner-message"
-            [optional]="true"
-            hint="The only content an announcement bar has."
-          >
-            <textarea
-              khControl
-              id="banner-message"
-              rows="2"
-              [value]="form.fields.message.value()"
-              (input)="form.fields.message.set($any($event.target).value)"
-            ></textarea>
-          </kh-field>
+          <!-- The announcement bar is words and every other placement is a picture, and the API
+               refuses the other combination — so the form shows one or the other, not both. -->
+          @if (isAnnouncement()) {
+            <kh-field
+              label="Message"
+              for="banner-message"
+              [error]="form.fields.message.error()"
+              hint="One line. Up to 200 characters."
+            >
+              <textarea
+                khControl
+                id="banner-message"
+                rows="2"
+                maxlength="200"
+                [value]="form.fields.message.value()"
+                (input)="form.fields.message.set($any($event.target).value)"
+                (touched)="form.fields.message.markTouched()"
+              ></textarea>
+            </kh-field>
 
-          <div class="images">
-            <div class="image">
-              <span class="image-label">Image</span>
-              <kh-product-image [source]="imageSource()" placeholder="No image" />
-              <div class="image-actions">
-                <button khButton type="button" size="sm" (click)="openPicker('desktop')">Choose</button>
-                @if (mediaFileId()) {
-                  <button khButton type="button" size="sm" variant="tertiary" (click)="mediaFileId.set(null)">
-                    Remove
-                  </button>
-                }
-              </div>
-            </div>
-
-            <div class="image">
-              <span class="image-label">Image for phones</span>
-              <kh-product-image [source]="mobileSource()" placeholder="Falls back to the image above" />
-              <div class="image-actions">
-                <button khButton type="button" size="sm" (click)="openPicker('mobile')">Choose</button>
-                @if (mobileMediaFileId()) {
-                  <button
-                    khButton
-                    type="button"
-                    size="sm"
-                    variant="tertiary"
-                    (click)="mobileMediaFileId.set(null)"
-                  >
-                    Remove
-                  </button>
-                }
-              </div>
-            </div>
-          </div>
-
-          <kh-field
-            label="Alt text"
-            for="banner-alt"
-            [optional]="true"
-            hint="What the image says, for anybody who cannot see it."
-          >
-            <input
-              khControl
-              id="banner-alt"
-              type="text"
-              maxlength="200"
-              [value]="form.fields.altText.value()"
-              (input)="form.fields.altText.set($any($event.target).value)"
+            <kh-checkbox
+              label="Scroll the message across the bar (marquee)"
+              inputId="banner-marquee"
+              description="For a message longer than one line. Readers who prefer reduced motion see it still."
+              [checked]="isMarquee()"
+              (checkedChange)="isMarquee.set($event)"
             />
-          </kh-field>
+          } @else {
+            <div class="images">
+              <div class="image">
+                <span class="image-label">Image</span>
+                <kh-product-image [source]="imageSource()" placeholder="No image" />
+                <div class="image-actions">
+                  <button khButton type="button" size="sm" (click)="openPicker('desktop')">Choose</button>
+                  @if (mediaFileId()) {
+                    <button
+                      khButton
+                      type="button"
+                      size="sm"
+                      variant="tertiary"
+                      (click)="mediaFileId.set(null)"
+                    >
+                      Remove
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="image">
+                <span class="image-label">Image for phones</span>
+                <kh-product-image [source]="mobileSource()" placeholder="Falls back to the image above" />
+                <div class="image-actions">
+                  <button khButton type="button" size="sm" (click)="openPicker('mobile')">Choose</button>
+                  @if (mobileMediaFileId()) {
+                    <button
+                      khButton
+                      type="button"
+                      size="sm"
+                      variant="tertiary"
+                      (click)="mobileMediaFileId.set(null)"
+                    >
+                      Remove
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <kh-field
+              label="Alt text"
+              for="banner-alt"
+              hint="What the image says, for anybody who cannot see it."
+            >
+              <input
+                khControl
+                id="banner-alt"
+                type="text"
+                maxlength="200"
+                [value]="form.fields.altText.value()"
+                (input)="form.fields.altText.set($any($event.target).value)"
+              />
+            </kh-field>
+          }
 
           <div class="row">
             <kh-field
@@ -457,6 +477,10 @@ export class BannersPage {
     () => this.placements.find((choice) => choice.value === this.placement())?.hint ?? '',
   );
 
+  /** The announcement bar is words, not a picture; the form shows one or the other. */
+  protected readonly isAnnouncement = computed(() => this.placement() === 'AnnouncementBar');
+  protected readonly isMarquee = signal(false);
+
   protected readonly imageSource = computed(() =>
     this.images.sourceForImage({ url: this.imageUrl(), fileId: this.mediaFileId() }, 'Banner image'),
   );
@@ -564,6 +588,7 @@ export class BannersPage {
     this.mobileMediaFileId.set(null);
     this.imageUrl.set(null);
     this.mobileUrl.set(null);
+    this.isMarquee.set(false);
     this.summary.set([]);
     this.form.reset({ name: '', message: '', altText: '', link: '', ctaLabel: '', priority: '100' });
     this.drawerOpen.set(true);
@@ -579,6 +604,7 @@ export class BannersPage {
     this.mobileMediaFileId.set(row.mobileImage?.fileId ?? null);
     this.imageUrl.set(row.image?.url ?? null);
     this.mobileUrl.set(row.mobileImage?.url ?? null);
+    this.isMarquee.set(row.isMarquee);
     this.summary.set([]);
     this.form.reset({
       name: row.name,
@@ -595,13 +621,27 @@ export class BannersPage {
     if (!this.form.submit() || this.saving()) return;
 
     const values = this.form.values();
+    const announcement = this.isAnnouncement();
+
+    // The API's own rule, said before the round trip: words for the strip, a picture with alt
+    // text for everywhere else.
+    if (announcement && !values.message.trim()) {
+      this.summary.set(['An announcement bar needs a message.']);
+      return;
+    }
+    if (!announcement && (!this.mediaFileId() || !values.altText.trim())) {
+      this.summary.set(['This placement needs an image and its alt text.']);
+      return;
+    }
+
     const body: BannerBody = {
       name: values.name,
       placement: this.placement(),
-      mediaFileId: this.mediaFileId(),
-      mobileMediaFileId: this.mobileMediaFileId(),
-      message: values.message || null,
-      altText: values.altText || null,
+      mediaFileId: announcement ? null : this.mediaFileId(),
+      mobileMediaFileId: announcement ? null : this.mobileMediaFileId(),
+      message: announcement ? values.message.trim() : null,
+      isMarquee: announcement && this.isMarquee(),
+      altText: announcement ? null : values.altText || null,
       link: values.link || null,
       ctaLabel: values.ctaLabel || null,
       priority: Number(values.priority) || 0,

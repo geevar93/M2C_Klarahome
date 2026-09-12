@@ -134,6 +134,16 @@ internal sealed class Banner : AggregateRoot<Guid>, ITenantScoped, IAuditable
     /// <summary>The words, for an announcement bar. Null on an image banner.</summary>
     public string? Message { get; private set; }
 
+    /// <summary>
+    /// Whether an announcement bar scrolls its message across the strip instead of centring it.
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful with a <see cref="Message"/>, so it is always false on an image banner. A
+    /// presentation choice rather than a placement: the same strip, the same window and the same
+    /// audience, and the storefront still honours a reader's reduced-motion preference over it.
+    /// </remarks>
+    public bool IsMarquee { get; private set; }
+
     /// <summary>The alt text. Required whenever there is an image — it is an accessibility failure otherwise.</summary>
     public string? AltText { get; private set; }
 
@@ -187,6 +197,7 @@ internal sealed class Banner : AggregateRoot<Guid>, ITenantScoped, IAuditable
     /// <param name="mediaFileId">The desktop image.</param>
     /// <param name="mobileMediaFileId">The mobile image.</param>
     /// <param name="message">The words, for an announcement bar.</param>
+    /// <param name="isMarquee">Whether the words scroll across the strip.</param>
     /// <param name="altText">The alt text.</param>
     /// <param name="link">Where clicking it goes.</param>
     /// <param name="ctaLabel">The button's wording.</param>
@@ -200,6 +211,7 @@ internal sealed class Banner : AggregateRoot<Guid>, ITenantScoped, IAuditable
         Guid? mediaFileId,
         Guid? mobileMediaFileId,
         string? message,
+        bool isMarquee,
         string? altText,
         string? link,
         string? ctaLabel,
@@ -213,6 +225,8 @@ internal sealed class Banner : AggregateRoot<Guid>, ITenantScoped, IAuditable
         MediaFileId = mediaFileId;
         MobileMediaFileId = mobileMediaFileId;
         Message = message;
+        // A marquee is a way of showing words; without words there is nothing to scroll.
+        IsMarquee = isMarquee && message is not null;
         AltText = altText;
         Link = link;
         CtaLabel = ctaLabel;

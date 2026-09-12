@@ -285,6 +285,7 @@ internal sealed record MenuResponse(
 /// <param name="Image">The desktop image, resolved.</param>
 /// <param name="MobileImage">The mobile image, resolved.</param>
 /// <param name="Message">The words, for an announcement bar.</param>
+/// <param name="IsMarquee">Whether the words scroll across the strip.</param>
 /// <param name="AltText">Its alt text.</param>
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
@@ -302,6 +303,7 @@ internal sealed record BannerResponse(
     ContentImageResponse? Image,
     ContentImageResponse? MobileImage,
     string? Message,
+    bool IsMarquee,
     string? AltText,
     string? Link,
     string? CtaLabel,
@@ -543,6 +545,7 @@ internal sealed record StoreMenuResponse(
 /// <param name="Image">The desktop image, resolved.</param>
 /// <param name="MobileImage">The mobile image, resolved.</param>
 /// <param name="Message">The words, for an announcement bar.</param>
+/// <param name="IsMarquee">Whether the words scroll across the strip.</param>
 /// <param name="AltText">Its alt text.</param>
 /// <param name="Link">Where clicking it goes.</param>
 /// <param name="CtaLabel">The button's wording.</param>
@@ -553,6 +556,7 @@ internal sealed record StoreBannerResponse(
     ContentImageResponse? Image,
     ContentImageResponse? MobileImage,
     string? Message,
+    bool IsMarquee,
     string? AltText,
     string? Link,
     string? CtaLabel,

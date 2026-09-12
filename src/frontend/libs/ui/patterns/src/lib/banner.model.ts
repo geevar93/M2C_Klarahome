@@ -17,6 +17,8 @@ export interface BannerView {
   readonly mobileImageUrl?: string | null;
   /** The words, for an announcement bar. */
   readonly message?: string | null;
+  /** Whether an announcement bar scrolls its words across the strip instead of centring them. */
+  readonly marquee?: boolean;
   /** Alt text. Empty is correct for a purely decorative banner and is not the same as absent. */
   readonly altText?: string | null;
   /** Where clicking it goes, as a router path. */

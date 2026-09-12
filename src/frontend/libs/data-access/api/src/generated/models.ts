@@ -310,6 +310,7 @@ export interface BannerBody {
   mediaFileId: string | null;
   mobileMediaFileId: string | null;
   message: string | null;
+  isMarquee: boolean;
   altText: string | null;
   link: string | null;
   ctaLabel: string | null;
@@ -336,6 +337,7 @@ export interface BannerResponse {
   image: null | ContentImageResponse;
   mobileImage: null | ContentImageResponse;
   message: string | null;
+  isMarquee: boolean;
   altText: string | null;
   link: string | null;
   ctaLabel: string | null;
@@ -4472,6 +4474,7 @@ export interface StoreBannerResponse {
   image: null | ContentImageResponse;
   mobileImage: null | ContentImageResponse;
   message: string | null;
+  isMarquee: boolean;
   altText: string | null;
   link: string | null;
   ctaLabel: string | null;

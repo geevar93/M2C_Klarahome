@@ -10,16 +10,22 @@ import { RUNTIME_CONFIG } from './runtime-config';
  * denormalised for speed and does not join the media table. Both have to end up as an `<img src>`,
  * and neither component that renders one should know the difference.
  *
- * `imageBaseUrl` is the imgproxy origin from the runtime configuration
- * (docs/05-frontend-architecture.md §5). When it is blank — the local stack, and any deployment
- * without a resizer — there is no honest URL to build from a file id, and this answers `null`
- * rather than a guess. A `null` renders the placeholder box, which is the correct thing to show
- * for an image that does not exist yet and is also the rule until Step 30
- * (docs/10-design-system-placeholder.md §1.3).
+ * A file id is turned into a URL by the API itself: `GET /store/media/{fileId}/image?width=N`
+ * answers with a redirect to the rendition nearest that width — imgproxy where the deployment has
+ * one, the original otherwise. The apps used to build an imgproxy path of their own from
+ * `imageBaseUrl`, and that path was one no service served: every id-only image on a deployment
+ * that set the variable was a broken picture. Only the media module knows the object key and the
+ * signature, so only the media module builds the address.
+ *
+ * The one id that is not a file is the all-zero GUID, which the catalogue projections use for
+ * "no image"; it answers `null` here so the placeholder box renders instead of a 404.
  */
 
 /** The widths a product image is requested at. One per column count the grid can produce. */
 export const IMAGE_WIDTHS = [180, 240, 360, 480, 720, 960] as const;
+
+/** What the catalogue projections send when a product has no image at all. */
+const EMPTY_FILE_ID = '00000000-0000-0000-0000-000000000000';
 
 /** What a component needs to render one image without knowing where it came from. */
 export interface ImageSource {
@@ -34,7 +40,7 @@ export interface ImageSource {
 
 @Injectable({ providedIn: 'root' })
 export class ImageUrls {
-  private readonly base = (inject(RUNTIME_CONFIG).imageBaseUrl ?? '').replace(/\/+$/, '');
+  private readonly base = (inject(RUNTIME_CONFIG).apiBaseUrl ?? '').replace(/\/+$/, '');
 
   /** Whether a file id can be turned into a URL at all in this deployment. */
   get canResize(): boolean {
@@ -42,15 +48,14 @@ export class ImageUrls {
   }
 
   /**
-   * One URL for a stored file at a given width, or `null` when no resizer is configured.
+   * One URL for a stored file at a given width, or `null` when there is no file to ask for.
    *
-   * The path shape — `/{width}x/{fileId}` — is the resizing convention the media module's
-   * imgproxy deployment serves (Step 8, ADR-016). It is built here rather than at each call site
-   * so that changing the resizer is one edit.
+   * The path is the media module's own public route (`StoreMediaEndpoints`), built here rather
+   * than at each call site so that changing it is one edit.
    */
   forFile(fileId: string | null | undefined, width: number): string | null {
-    if (!fileId || !this.canResize) return null;
-    return `${this.base}/${width}x/${encodeURIComponent(fileId)}`;
+    if (!fileId || fileId === EMPTY_FILE_ID || !this.canResize) return null;
+    return `${this.base}/api/v1/store/media/${encodeURIComponent(fileId)}/image?width=${width}`;
   }
 
   /**

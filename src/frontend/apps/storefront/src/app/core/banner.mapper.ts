@@ -17,6 +17,7 @@ export function toBannerView(banner: StoreBannerResponse): BannerView {
     imageUrl: banner.image?.url ?? null,
     mobileImageUrl: banner.mobileImage?.url ?? banner.image?.url ?? null,
     message: banner.message,
+    marquee: banner.isMarquee,
 
     // The banner's own alt text wins; the image's is the fallback, and an empty string is a real
     // answer meaning "decorative" rather than a missing one.

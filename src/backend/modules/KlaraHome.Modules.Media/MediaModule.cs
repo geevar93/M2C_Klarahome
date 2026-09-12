@@ -9,6 +9,7 @@ using KlaraHome.Modules.Media.Infrastructure;
 using KlaraHome.Modules.Media.Infrastructure.Imaging;
 using KlaraHome.Modules.Media.Infrastructure.Persistence;
 using KlaraHome.Modules.Media.Infrastructure.Scanning;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -82,5 +83,7 @@ public sealed class MediaModule : IModule
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapAdminMediaEndpoints();
+
+        endpoints.MapGroup("/store").MapStoreMediaEndpoints();
     }
 }
