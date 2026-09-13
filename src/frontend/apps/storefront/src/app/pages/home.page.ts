@@ -38,7 +38,9 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
   selector: 'kh-home-page',
   imports: [BannerSlot, CmsBlockRenderer, EmptyState, ProductCarousel],
   template: `
-    <kh-banner-slot [banners]="heroBanners()" />
+    @if (heroBanners().length > 0) {
+      <kh-banner-slot [banners]="heroBanners()" />
+    }
 
     @if (blocks().length > 0) {
       <kh-cms-block-renderer
@@ -54,7 +56,9 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       />
     }
 
-    <kh-banner-slot [banners]="stripBanners()" />
+    @if (stripBanners().length > 0) {
+      <kh-banner-slot [banners]="stripBanners()" />
+    }
 
     @if (recentlyViewed().length > 0) {
       <kh-product-carousel heading="Recently viewed" [products]="recentlyViewed()" />
@@ -68,8 +72,19 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
        (correctly) cancels between blocks — and lost it at the top the moment the carousel was not
        the first block. */
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      /* The same rhythm the renderer keeps between its own blocks, so the hero banner, the
+         blocks, the strip banner and the recently-viewed rail sit apart by one section gap. The
+         slots are rendered only when they hold a banner, because a flex gap surrounds an empty
+         item just as faithfully as a full one. */
+      gap: var(--space-section);
       padding-block: var(--space-6) var(--space-10);
+    }
+
+    /* The rail carries its own margin for the pages where it stands alone; here the gap is it. */
+    kh-product-carousel {
+      margin-block: 0;
     }
 
     h1 {
