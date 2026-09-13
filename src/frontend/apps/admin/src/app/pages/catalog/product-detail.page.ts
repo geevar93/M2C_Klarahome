@@ -630,43 +630,50 @@ interface CategoryOption {
               khButton
               type="button"
               size="sm"
-              (click)="addingOffer.set(!addingOffer())"
+              (click)="addingOffer() && !editingOffer() ? cancelOffer() : startOffer()"
             >
               <kh-icon name="plus" size="sm" />
               Add an offer
             </button>
           </div>
           <p class="hint">
-            What sellers are charging for this product. The buy box picks one of them; editing a price is the
-            seller's own screen.
+            What sellers are charging for this product. The buy box picks one of them. The storefront shows
+            the winning offer's selling price, so this is where a listed price is changed.
           </p>
 
           @if (addingOffer()) {
             <div class="offer-form">
-              <kh-field label="Variant" for="offer-variant">
-                <select
-                  khControl
-                  id="offer-variant"
-                  [value]="offerVariantId()"
-                  (change)="offerVariantId.set($any($event.target).value)"
-                >
-                  <option value="">Choose a variant</option>
-                  @for (variant of current.variants; track variant.id) {
-                    <option [value]="variant.id">
-                      {{ variant.sku }}{{ variant.nameSuffix ? ' — ' + variant.nameSuffix : '' }}
-                    </option>
-                  }
-                </select>
-              </kh-field>
+              @if (editingOffer(); as listing) {
+                <p class="hint">
+                  Editing the offer on <strong>{{ listing.sku }}</strong>. The variant and the seller stay as
+                  they are; a live offer's new price reaches the storefront as soon as it is saved.
+                </p>
+              } @else {
+                <kh-field label="Variant" for="offer-variant">
+                  <select
+                    khControl
+                    id="offer-variant"
+                    [value]="offerVariantId()"
+                    (change)="offerVariantId.set($any($event.target).value)"
+                  >
+                    <option value="">Choose a variant</option>
+                    @for (variant of current.variants; track variant.id) {
+                      <option [value]="variant.id">
+                        {{ variant.sku }}{{ variant.nameSuffix ? ' — ' + variant.nameSuffix : '' }}
+                      </option>
+                    }
+                  </select>
+                </kh-field>
 
-              <kh-entity-picker
-                label="Seller"
-                inputId="offer-vendor-picker"
-                hint="Who is making this offer."
-                [search]="vendorSearch"
-                [value]="offerVendor()"
-                (chose)="offerVendor.set($event)"
-              />
+                <kh-entity-picker
+                  label="Seller"
+                  inputId="offer-vendor-picker"
+                  hint="Who is making this offer. Only an active seller can put an offer on the storefront."
+                  [search]="vendorSearch"
+                  [value]="offerVendor()"
+                  (chose)="offerVendor.set($event)"
+                />
+              }
 
               <div class="pair">
                 <kh-field label="Selling price" for="offer-price">
@@ -684,8 +691,8 @@ interface CategoryOption {
                 <kh-field
                   label="MRP"
                   for="offer-mrp"
-                  [optional]="true"
-                  hint="Blank uses the variant's own MRP."
+                  [optional]="!editingOffer()"
+                  [hint]="editingOffer() ? 'The selling price may not exceed it.' : 'Blank uses the variant’s own MRP.'"
                 >
                   <input
                     khControl
@@ -733,9 +740,12 @@ interface CategoryOption {
               />
 
               @if (offerError(); as message) {
-                <kh-alert tone="danger" heading="That offer could not be opened" [dismissible]="true">{{
-                  message
-                }}</kh-alert>
+                <kh-alert
+                  tone="danger"
+                  [heading]="editingOffer() ? 'That offer could not be saved' : 'That offer could not be opened'"
+                  [dismissible]="true"
+                  >{{ message }}</kh-alert
+                >
               }
 
               <div class="panel-actions">
@@ -750,7 +760,7 @@ interface CategoryOption {
                   [disabled]="busy()"
                   (click)="submitOffer()"
                 >
-                  Open offer
+                  {{ editingOffer() ? 'Save offer' : 'Open offer' }}
                 </button>
               </div>
             </div>
@@ -781,16 +791,26 @@ interface CategoryOption {
                     <td class="numeric">{{ money(listing.sellingPrice) }}</td>
                     <td>{{ listing.isCodAllowed ? 'Yes' : 'No' }}</td>
                     <td>
-                      <button
-                        *khHasPermission="'catalog.listing.manage'"
-                        khButton
-                        type="button"
-                        size="sm"
-                        [disabled]="busy()"
-                        (click)="toggleListing(listing)"
-                      >
-                        {{ listing.status === 'Active' ? 'Deactivate' : 'Activate' }}
-                      </button>
+                      <div class="row-actions" *khHasPermission="'catalog.listing.manage'">
+                        <button
+                          khButton
+                          type="button"
+                          size="sm"
+                          [disabled]="busy()"
+                          (click)="editOffer(listing)"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          khButton
+                          type="button"
+                          size="sm"
+                          [disabled]="busy()"
+                          (click)="toggleListing(listing)"
+                        >
+                          {{ listing.status === 'Active' ? 'Deactivate' : 'Activate' }}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 }
@@ -925,6 +945,12 @@ interface CategoryOption {
       margin-block-start: var(--space-2);
     }
 
+    .row-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+    }
+
     .panel h2 {
       margin: 0 0 var(--space-2);
       font-size: var(--text-lg);
@@ -993,6 +1019,8 @@ export class ProductDetailPage implements HasUnsavedChanges {
   protected readonly offerMaxQuantity = signal('');
   protected readonly offerCodAllowed = signal(true);
   protected readonly offerError = signal<string | null>(null);
+  /** The offer whose terms the form is editing, or null when it is opening a new one. */
+  protected readonly editingOffer = signal<ListingResponse | null>(null);
 
   protected readonly media = signal<readonly MediaPayload[]>([]);
   protected readonly specifications = signal<readonly SpecificationPayload[]>([]);
@@ -1297,10 +1325,14 @@ export class ProductDetailPage implements HasUnsavedChanges {
     this.load();
   }
 
-  /** Finds sellers for the "Add an offer" picker. */
+  /**
+   * Finds sellers for the "Add an offer" picker. Only the active ones: `CreateListingCommandHandler`
+   * refuses a seller who is not trading, so offering an applied or suspended seller here is a
+   * choice that can only end in the server's refusal.
+   */
   protected readonly vendorSearch = (term: string): Observable<readonly EntityOption[]> =>
     this.vendors
-      .searchVendors(term)
+      .searchVendors(term, 10, 'Active')
       .pipe(
         map((sellers) =>
           sellers.map((seller) => ({ id: seller.id, label: seller.displayName, hint: seller.code })),
@@ -1309,6 +1341,7 @@ export class ProductDetailPage implements HasUnsavedChanges {
 
   protected cancelOffer(): void {
     this.addingOffer.set(false);
+    this.editingOffer.set(null);
     this.offerVariantId.set('');
     this.offerVendor.set(null);
     this.offerPrice.set('');
@@ -1319,12 +1352,43 @@ export class ProductDetailPage implements HasUnsavedChanges {
     this.offerError.set(null);
   }
 
+  /** Opens the form empty, for a new offer — also when it was showing an existing one. */
+  protected startOffer(): void {
+    this.cancelOffer();
+    this.addingOffer.set(true);
+  }
+
+  /**
+   * Opens the form on an existing offer's terms. The same form as "Add an offer", because the
+   * fields are the same; only the variant and the seller are fixed, since an offer is the pair.
+   */
+  protected editOffer(listing: ListingResponse): void {
+    this.cancelOffer();
+    this.editingOffer.set(listing);
+    this.offerVariantId.set(listing.variantId);
+    this.offerPrice.set(String(listing.sellingPrice));
+    this.offerMrp.set(String(listing.mrp));
+    this.offerHandlingHours.set(String(listing.handlingTimeHours));
+    this.offerMaxQuantity.set(listing.maxOrderQuantity === null ? '' : String(listing.maxOrderQuantity));
+    this.offerCodAllowed.set(listing.isCodAllowed);
+    this.addingOffer.set(true);
+  }
+
   /**
    * Opens the offer as a Draft — `CreateListingCommandHandler` never activates one. Activating is
    * the (now-fixed) button already in the offers table, which is also where the invariants that
    * only matter for a live offer (seller active, variant sellable, product published) are checked.
+   *
+   * For an existing offer the same button saves its terms instead. A live offer's new price goes
+   * out as `ListingUpdated`, so the search cards and the buy box follow without a republish.
    */
   protected submitOffer(): void {
+    const editing = this.editingOffer();
+    if (editing) {
+      this.saveOffer(editing);
+      return;
+    }
+
     const variantId = this.offerVariantId();
     const vendorId = this.offerVendor()?.id;
     const sellingPrice = Number(this.offerPrice());
@@ -1358,6 +1422,51 @@ export class ProductDetailPage implements HasUnsavedChanges {
         error: (error: unknown) => {
           this.busy.set(false);
           this.offerError.set(describeError(error, 'That offer could not be opened.'));
+        },
+      });
+  }
+
+  private saveOffer(listing: ListingResponse): void {
+    const sellingPrice = Number(this.offerPrice());
+    const mrp = Number(this.offerMrp());
+
+    if (!sellingPrice || !mrp) {
+      this.offerError.set('Give the offer a selling price and an MRP.');
+      return;
+    }
+
+    if (sellingPrice > mrp) {
+      this.offerError.set('The selling price may not exceed the MRP.');
+      return;
+    }
+
+    this.busy.set(true);
+    this.offerError.set(null);
+
+    this.catalog
+      .updateListing(listing.id, {
+        mrp,
+        sellingPrice,
+        vendorSku: listing.vendorSku,
+        handlingTimeHours: Number(this.offerHandlingHours()) || listing.handlingTimeHours,
+        isCodAllowed: this.offerCodAllowed(),
+        maxOrderQuantity: this.offerMaxQuantity() ? Number(this.offerMaxQuantity()) : null,
+      })
+      .subscribe({
+        next: () => {
+          this.busy.set(false);
+          this.toasts.success(
+            listing.status === 'Active'
+              ? 'Offer saved. The storefront shows the new price.'
+              : 'Offer saved.',
+          );
+          this.cancelOffer();
+          this.listings.refresh();
+          this.audit.refresh();
+        },
+        error: (error: unknown) => {
+          this.busy.set(false);
+          this.offerError.set(describeError(error, 'That offer could not be saved.'));
         },
       });
   }

@@ -19,6 +19,7 @@ import {
   VendorListItem,
   VendorReadiness,
   VendorResponse,
+  VendorStatus,
   VendorStaffBody,
   VendorStaffResponse,
   VendorsApiClient,
@@ -80,8 +81,10 @@ export class VendorsAdminService {
    * The same shape and the same reasoning as the catalogue's: a typeahead shows a handful and is
    * re-run on the next keystroke (Step 28B, deliverable 15).
    */
-  searchVendors(term: string, take = 10): Observable<VendorListItem[]> {
-    return this.api.adminVendorsList({ search: term, size: take }).pipe(map((page) => page.items));
+  searchVendors(term: string, take = 10, status?: VendorStatus): Observable<VendorListItem[]> {
+    return this.api
+      .adminVendorsList({ search: term, size: take, status })
+      .pipe(map((page) => page.items));
   }
 
   vendor(id: string): Observable<VendorResponse> {

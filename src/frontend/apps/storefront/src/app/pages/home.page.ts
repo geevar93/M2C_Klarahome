@@ -61,17 +61,18 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     }
   `,
   styles: `
-    /* The same end padding \`cms-page.page.ts\` gives the other frame around \`CmsBlockRenderer\`, so
-       the last block never butts against the footer. The renderer's own \`gap\` only separates
-       blocks from each other; this page used to get its bottom breathing room by accident, from a
-       product carousel's margin that the renderer now (correctly) cancels between blocks. */
+    /* The same frame \`cms-page.page.ts\` gives the other page around \`CmsBlockRenderer\`, so the
+       first block never butts against the header and the last never against the footer. The
+       renderer's own \`gap\` only separates blocks from each other; this page used to get its
+       breathing room by accident, from a product carousel's margin that the renderer now
+       (correctly) cancels between blocks — and lost it at the top the moment the carousel was not
+       the first block. */
     :host {
       display: block;
-      padding-block-end: var(--space-10);
+      padding-block: var(--space-6) var(--space-10);
     }
 
     h1 {
-      padding-block-start: var(--space-6);
       font-size: var(--text-2xl);
     }
   `,
