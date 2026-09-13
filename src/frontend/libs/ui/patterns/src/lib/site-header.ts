@@ -10,7 +10,9 @@ import { NavItem, isInternalHref } from './navigation.model';
  * Mobile first, and the order of the markup is the order of the tab stops: menu, wordmark,
  * search, account, cart. On a phone the search box moves below the row rather than being
  * collapsed behind an icon — search is how a storefront is actually used, and hiding it behind a
- * tap costs more than the 44px of height it saves.
+ * tap costs more than the 44px of height it saves. From the desktop breakpoint the primary menu
+ * takes a row of its own under the search bar, so the number of menu items never decides how
+ * wide the search box is.
  *
  * Every piece of data arrives as an input. The header does not know what a menu is fetched from,
  * which is what lets the shell decide, and what lets this be rendered in a test with three lines
@@ -178,25 +180,45 @@ import { NavItem, isInternalHref } from './navigation.model';
       text-underline-offset: var(--space-1);
     }
 
-    /* From the 'lg' breakpoint the layout is one row: the burger goes away, the menu is inline, and search keeps
-       the middle. 1024px is the 'lg' breakpoint from _breakpoints.scss. */
+    /* From the 'lg' breakpoint the burger goes away and the header is two rows: wordmark, search
+       and actions on the first, the menu on its own line beneath. The menu used to sit between the
+       wordmark and the search box on one row, which meant every item an editor added took its
+       width out of the search box — six items left it a stub pushed to the right. A row of its own
+       gives the menu the whole container and gives search a fixed, central place, whatever the
+       menu grows to. 1024px is the 'lg' breakpoint from _breakpoints.scss. */
     @media (min-width: 1024px) {
       .bar {
-        grid-template-columns: auto auto 1fr auto;
-        grid-template-areas: 'wordmark primary search actions';
-        gap: var(--space-4);
-        padding-block: var(--space-3);
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas:
+          'wordmark search actions'
+          'primary primary primary';
+        column-gap: var(--space-6);
+        row-gap: var(--space-1);
+        padding-block: var(--space-3) 0;
       }
 
       .menu-button {
         display: none;
       }
 
+      .search {
+        justify-self: center;
+        width: 100%;
+        max-width: 40rem;
+      }
+
       .primary {
         grid-area: primary;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-1);
+        /* Pulled back to the container edge so the first label lines up with the wordmark. */
+        margin-inline-start: calc(-1 * var(--space-2));
+      }
+
+      .nav-link {
+        padding-block: var(--space-2) var(--space-3);
       }
     }
   `,

@@ -26,7 +26,23 @@ import { NavItem, isInternalHref } from './navigation.model';
           <div class="groups">
             @for (group of menu(); track group.label) {
               <nav class="group" [attr.aria-label]="group.label">
-                <h2 class="group-title">{{ group.label }}</h2>
+                <!-- A heading that points somewhere is a link too: the editor lets a footer item
+                     carry a target at the top level, and a label that looks like a heading but
+                     silently ignores it was an item nobody could click. -->
+                <h2 class="group-title">
+                  @if (isInternal(group.href)) {
+                    <a [routerLink]="group.href">{{ group.label }}</a>
+                  } @else if (group.href) {
+                    <a
+                      [href]="group.href"
+                      [attr.target]="group.opensInNewTab ? '_blank' : null"
+                      rel="noopener"
+                      >{{ group.label }}</a
+                    >
+                  } @else {
+                    {{ group.label }}
+                  }
+                </h2>
                 <ul>
                   @for (item of group.children ?? []; track item.label) {
                     <li>
@@ -90,6 +106,18 @@ import { NavItem, isInternalHref } from './navigation.model';
       color: var(--color-text-muted);
     }
 
+    .group-title a {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--touch-target-min);
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .group-title a:hover {
+      text-decoration: underline;
+    }
+
     ul {
       list-style: none;
       margin: 0;
@@ -144,7 +172,7 @@ import { NavItem, isInternalHref } from './navigation.model';
 })
 export class SiteFooter {
   readonly storeName = input('Klara Home');
-  /** Top-level items are column headings; their children are the links. */
+  /** Top-level items are column headings — links themselves when they carry a target — and their children are the links beneath. */
   readonly menu = input<readonly NavItem[]>([]);
   /** Whether the page has a sticky action bar the last line has to clear. */
   readonly clearsStickyBar = input(false);
