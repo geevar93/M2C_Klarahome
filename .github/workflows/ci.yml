@@ -276,7 +276,7 @@ jobs:
       # It still reaches the Security tab through the SARIF upload below, so nothing is hidden -
       # it simply does not block a change that has nothing to do with it.
       - name: Scan ${{ matrix.image }} image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: klarahome/${{ matrix.image }}:${{ github.sha }}
           format: sarif
@@ -294,7 +294,7 @@ jobs:
       # The SARIF upload records; this fails. Two steps because a scan that only records is not a
       # gate, and a gate that does not record leaves nothing to look at afterwards.
       - name: Fail on high or critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: klarahome/${{ matrix.image }}:${{ github.sha }}
           format: table
