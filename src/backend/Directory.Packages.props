@@ -80,7 +80,7 @@
       rewrite (docs/08-integrations.md #4, ADR-010). The `Minio` .NET SDK would have tied us to
       one server implementation for no gain.
     -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.5" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.103.2" />
     <!--
       SMTP. MIT, by the author of the MIME parser the .NET ecosystem standardised on.
       System.Net.Mail.SmtpClient is documented by Microsoft as obsolete for new development and
