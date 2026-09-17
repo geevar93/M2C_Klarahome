@@ -133,7 +133,14 @@ internal sealed class ListProductsQueryHandler(CatalogDbContext context, Product
             products = products.Where(product => product.VendorId == vendorId);
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Search))
+        if (TryParseIds(query.Search) is { } searchedIds)
+        {
+            // One or more product ids — pasted from a support ticket, or sent by a back-office
+            // picker resolving the ids a CMS block already holds back into names. An id is not a
+            // name and never a SKU, so this replaces the text match rather than joining it.
+            products = products.Where(product => searchedIds.Contains(product.Id));
+        }
+        else if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var pattern = $"%{CatalogQueries.EscapeLike(query.Search)}%";
 
@@ -208,6 +215,31 @@ internal sealed class ListProductsQueryHandler(CatalogDbContext context, Product
                     product.CreatedAt)),
             ],
             new PageInfo(size, hasMore ? Cursor.Encode(page[^1].Id.ToString()) : null)));
+    }
+
+    /// <summary>
+    /// The ids in a search term made only of ids — separated by spaces, commas or new lines — or
+    /// null when any part of it is not one, which leaves it an ordinary name-or-SKU search.
+    /// </summary>
+    internal static Guid[]? TryParseIds(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var parts = search.Split([' ', ',', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var ids = new Guid[parts.Length];
+
+        for (var index = 0; index < parts.Length; index++)
+        {
+            if (!Guid.TryParse(parts[index], out ids[index]))
+            {
+                return null;
+            }
+        }
+
+        return ids;
     }
 }
 

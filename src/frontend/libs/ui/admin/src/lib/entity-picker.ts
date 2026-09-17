@@ -20,6 +20,8 @@ export interface EntityOption {
   readonly label: string;
   /** A second line: a code, a SKU, a price — whatever tells two similar rows apart. */
   readonly hint?: string | null;
+  /** A small picture of it, where it has one. Shown as a thumbnail beside the label. */
+  readonly imageUrl?: string | null;
 }
 
 /** How the picker finds candidates. Returns at most a screenful; the picker does not page. */

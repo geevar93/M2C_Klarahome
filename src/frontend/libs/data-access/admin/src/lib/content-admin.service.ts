@@ -248,6 +248,13 @@ export class ContentAdminService {
     );
   }
 
+  /** A short list of collections matching a search, for a picker. The same shape as `searchProducts`. */
+  searchCollections(term: string, take = 25): Observable<CollectionSummaryResponse[]> {
+    return this.api
+      .adminListCollections({ search: term || undefined, size: take })
+      .pipe(map((page) => page.items));
+  }
+
   collection(id: string): Observable<CollectionResponse> {
     return this.api.adminGetCollection(id);
   }

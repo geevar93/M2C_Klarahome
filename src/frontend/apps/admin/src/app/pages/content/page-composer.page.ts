@@ -1,12 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   BlockBody,
   BlockFieldResponse,
   BlockResponse,
   BlockTypeResponse,
+  CatalogAdminService,
+  CategoryNode,
   ContentAdminService,
   MediaFileResponse,
+  MediaLibraryService,
   PageResponse,
   PageStatus,
   PageVersionSummaryResponse,
@@ -15,16 +26,22 @@ import {
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
   ConfirmDialog,
+  EntityMultiPicker,
+  EntityOption,
+  EntitySearch,
   HasUnsavedChanges,
   Modal,
   PageHeader,
+  ReferenceTag,
+  ReferenceTags,
   ReorderItem,
   ReorderList,
   SchemaField,
   StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
-import { ToastService } from '@klarahome/util';
+import { ImageUrls, ToastService } from '@klarahome/util';
+import { Observable, catchError, forkJoin, map, of, shareReplay } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
@@ -80,12 +97,14 @@ interface BlockDraft {
     Checkbox,
     ConfirmDialog,
     Control,
+    EntityMultiPicker,
     Field,
     HasPermission,
     Icon,
     MediaPicker,
     Modal,
     PageHeader,
+    ReferenceTags,
     ReorderList,
     SchemaField,
     Skeleton,
@@ -186,14 +205,28 @@ interface BlockDraft {
 
               @if (schemaFor(draft.type); as schema) {
                 @for (field of schema.fields; track field.name) {
-                  <kh-schema-field
-                    [field]="field"
-                    [controlId]="draft.id + '-' + field.name"
-                    [label]="humanise(field.name)"
-                    [hint]="fieldHint(field)"
-                    [value]="draft.config[field.name]"
-                    (changed)="setConfig(draft.id, field.name, $event)"
-                  />
+                  @if (isPickable(field)) {
+                    <kh-reference-tags
+                      [controlId]="draft.id + '-' + field.name"
+                      [label]="humanise(field.name)"
+                      [hint]="fieldHint(field)"
+                      [required]="field.isRequired"
+                      [tags]="tagsFor(field.kind, draft.config[field.name])"
+                      [browseLabel]="browseLabelFor(field, draft.config[field.name])"
+                      [full]="isFull(field, draft.config[field.name])"
+                      (removed)="removeReference(draft.id, field, $event)"
+                      (browse)="browse({ blockId: draft.id, field, mode: field.isList ? 'list' : 'single' })"
+                    />
+                  } @else {
+                    <kh-schema-field
+                      [field]="field"
+                      [controlId]="draft.id + '-' + field.name"
+                      [label]="humanise(field.name)"
+                      [hint]="fieldHint(field)"
+                      [value]="draft.config[field.name]"
+                      (changed)="setConfig(draft.id, field.name, $event)"
+                    />
+                  }
                 }
 
                 @if (schema.itemFields && schema.itemFields.length > 0) {
@@ -241,28 +274,60 @@ interface BlockDraft {
                         </header>
 
                         @for (field of schema.itemFields; track field.name) {
-                          <kh-schema-field
-                            [field]="field"
-                            [controlId]="draft.id + '-item-' + $index + '-' + field.name"
-                            [label]="humanise(field.name)"
-                            [hint]="fieldHint(field)"
-                            [value]="item[field.name]"
-                            (changed)="setItemField(draft.id, $index, field.name, $event)"
-                          />
+                          @if (isPickable(field)) {
+                            <kh-reference-tags
+                              [controlId]="draft.id + '-item-' + $index + '-' + field.name"
+                              [label]="humanise(field.name)"
+                              [hint]="fieldHint(field)"
+                              [required]="field.isRequired"
+                              [tags]="tagsFor(field.kind, item[field.name])"
+                              [browseLabel]="browseLabelFor(field, item[field.name])"
+                              (removed)="setItemField(draft.id, $index, field.name, null)"
+                              (browse)="
+                                browse({ blockId: draft.id, field, mode: 'single', itemIndex: $index })
+                              "
+                            />
+                          } @else {
+                            <kh-schema-field
+                              [field]="field"
+                              [controlId]="draft.id + '-item-' + $index + '-' + field.name"
+                              [label]="humanise(field.name)"
+                              [hint]="fieldHint(field)"
+                              [value]="item[field.name]"
+                              (changed)="setItemField(draft.id, $index, field.name, $event)"
+                            />
+                          }
                         }
                       </article>
                     }
 
-                    <button
-                      khButton
-                      type="button"
-                      size="sm"
-                      [disabled]="itemsOf(draft).length >= schema.maxItems"
-                      (click)="addItem(draft.id)"
-                    >
-                      <kh-icon name="plus" size="sm" />
-                      Add an item
-                    </button>
+                    <div class="item-add">
+                      <button
+                        khButton
+                        type="button"
+                        size="sm"
+                        [disabled]="itemsOf(draft).length >= schema.maxItems"
+                        (click)="addItem(draft.id)"
+                      >
+                        <kh-icon name="plus" size="sm" />
+                        Add an item
+                      </button>
+                      @if (pickableItemField(schema); as field) {
+                        <button
+                          khButton
+                          type="button"
+                          size="sm"
+                          variant="primary"
+                          [disabled]="itemsOf(draft).length >= schema.maxItems"
+                          (click)="
+                            browse({ blockId: draft.id, field, mode: 'items', maxItems: schema.maxItems })
+                          "
+                        >
+                          <kh-icon name="search" size="sm" />
+                          Add {{ nounFor(field.kind, true) }} in bulk
+                        </button>
+                      }
+                    </div>
                   </section>
                 }
               } @else {
@@ -479,6 +544,27 @@ interface BlockDraft {
       (closed)="pickerOpen.set(false)"
     />
 
+    <!-- Finding what a block points at. Media has its own library dialog; everything else is a search. -->
+    <kh-entity-multi-picker
+      [open]="browseKind() !== null && browseKind() !== 'MediaRef'"
+      [heading]="browseHeading()"
+      [noun]="nounFor(browseKind() ?? '', true)"
+      [search]="browseSearch()"
+      [existingIds]="browseExisting()"
+      [limit]="browseLimit()"
+      (confirmed)="applyBrowse($event)"
+      (closed)="browsing.set(null)"
+    />
+
+    <kh-media-picker
+      [open]="browseKind() === 'MediaRef'"
+      [multiple]="browsing()?.mode !== 'single'"
+      ownerType="ContentPage"
+      [ownerId]="id"
+      (picked)="applyBrowse(mediaOptions($event))"
+      (closed)="browsing.set(null)"
+    />
+
     <kh-modal
       [open]="previewOpen()"
       heading="What the storefront would serve"
@@ -613,6 +699,12 @@ interface BlockDraft {
       justify-content: space-between;
       gap: var(--space-2);
       margin-block-end: var(--space-2);
+    }
+
+    .item-add {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
     }
 
     .item-actions {
@@ -789,6 +881,9 @@ interface BlockDraft {
 })
 export class PageComposerPage implements HasUnsavedChanges {
   private readonly content = inject(ContentAdminService);
+  private readonly catalog = inject(CatalogAdminService);
+  private readonly media = inject(MediaLibraryService);
+  private readonly images = inject(ImageUrls);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toasts = inject(ToastService);
@@ -820,6 +915,7 @@ export class PageComposerPage implements HasUnsavedChanges {
   protected readonly noIndex = signal(false);
 
   protected readonly pickerOpen = signal(false);
+  protected readonly browsing = signal<BrowseTarget | null>(null);
   protected readonly deleting = signal(false);
   protected readonly rollingBackTo = signal<number | null>(null);
 
@@ -860,6 +956,10 @@ export class PageComposerPage implements HasUnsavedChanges {
     this.load();
     this.loadBlockTypes();
     this.loadVersions();
+
+    // Re-run whenever the blocks or their schemas change, so a loaded page and a restored version
+    // both show names rather than ids. Only unknown ids are fetched.
+    effect(() => this.resolveReferences());
   }
 
   /** Read by the route's `unsavedChangesGuard`; see `navigation.ts`. */
@@ -1127,6 +1227,305 @@ export class PageComposerPage implements HasUnsavedChanges {
     this.dirty.set(true);
   }
 
+  // ---- Browsing for references ------------------------------------------------------------------
+
+  /** Whether a field names something the platform already holds, and so can be searched for. */
+  protected isPickable(field: BlockFieldResponse): boolean {
+    return field.kind in REFERENCE_NOUNS;
+  }
+
+  protected nounFor(kind: string, plural: boolean): string {
+    const noun = REFERENCE_NOUNS[kind] ?? ['item', 'items'];
+    return plural ? noun[1] : noun[0];
+  }
+
+  /**
+   * The item field a bulk add fills: the first reference among an item's fields. A category grid's
+   * tiles are categories, a gallery's are images — one ticked row becomes one new item, and its
+   * other fields are left for the editor to fill in the cards that appear.
+   */
+  protected pickableItemField(schema: BlockTypeResponse): BlockFieldResponse | null {
+    return (schema.itemFields ?? []).find((field) => this.isPickable(field) && !field.isList) ?? null;
+  }
+
+  protected browse(target: BrowseTarget): void {
+    this.browsing.set(target);
+  }
+
+  protected readonly browseKind = computed(() => this.browsing()?.field.kind ?? null);
+
+  protected readonly browseHeading = computed(() => {
+    const target = this.browsing();
+    if (!target) return '';
+    return target.mode === 'single'
+      ? `Choose ${this.nounFor(target.field.kind, false)}`
+      : `Add ${this.nounFor(target.field.kind, true)}`;
+  });
+
+  protected readonly browseSearch = computed<EntitySearch>(() => {
+    switch (this.browsing()?.field.kind) {
+      case 'CategoryRef':
+        return this.categorySearch;
+      case 'CollectionRef':
+        return this.collectionSearch;
+      default:
+        return this.productSearch;
+    }
+  });
+
+  /** What the target already holds, shown as ticked-and-disabled so it cannot be added twice. */
+  protected readonly browseExisting = computed<readonly string[]>(() => {
+    const target = this.browsing();
+    const draft = target && this.blocks().find((candidate) => candidate.id === target.blockId);
+    if (!target || !draft) return [];
+
+    if (target.mode === 'list') {
+      const value = draft.config[target.field.name];
+      return Array.isArray(value) ? value.map((entry) => String(entry)) : [];
+    }
+    if (target.mode === 'items') {
+      return this.itemsOf(draft)
+        .map((item) => item[target.field.name])
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    }
+    // Choosing a single value replaces it, so the current one is not in the way.
+    return [];
+  });
+
+  protected readonly browseLimit = computed<number | null>(() => {
+    const target = this.browsing();
+    if (!target) return null;
+    if (target.mode === 'single') return 1;
+
+    const held = this.browseExisting().length;
+    const cap = target.mode === 'list' ? target.field.maxLength : (target.maxItems ?? 0);
+    return cap > 0 ? Math.max(0, cap - held) : null;
+  });
+
+  protected mediaOptions(files: readonly MediaFileResponse[]): readonly EntityOption[] {
+    return files.map((file) => ({
+      id: file.id,
+      label: file.fileName,
+      imageUrl: this.images.forFile(file.id, THUMB_WIDTH) ?? file.url,
+    }));
+  }
+
+  // ---- Tags: ids shown by name ------------------------------------------------------------------
+
+  /** A reference field's value as its ids: a list field's entries, or a single id as a list of one. */
+  private idsOf(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map((entry) => String(entry)).filter((entry) => entry.length > 0);
+    return typeof value === 'string' && value.length > 0 ? [value] : [];
+  }
+
+  protected tagsFor(kind: string, value: unknown): readonly ReferenceTag[] {
+    const known = this.references();
+    return this.idsOf(value).map(
+      (id) => known.get(referenceKey(kind, id)) ?? { id, label: id, pending: true },
+    );
+  }
+
+  protected browseLabelFor(field: BlockFieldResponse, value: unknown): string {
+    if (field.isList) return `Add ${this.nounFor(field.kind, true)}`;
+    return this.idsOf(value).length > 0 ? 'Replace' : `Choose ${this.nounFor(field.kind, false)}`;
+  }
+
+  protected isFull(field: BlockFieldResponse, value: unknown): boolean {
+    return field.isList && field.maxLength > 0 && this.idsOf(value).length >= field.maxLength;
+  }
+
+  protected removeReference(blockId: string, field: BlockFieldResponse, id: string): void {
+    const draft = this.blocks().find((candidate) => candidate.id === blockId);
+    if (!draft) return;
+
+    if (!field.isList) {
+      this.patchConfig(blockId, field.name, null);
+      return;
+    }
+    const remaining = this.idsOf(draft.config[field.name]).filter((entry) => entry !== id);
+    this.patchConfig(blockId, field.name, remaining.length > 0 ? remaining : null);
+  }
+
+  /** Names already learned, keyed by kind and id — from the picker, or looked up for a loaded page. */
+  private readonly references = signal<ReadonlyMap<string, ReferenceTag>>(new Map());
+  private readonly resolving = new Set<string>();
+
+  private remember(kind: string, tags: readonly ReferenceTag[]): void {
+    this.references.update((current) => {
+      const next = new Map(current);
+      for (const tag of tags) next.set(referenceKey(kind, tag.id), tag);
+      return next;
+    });
+  }
+
+  /**
+   * Looks up every referenced id the composer has no name for yet.
+   *
+   * One request per kind for products (the list endpoint answers a term made of ids), the loaded
+   * tree for categories, and one lookup per collection or file — those are few on any real page.
+   * An id that resolves to nothing is remembered as missing, so it is shown once and never retried
+   * in a loop.
+   */
+  private resolveReferences(): void {
+    const wanted = new Map<string, Set<string>>();
+    const known = untracked(() => this.references());
+
+    for (const draft of this.blocks()) {
+      const schema = this.schemaFor(draft.type);
+      if (!schema) continue;
+
+      const collect = (
+        fields: readonly BlockFieldResponse[] | null | undefined,
+        owner: Record<string, unknown>,
+      ) => {
+        for (const field of fields ?? []) {
+          if (!this.isPickable(field)) continue;
+          for (const id of this.idsOf(owner[field.name])) {
+            const key = referenceKey(field.kind, id);
+            if (known.has(key) || this.resolving.has(key)) continue;
+            this.resolving.add(key);
+            const ids = wanted.get(field.kind) ?? new Set<string>();
+            ids.add(id);
+            wanted.set(field.kind, ids);
+          }
+        }
+      };
+
+      collect(schema.fields, draft.config);
+      for (const item of this.itemsOf(draft)) collect(schema.itemFields, item);
+    }
+
+    for (const [kind, set] of wanted) {
+      const ids = [...set];
+      const found: Observable<readonly EntityOption[]> =
+        kind === 'ProductRef'
+          ? this.productSearch(ids.join(' '))
+          : kind === 'CategoryRef'
+            ? this.categories$.pipe(map((all) => all.filter((entry) => set.has(entry.id))))
+            : kind === 'CollectionRef'
+              ? forkJoin(
+                  ids.map((slug) =>
+                    this.collectionSearch(slug).pipe(
+                      map((options) => options.filter((option) => option.id === slug)),
+                      catchError(() => of([] as EntityOption[])),
+                    ),
+                  ),
+                ).pipe(map((groups) => groups.flat()))
+              : forkJoin(
+                  ids.map((id) =>
+                    this.media.file(id).pipe(
+                      map((file) => this.mediaOptions([file])),
+                      catchError(() => of([] as EntityOption[])),
+                    ),
+                  ),
+                ).pipe(map((groups) => groups.flat()));
+
+      found.pipe(catchError(() => of(null))).subscribe((options) => {
+        for (const id of ids) this.resolving.delete(referenceKey(kind, id));
+        // A failed lookup is not "missing" — it leaves the ids pending, to be retried on the next change.
+        if (options === null) return;
+
+        const byId = new Map(options.map((option) => [option.id, option]));
+        this.remember(
+          kind,
+          ids.map((id) => byId.get(id) ?? { id, label: `Not found (${id.slice(0, 8)}…)`, missing: true }),
+        );
+      });
+    }
+  }
+
+  /** Writes what was chosen into the block, in the shape the target field holds. */
+  protected applyBrowse(options: readonly EntityOption[]): void {
+    const target = this.browsing();
+    // Read before the dialog is closed: what the target holds is derived from `browsing`, and
+    // clearing that first made every add replace the list with only the new choices.
+    const current = this.browseExisting();
+    this.browsing.set(null);
+    if (!target || options.length === 0) return;
+
+    const draft = this.blocks().find((candidate) => candidate.id === target.blockId);
+    if (!draft) return;
+
+    this.remember(target.field.kind, options);
+
+    const name = target.field.name;
+    const ids = options.map((option) => option.id);
+
+    switch (target.mode) {
+      case 'single':
+        if (target.itemIndex === undefined) this.patchConfig(target.blockId, name, ids[0]);
+        else this.setItemField(target.blockId, target.itemIndex, name, ids[0]);
+        break;
+
+      case 'list': {
+        const merged = [...current, ...ids.filter((id) => !current.includes(id))];
+        const cap = target.field.maxLength;
+        this.patchConfig(target.blockId, name, cap > 0 ? merged.slice(0, cap) : merged);
+        break;
+      }
+
+      case 'items': {
+        const held = new Set(current);
+        const added = ids.filter((id) => !held.has(id)).map((id) => ({ [name]: id }));
+        const items = [...this.itemsOf(draft), ...added];
+        this.patchConfig(target.blockId, 'items', target.maxItems ? items.slice(0, target.maxItems) : items);
+        break;
+      }
+    }
+
+    this.toasts.success(
+      ids.length === 1
+        ? `Added ${options[0].label}.`
+        : `Added ${ids.length} ${this.nounFor(target.field.kind, true)}.`,
+    );
+  }
+
+  private readonly productSearch: EntitySearch = (term) =>
+    this.catalog.searchProducts(term, 25).pipe(
+      map((products) =>
+        products.map((product) => ({
+          id: product.id,
+          label: product.name,
+          hint: `${product.status} · /${product.slug}`,
+          imageUrl: this.images.forFile(product.primaryImageFileId, THUMB_WIDTH),
+        })),
+      ),
+    );
+
+  /** The tree is small and changes rarely, so it is read once and filtered here as the editor types. */
+  private readonly categories$ = this.catalog.categoryTree().pipe(
+    map((roots) => flattenCategories(roots, (fileId) => this.images.forFile(fileId, THUMB_WIDTH))),
+    shareReplay({ bufferSize: 1, refCount: false }),
+  );
+
+  private readonly categorySearch: EntitySearch = (term) => {
+    const needle = term.trim().toLowerCase();
+    return this.categories$.pipe(
+      map((entries) =>
+        entries
+          .filter(
+            (entry) =>
+              !needle ||
+              entry.label.toLowerCase().includes(needle) ||
+              (entry.hint ?? '').toLowerCase().includes(needle),
+          )
+          .slice(0, 50),
+      ),
+    );
+  };
+
+  /** A collection block stores the slug, not the id — so the slug is what the picker yields. */
+  private readonly collectionSearch: EntitySearch = (term) =>
+    this.content.searchCollections(term.trim()).pipe(
+      map((collections) =>
+        collections.map((collection) => ({
+          id: collection.slug,
+          label: collection.name,
+          hint: `${collection.kind} · ${collection.itemCount} items${collection.isActive ? '' : ' · inactive'}`,
+        })),
+      ),
+    );
+
   protected chooseCover(files: readonly MediaFileResponse[]): void {
     this.pickerOpen.set(false);
     const file = files[0];
@@ -1353,12 +1752,52 @@ export class PageComposerPage implements HasUnsavedChanges {
 
 /** What the identifier-shaped field kinds actually want typed into them. */
 const REFERENCE_HINTS: Readonly<Record<string, string>> = {
-  MediaRef: 'A media file id',
-  ProductRef: 'A product id',
-  CategoryRef: 'A category id',
-  CollectionRef: "A collection's slug",
   Link: 'An absolute URL, or a path beginning with /',
 };
+
+/** The field kinds that can be browsed for, and what one and several of them are called. */
+const REFERENCE_NOUNS: Readonly<Record<string, readonly [string, string]>> = {
+  MediaRef: ['an image', 'images'],
+  ProductRef: ['a product', 'products'],
+  CategoryRef: ['a category', 'categories'],
+  CollectionRef: ['a collection', 'collections'],
+};
+
+/**
+ * Where a browse dialog writes: one value (`single`, optionally inside item `itemIndex`), a list
+ * field it appends to (`list`), or the block's repeater, one new item per choice (`items`).
+ */
+interface BrowseTarget {
+  readonly blockId: string;
+  readonly field: BlockFieldResponse;
+  readonly mode: 'single' | 'list' | 'items';
+  readonly itemIndex?: number;
+  readonly maxItems?: number;
+}
+
+/** Every category, depth-first, with its ancestry as the hint: "Home › Lighting". */
+function flattenCategories(
+  nodes: readonly CategoryNode[],
+  image: (fileId: string | null) => string | null,
+  trail: readonly string[] = [],
+): EntityOption[] {
+  return nodes.flatMap((node) => [
+    {
+      id: node.id,
+      label: node.name,
+      hint: [...trail, node.name].join(' › ') + (node.isActive ? '' : ' · inactive'),
+      imageUrl: image(node.imageFileId),
+    },
+    ...flattenCategories(node.children, image, [...trail, node.name]),
+  ]);
+}
+
+/** Thumbnails are requested at this width; the API redirects to the nearest rendition. */
+const THUMB_WIDTH = 180;
+
+function referenceKey(kind: string, id: string): string {
+  return `${kind}:${id}`;
+}
 
 function toDraft(block: BlockResponse): BlockDraft {
   return {
