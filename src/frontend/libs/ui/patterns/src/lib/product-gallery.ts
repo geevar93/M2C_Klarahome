@@ -71,12 +71,14 @@ import { GalleryImageView } from './catalog.model';
   styles: `
     :host {
       display: block;
+      min-inline-size: 0;
     }
 
     .stage {
       position: relative;
       display: block;
       inline-size: 100%;
+      max-inline-size: 100%;
       padding: 0;
       border: 0;
       background: transparent;
@@ -97,17 +99,20 @@ import { GalleryImageView } from './catalog.model';
       transition: transform var(--duration-base) var(--ease-standard);
     }
 
+    /* Wrapped onto as many rows as they need rather than a sideways strip: a phone shows four
+       thumbnails across, and the fifth image of a strip was one nobody knew was there. */
     .thumbs {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin: var(--space-3) 0 0;
       padding: 0;
       list-style: none;
-      overflow-x: auto;
     }
 
     .thumb {
       inline-size: 4.5rem;
+      min-block-size: var(--touch-target-min);
       padding: var(--space-1);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);

@@ -79,7 +79,8 @@ export const appRoutes: Route[] = [
     path: 'p/:productSlug',
     loadComponent: () => import('./pages/product.page').then((m) => m.ProductPage),
     resolve: { product: productResolver },
-    data: { breadcrumb: 'Product', seo: { title: 'Product', ogType: 'product' } },
+    // No footer on a phone: the sticky "Add to cart" bar is where the page ends.
+    data: { breadcrumb: 'Product', hideFooterOnMobile: true, seo: { title: 'Product', ogType: 'product' } },
   },
   {
     path: 'vendor/:slug',

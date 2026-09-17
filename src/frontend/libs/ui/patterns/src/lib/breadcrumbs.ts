@@ -21,7 +21,9 @@ import { Icon } from '@klarahome/ui-primitives';
     @if (items().length > 1) {
       <nav aria-label="Breadcrumb">
         <ol>
-          @for (crumb of items(); track crumb.label; let last = $last) {
+          <!-- Tracked by position, not label: ancestors arrive after hydration and are inserted
+               before the leaf, and keyed moves over server-rendered nodes left them after it. -->
+          @for (crumb of items(); track $index; let last = $last) {
             <li>
               @if (crumb.path && !last) {
                 <a [routerLink]="crumb.path">{{ crumb.label }}</a>
@@ -57,7 +59,9 @@ import { Icon } from '@klarahome/ui-primitives';
       white-space: nowrap;
     }
 
+    /* The row scrolls, so an item never shrinks: squeezed, the chevron was drawn over the next label. */
     li {
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       gap: var(--space-1);

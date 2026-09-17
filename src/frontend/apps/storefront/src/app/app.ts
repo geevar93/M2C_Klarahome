@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, ResolveEnd, Router, RouterOutlet } from '@angular/router';
 import {
   AnnouncementBar,
@@ -74,6 +74,8 @@ export class App {
   protected readonly loading = inject(LoadingIndicator).isLoading;
   protected readonly breadcrumbs = this.trail.items;
   protected readonly hasStickyAction = inject(StickyActionBarService).active;
+  /** The deepest matched route's `data.hideFooterOnMobile`. */
+  protected readonly hideFooterOnMobile = signal(false);
 
   constructor() {
     this.shell.initialise();
@@ -81,6 +83,7 @@ export class App {
     // `takeUntilDestroyed` is not needed on either: the shell lives as long as the application.
     this.router.events.pipe(filter((event) => event instanceof ResolveEnd)).subscribe((event) => {
       this.applyRouteSeo(event.state.root, event.urlAfterRedirects);
+      this.hideFooterOnMobile.set(this.deepest(event.state.root).data['hideFooterOnMobile'] === true);
     });
 
     this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe((event) => {
@@ -130,6 +133,12 @@ export class App {
     }
 
     this.seo.apply({ canonicalPath: url.split('?')[0], ...metadata });
+  }
+
+  private deepest(root: ActivatedRouteSnapshot): ActivatedRouteSnapshot {
+    let route = root;
+    while (route.firstChild) route = route.firstChild;
+    return route;
   }
 
   private publishBreadcrumbStructuredData(): void {

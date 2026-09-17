@@ -75,7 +75,20 @@ import { NavItem, isInternalHref } from './navigation.model';
       </div>
     </footer>
   `,
+  host: { '[class.hidden-on-mobile]': 'hideOnMobile()' },
   styles: `
+    /* Below 'lg' a page can opt out of the footer: on a product page the sticky buy bar is the end of
+       the page, and a band of links scrolled up beneath it only pushes the purchase out of view. */
+    :host(.hidden-on-mobile) {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      :host(.hidden-on-mobile) {
+        display: block;
+      }
+    }
+
     footer {
       border-block-start: 1px solid var(--color-border);
       background: var(--color-surface);
@@ -176,6 +189,8 @@ export class SiteFooter {
   readonly menu = input<readonly NavItem[]>([]);
   /** Whether the page has a sticky action bar the last line has to clear. */
   readonly clearsStickyBar = input(false);
+  /** Hides the footer below the 'lg' breakpoint; a wide screen always shows it. */
+  readonly hideOnMobile = input(false);
   /** The platform vendor's credit. Empty hides the line. */
   readonly poweredBy = input('Stardust Technologies');
 

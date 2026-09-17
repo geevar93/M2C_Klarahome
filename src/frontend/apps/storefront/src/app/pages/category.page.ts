@@ -70,13 +70,15 @@ import { ProductListing } from './listing/product-listing';
       color: var(--color-text-muted);
     }
 
+    /* Wrapped onto rows rather than a sideways strip: a subcategory past the edge of a phone is
+       one the shopper never learns exists. */
     .children ul {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin: var(--space-4) 0 0;
       padding: 0 0 var(--space-2);
       list-style: none;
-      overflow-x: auto;
     }
 
     .children a {

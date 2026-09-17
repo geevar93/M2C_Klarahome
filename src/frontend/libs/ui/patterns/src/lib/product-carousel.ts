@@ -5,16 +5,22 @@ import { ProductCardView } from './catalog.model';
 import { ProductCard } from './product-card';
 
 /**
- * A horizontal row of products — related items, recently viewed, a merchandised carousel.
+ * A titled set of products — related items, recently viewed, a merchandised block.
  *
- * **It scrolls; it does not rotate.** No timer, no auto-advance, no previous/next buttons that
- * animate past content the shopper was reading: auto-rotation is banned on mobile by
- * docs/05-frontend-architecture.md §3.3, and a native scroller is what every phone user already
- * knows how to drive. `scroll-snap` makes it land on a card rather than halfway through one.
+ * **It wraps; it does not scroll sideways.** This used to be a horizontal `scroll-snap` rail, and
+ * on a phone that hid all but the first card and a half behind a swipe most shoppers never make —
+ * the products below the fold of a sideways scroller are products nobody sees. Every large
+ * marketplace stacks them instead: as many columns as the width allows (two on a 360px phone, five
+ * or six on a desktop) and as many rows as there are products, so the page scrolls in the one
+ * direction a shopper is already scrolling. Still no timer and no auto-advance, which
+ * docs/05-frontend-architecture.md §3.3 bans on mobile anyway.
  *
- * A scrolling region has to be reachable without a mouse wheel or a swipe, so the list carries
- * `tabindex="0"` and an accessible name — that is what lets a keyboard user scroll it with the
- * arrow keys, and it is a WCAG 2.2 requirement rather than a nicety.
+ * The selector and inputs keep the old name, so the CMS `productCarousel` block and every page
+ * that renders one are unchanged.
+ *
+ * The column floor is 9rem, not the listing grid's old 10rem: two 10rem columns plus the gap are
+ * 332px, 4px more than a 360px phone has inside its 16px gutters, and the grid silently fell back
+ * to one enormous card per row.
  */
 @Component({
   selector: 'kh-product-carousel',
@@ -27,13 +33,13 @@ import { ProductCard } from './product-card';
       }
     </div>
 
-    <ol class="rail" tabindex="0" [attr.aria-label]="heading()">
+    <ol class="items" [attr.aria-label]="heading()">
       @for (product of products(); track product.variantId) {
         <li>
           <kh-product-card
             [product]="product"
             [showWishlist]="showWishlist()"
-            imageSizes="(min-width: 768px) 14rem, 45vw"
+            imageSizes="(min-width: 1024px) 14rem, (min-width: 768px) 25vw, 50vw"
             (opened)="opened.emit($event)"
             (wishlistToggled)="wishlistToggled.emit($event)"
           />
@@ -55,39 +61,47 @@ import { ProductCard } from './product-card';
     }
 
     h2 {
+      min-inline-size: 0;
       margin: 0 0 var(--space-3);
       font-size: var(--text-xl);
+      overflow-wrap: anywhere;
     }
 
     .view-all {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--touch-target-min);
       font-size: var(--text-sm);
       white-space: nowrap;
     }
 
-    .rail {
-      display: flex;
+    /* The same auto-fill rule \`kh-grid\` uses, so the column count follows the container rather
+       than the viewport: a set inside the PDP's full-width band and one inside a narrower CMS
+       column each fit what they actually have. \`min(9rem, 100%)\` keeps a single column from
+       overflowing a container narrower than the floor. */
+    .items {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
       gap: var(--space-3);
       margin: 0;
-      padding: 0 0 var(--space-2);
+      padding: 0;
       list-style: none;
-      overflow-x: auto;
-      scroll-snap-type: x mandatory;
-      /* The gutter is negative-margined out and padded back in, so the first card starts at the
-         page edge and the last one can scroll past it — a rail that stops short of the edge looks
-         like it has ended when it has not. */
-      overscroll-behavior-x: contain;
     }
 
-    .rail > li {
-      flex: 0 0 auto;
-      inline-size: 45vw;
-      max-inline-size: 14rem;
-      scroll-snap-align: start;
+    .items > li {
+      display: flex;
+      min-inline-size: 0;
+    }
+
+    .items > li > kh-product-card {
+      flex: 1;
+      min-inline-size: 0;
     }
 
     @media (min-width: 768px) {
-      .rail > li {
-        inline-size: 14rem;
+      .items {
+        grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+        gap: var(--space-4);
       }
     }
   `,

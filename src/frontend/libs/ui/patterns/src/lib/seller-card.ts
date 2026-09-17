@@ -70,7 +70,7 @@ import { SellerView } from './catalog.model';
 
     dl {
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: auto minmax(0, 1fr);
       gap: var(--space-1) var(--space-3);
       margin: var(--space-3) 0 0;
       font-size: var(--text-sm);

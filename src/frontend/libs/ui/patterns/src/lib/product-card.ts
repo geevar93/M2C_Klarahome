@@ -131,6 +131,7 @@ import { ProductCardView } from './catalog.model';
       font-size: var(--text-sm);
       font-weight: var(--weight-medium);
       line-height: var(--leading-normal);
+      overflow-wrap: anywhere;
     }
 
     .name a {

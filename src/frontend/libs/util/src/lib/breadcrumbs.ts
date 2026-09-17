@@ -1,5 +1,5 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
-import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 
 /** One step of the trail. The last one is the current page and carries no link. */
@@ -57,11 +57,15 @@ export class BreadcrumbTrail {
   constructor() {
     this.rebuild();
     // The shell lives as long as the application, so this subscription is never torn down.
-    this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => {
+    // The overrides are cleared when a navigation starts, not when it ends: the routed page is
+    // constructed during activation, before `NavigationEnd`, and a page that sets its label in its
+    // constructor would otherwise have it wiped the moment it was set — the trail read
+    // `Home / Product` instead of the product's name.
+    this.router.events.pipe(filter((event) => event instanceof NavigationStart)).subscribe(() => {
       this.leafOverride.set(null);
       this.ancestors.set([]);
-      this.rebuild();
     });
+    this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => this.rebuild());
   }
 
   /**

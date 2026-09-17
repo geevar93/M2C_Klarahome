@@ -5,10 +5,13 @@ import {
   DestroyRef,
   Directive,
   Injectable,
+  OnInit,
   Signal,
   TemplateRef,
+  booleanAttribute,
   computed,
   inject,
+  input,
   signal,
 } from '@angular/core';
 
@@ -27,13 +30,17 @@ import {
 @Injectable({ providedIn: 'root' })
 export class StickyActionBarService {
   private readonly current = signal<TemplateRef<unknown> | null>(null);
+  private readonly phoneOnly = signal(false);
 
   readonly template: Signal<TemplateRef<unknown> | null> = this.current.asReadonly();
   /** Read by the shell, which reserves the height so the bar never covers the last line of a page. */
   readonly active = computed(() => this.current() !== null);
+  /** Whether the bar disappears from 'lg' up, because the page already shows the action in place. */
+  readonly mobileOnly: Signal<boolean> = this.phoneOnly.asReadonly();
 
-  register(template: TemplateRef<unknown>): void {
+  register(template: TemplateRef<unknown>, mobileOnly = false): void {
     this.current.set(template);
+    this.phoneOnly.set(mobileOnly);
   }
 
   /**
@@ -55,14 +62,25 @@ export class StickyActionBarService {
  *   <button khButton variant="primary" block>Add to cart</button>
  * </ng-template>
  * ```
+ *
+ * `mobileOnly` hides the bar from 'lg' up, for a page whose own layout already shows the same
+ * action on a wide screen — the product page's buy box, where a second full-width "Add to cart"
+ * pinned under it is just a duplicate. Checkout leaves it off: its bar is the only "Continue".
  */
 @Directive({ selector: 'ng-template[khStickyAction]' })
-export class StickyAction {
+export class StickyAction implements OnInit {
+  readonly mobileOnly = input(false, { transform: booleanAttribute });
+
+  private readonly template = inject(TemplateRef);
+  private readonly service = inject(StickyActionBarService);
+
   constructor() {
-    const template = inject(TemplateRef);
-    const service = inject(StickyActionBarService);
-    service.register(template);
-    inject(DestroyRef).onDestroy(() => service.release(template));
+    inject(DestroyRef).onDestroy(() => this.service.release(this.template));
+  }
+
+  // Registered once inputs are bound, so `mobileOnly` is known when the bar first renders.
+  ngOnInit(): void {
+    this.service.register(this.template, this.mobileOnly());
   }
 }
 
@@ -72,7 +90,7 @@ export class StickyAction {
   imports: [NgTemplateOutlet],
   template: `
     @if (template(); as content) {
-      <div class="bar">
+      <div class="bar" [class.mobile-only]="mobileOnly()">
         <ng-container [ngTemplateOutlet]="content" />
       </div>
     }
@@ -104,10 +122,16 @@ export class StickyAction {
         max-width: var(--container-max);
         margin-inline: auto;
       }
+
+      .bar.mobile-only {
+        display: none;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StickyActionBar {
-  protected readonly template = inject(StickyActionBarService).template;
+  private readonly service = inject(StickyActionBarService);
+  protected readonly template = this.service.template;
+  protected readonly mobileOnly = this.service.mobileOnly;
 }

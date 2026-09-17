@@ -91,7 +91,11 @@ export class ProductGrid {
   /** A further page is in flight. The grid keeps what it has and appends placeholders. */
   readonly loadingMore = input(false);
   readonly skeletonCount = input(8);
-  readonly minColumnWidth = input('10rem');
+  /**
+   * 9rem, so a 360px phone gets two columns: two 10rem columns plus the gap are 332px, 4px more
+   * than the 328px inside its gutters, and the grid fell back to one full-width card per row.
+   */
+  readonly minColumnWidth = input('9rem');
   readonly showWishlist = input(true);
   readonly showAddToCart = input(false);
   readonly wishlistedIds = input<readonly string[]>([]);

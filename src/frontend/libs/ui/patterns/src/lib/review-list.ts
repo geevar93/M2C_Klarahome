@@ -125,8 +125,11 @@ import { RatingBreakdownView, ReviewView } from './catalog.model';
       margin-block-end: var(--space-3);
     }
 
+    /* A review is customer free text; one long URL or unbroken word must not widen the page. */
     :host {
       display: block;
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
     }
 
     .summary {
@@ -215,13 +218,15 @@ import { RatingBreakdownView, ReviewView } from './catalog.model';
       white-space: pre-line;
     }
 
+    /* Wrapped, not a sideways strip, for the same reason as the gallery's thumbnails: a photo
+       past the edge of a phone is a photo nobody opens. */
     .photos {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin: var(--space-2) 0 0;
       padding: 0;
       list-style: none;
-      overflow-x: auto;
     }
 
     .photos li {
@@ -231,6 +236,7 @@ import { RatingBreakdownView, ReviewView } from './catalog.model';
 
     .foot {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: var(--space-2);

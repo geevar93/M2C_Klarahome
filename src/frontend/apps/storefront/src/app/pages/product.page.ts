@@ -276,7 +276,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     </article>
 
     <!-- The thumb-zone action. In the shell's bar, so it stays put while the page scrolls. -->
-    <ng-template khStickyAction>
+    <ng-template khStickyAction mobileOnly>
       @if (buyBox(); as offer) {
         <span class="bar-price">{{ offer.price | khMoney }}</span>
         <button
@@ -427,10 +427,22 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     </kh-drawer>
   `,
   styles: `
+    /* Mobile first: the base rules are the 360px phone, and each media query below only adds.
+       One column in this order — gallery, title and price, the buy controls, details, reviews,
+       questions, recently viewed — which is the order a shopper reads a product in.
+
+       \`minmax(0, 1fr)\`, not the implicit \`auto\` track: an \`auto\` column is as wide as the
+       min-content of its widest child, so one long unbroken spec value, a seller name or the
+       gallery's image pushed the whole page wider than the phone and gave it a sideways scroll. */
     .pdp {
       display: grid;
-      gap: var(--space-6);
-      padding-block: var(--space-4) var(--space-10);
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-5);
+      padding-block: var(--space-3) var(--space-8);
+    }
+
+    .pdp > * {
+      min-inline-size: 0;
     }
 
     .buy {
@@ -439,20 +451,42 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       gap: var(--space-4);
     }
 
+    /* Product names, descriptions and spec values are merchant free text with no length limit. */
+    .buy,
+    .detail {
+      overflow-wrap: anywhere;
+    }
+
     h1 {
       margin: 0 0 var(--space-2);
-      font-size: var(--text-2xl);
+      font-size: var(--text-xl);
+      line-height: var(--leading-snug);
     }
 
     .rating-link {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--touch-target-min);
       text-decoration: none;
     }
 
+    /* On a phone: the stepper and "Add to cart" share a row, with the button taking every pixel
+       the stepper leaves, and "Save for later" gets a full-width row of its own beneath — three
+       controls wrapping wherever \`flex-wrap\` happened to break them left a lone, half-width
+       button that was easy to mistake for the primary action. */
     .quantity {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
       gap: var(--space-3);
+    }
+
+    .quantity > button {
+      inline-size: 100%;
+    }
+
+    .quantity > button:last-child {
+      grid-column: 1 / -1;
     }
 
     .net,
@@ -466,16 +500,19 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       color: var(--color-text);
     }
 
+    /* A phone stacks each label over its value: a fixed 8rem label column left a 360px screen
+       about 150px for the value, and "Dimensions (W × D × H)" took four lines to say what it is. */
     .specs {
       display: grid;
-      grid-template-columns: minmax(8rem, auto) 1fr;
-      gap: var(--space-2) var(--space-4);
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-3);
       margin: 0;
       font-size: var(--text-sm);
     }
 
     .specs > div {
-      display: contents;
+      display: grid;
+      gap: var(--space-1);
     }
 
     dt {
@@ -492,7 +529,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
 
     .reviews,
     .questions {
-      padding-block-start: var(--space-8);
+      padding-block-start: var(--space-6);
       border-block-start: 1px solid var(--color-border);
     }
 
@@ -501,12 +538,51 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       white-space: nowrap;
     }
 
+    /* From 480px (\`sm\`) there is room for the label beside its value, and for the three buy
+       controls on one line. */
+    @media (min-width: 480px) {
+      .specs {
+        grid-template-columns: minmax(6rem, 35%) minmax(0, 1fr);
+        gap: var(--space-2) var(--space-4);
+      }
+
+      .specs > div {
+        display: contents;
+      }
+
+      .quantity {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .quantity > button {
+        inline-size: auto;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .pdp {
+        gap: var(--space-6);
+        padding-block: var(--space-4) var(--space-10);
+      }
+
+      h1 {
+        font-size: var(--text-2xl);
+      }
+
+      .reviews,
+      .questions {
+        padding-block-start: var(--space-8);
+      }
+    }
+
     /* From 'lg' the gallery and the buy column sit side by side and everything else runs full
        width beneath them. 1024px is the \`lg\` breakpoint from _breakpoints.scss. */
     @media (min-width: 1024px) {
       .pdp {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: start;
+        gap: var(--space-8);
       }
 
       .detail,
