@@ -50,6 +50,7 @@ export class ShellStore {
   private readonly announcements = signal<readonly BannerView[]>([]);
   private readonly header = signal<readonly NavItem[]>([]);
   private readonly footer = signal<readonly NavItem[]>([]);
+  private readonly socialMenu = signal<readonly NavItem[]>([]);
   private readonly navDrawerOpen = signal(false);
   private readonly cartDrawerOpen = signal(false);
   private readonly typed = signal('');
@@ -69,6 +70,8 @@ export class ShellStore {
 
   readonly headerMenu: Signal<readonly NavItem[]> = this.header.asReadonly();
   readonly footerMenu: Signal<readonly NavItem[]> = this.footer.asReadonly();
+  /** The `social` menu: the profile links the footer draws as icons. Empty where none is built. */
+  readonly socialLinks: Signal<readonly NavItem[]> = this.socialMenu.asReadonly();
 
   readonly isNavOpen: Signal<boolean> = this.navDrawerOpen.asReadonly();
   readonly isCartOpen: Signal<boolean> = this.cartDrawerOpen.asReadonly();
@@ -135,6 +138,7 @@ export class ShellStore {
       .subscribe((banners) => this.announcements.set(toBannerViews(banners)));
     this.content.menu(MENU_CODES.header).subscribe((menu) => this.header.set(toNavItems(menu.items)));
     this.content.menu(MENU_CODES.footer).subscribe((menu) => this.footer.set(toNavItems(menu.items)));
+    this.content.menu(MENU_CODES.social).subscribe((menu) => this.socialMenu.set(toNavItems(menu.items)));
     this.content.seoConfig().subscribe((seoConfig) => {
       this.seo.configure(seoConfig);
       this.publishSiteStructuredData();

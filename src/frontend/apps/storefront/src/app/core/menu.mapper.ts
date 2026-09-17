@@ -29,4 +29,5 @@ export function toNavItems(items: readonly StoreMenuItemResponse[] | undefined):
 export const MENU_CODES = {
   header: 'header',
   footer: 'footer',
+  social: 'social',
 } as const;

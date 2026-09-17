@@ -52,9 +52,41 @@ const ICON_PATHS = {
   card: ['M3 7h18v10H3z', 'M3 11h18'],
   pin: ['M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z', 'M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
   refresh: ['M20 12a8 8 0 1 1-2.4-5.7', 'M20 4v5h-5'],
+  // The social marks, added at Step 31 for the footer's follow row. Drawn in the same 24x24
+  // stroked box as everything else rather than pasted in as filled brand SVGs: a logo dropped into
+  // this set would ignore `currentColor` and sit at a different weight beside the icons around it.
+  // They are recognisable rather than exact, which is what a 20px footer icon can be.
+  instagram: [
+    'M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z',
+    'M16 12a4 4 0 1 1-4-4 4 4 0 0 1 4 4z',
+    'M17.5 6.5h.01',
+  ],
+  facebook: ['M15 3h-2.5A4.5 4.5 0 0 0 8 7.5V10H5.5v4H8v7h4v-7h3l.5-4H12V8a1 1 0 0 1 1-1h2V3z'],
+  // X's mark, as its one outline rather than two crossed strokes — stroked diagonals are the close
+  // icon, which is what this looked like. The arms are uneven and taper, and only the real glyph
+  // has that, so this one is filled (see FILLED_ICONS). Traced from the official mark and inset to
+  // the same box as the rest of the set.
+  x: [
+    'M13.82 10.53L20.98 2.4h-1.7l-6.21 7.06L8.12 2.4H2.4l7.5 10.67L2.4 21.6h1.7l6.55-7.46 5.23 7.46h5.72l-7.78-11.07z',
+  ],
+  twitch: ['M4 3h16v11l-4 4h-3.5L9 21H7v-3H4V3z', 'M11 8v4', 'M15 8v4'],
+  youtube: [
+    'M3 8.5A3.5 3.5 0 0 1 6.5 5h11A3.5 3.5 0 0 1 21 8.5v7a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 15.5v-7z',
+    'M11 9.5l4 2.5-4 2.5v-5z',
+  ],
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
+
+/**
+ * The icons whose shape is the fill, not the stroke.
+ *
+ * The set is stroked, which is what keeps a cart and a chevron the same weight. A wordmark is the
+ * exception: its strokes are uneven and tapered by design, and outlining one at 1.75px turns it
+ * into a hollow smudge at 20 pixels. These are drawn as a filled path in `currentColor` instead,
+ * so they still take the colour of the control they sit in.
+ */
+const FILLED_ICONS: ReadonlySet<string> = new Set<IconName>(['x']);
 
 /** The names, for a caller that wants to validate one at runtime. */
 export const ICON_NAMES = Object.keys(ICON_PATHS) as readonly IconName[];
@@ -66,8 +98,8 @@ export const ICON_NAMES = Object.keys(ICON_PATHS) as readonly IconName[];
       [attr.width]="pixels()"
       [attr.height]="pixels()"
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
+      [attr.fill]="filled() ? 'currentColor' : 'none'"
+      [attr.stroke]="filled() ? 'none' : 'currentColor'"
       stroke-width="1.75"
       stroke-linecap="round"
       stroke-linejoin="round"
@@ -93,5 +125,6 @@ export class Icon {
   readonly size = input<'sm' | 'md'>('md');
 
   protected readonly paths = computed(() => ICON_PATHS[this.name()] ?? []);
+  protected readonly filled = computed(() => FILLED_ICONS.has(this.name()));
   protected readonly pixels = computed(() => (this.size() === 'sm' ? 20 : 24));
 }

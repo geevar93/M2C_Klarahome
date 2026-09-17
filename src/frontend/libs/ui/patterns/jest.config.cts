@@ -12,7 +12,8 @@ module.exports = {
       },
     ],
   },
-  transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$)'],
+  // `transformIgnorePatterns` is deliberately not set: the preset's list is what lets a spec that
+  // reaches @klarahome/i18n load Angular's ESM-only locale data. Restating it here overrode that.
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
     'jest-preset-angular/build/serializers/ng-snapshot',

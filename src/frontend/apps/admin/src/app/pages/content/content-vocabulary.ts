@@ -98,6 +98,11 @@ export const MENU_LINK_TYPES: readonly Choice<MenuLinkType>[] = [
 export const MENU_PLACEMENTS: readonly Choice[] = [
   { value: 'header', label: 'Header', hint: 'The primary navigation, and the mobile drawer.' },
   { value: 'footer', label: 'Footer', hint: 'Columns of links: each top-level item is a heading.' },
+  {
+    value: 'social',
+    label: 'Social profiles',
+    hint: 'A row of icons above the footer’s legal line. Instagram, Facebook, X, Twitch and YouTube are recognised from the address.',
+  },
 ];
 
 export const COLLECTION_KINDS: readonly Choice<CollectionKind>[] = [
