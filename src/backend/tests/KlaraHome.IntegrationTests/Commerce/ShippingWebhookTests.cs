@@ -99,6 +99,60 @@ public sealed class ShippingWebhookTests(KlaraHomeSchemaFixture fixture) : Comme
     }
 
     /// <summary>
+    /// The aggregator-neutral path reaches the configured courier: a verified scan sent to
+    /// <c>/webhooks/courier</c> is stored under that courier's name and applied, and a forged one is
+    /// refused exactly as on the named path. Shiprocket will not register a URL naming itself.
+    /// </summary>
+    [Fact]
+    public async Task The_courier_path_reaches_the_configured_provider_and_still_refuses_a_forgery()
+    {
+        SkipWithoutDocker();
+
+        var (booked, admin) = await BookedShipmentAsync();
+
+        var awb = booked.GetProperty("awb").GetString()!;
+        var shipmentId = booked.GetProperty("id").GetGuid();
+
+        var scan = Factory.Courier.Scan(awb, ShipmentStatus.InTransit);
+        var body = Factory.Courier.WebhookBody(awb, scan);
+
+        // A separate scan: the receiver deduplicates on the event id alone, so forging this one first
+        // would leave the genuine delivery answered as a replay.
+        var forgedScan = Factory.Courier.Scan(awb, ShipmentStatus.OutForDelivery);
+        var forged = await PostRawAsync(
+            CreateClient(),
+            "/api/v1/webhooks/courier",
+            Factory.Courier.WebhookBody(awb, forgedScan),
+            ("X-Api-Key", "not-the-secret"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, forged.StatusCode);
+
+        var accepted = await PostRawAsync(
+            CreateClient(),
+            "/api/v1/webhooks/courier",
+            body,
+            ("X-Api-Key", FakeShippingProvider.Sign(body)));
+
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        var storedUnderProvider = await Database.CountAsync(
+            "SELECT COUNT(*) FROM shipping.courier_events WHERE provider_event_id = $1 AND provider = $2 AND signature_valid",
+            Cancellation,
+            scan.ProviderEventId,
+            ShippingProviders.Shiprocket);
+
+        Assert.Equal(1, storedUnderProvider);
+
+        await DrainCourierEventsAsync();
+
+        var shipment = await ReadAsync(await admin.GetAsync(
+            new Uri($"/api/v1/admin/shipments/{shipmentId}", UriKind.Relative),
+            Cancellation));
+
+        Assert.Equal("InTransit", shipment.GetProperty("status").GetString());
+    }
+
+    /// <summary>
     /// A webhook whose signature does not verify is stored, marked ignored, answered <c>401</c>, and
     /// never processed — including after an operator replays it.
     /// </summary>

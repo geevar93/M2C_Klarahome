@@ -455,7 +455,8 @@ the header.
 itself. Three options, same as payments:
 
 ```bash
-# 1. A tunnel: point their dashboard webhook at <tunnel>/api/v1/webhooks/shipping/shiprocket
+# 1. A tunnel: point their dashboard webhook at <tunnel>/api/v1/webhooks/courier (Shiprocket
+#    refuses a URL containing "shiprocket", "kartrocket", "sr" or "kr")
 #    with the same secret as SHIPPING_WEBHOOK_SECRET. Shiprocket sends it back in an
 #    x-api-key header, not as an HMAC over the body.
 # 2. Ask the courier directly, which is what the polling fallback does anyway:

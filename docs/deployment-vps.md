@@ -353,7 +353,7 @@ Finally, register the webhook URLs with the providers you use:
 | Provider | URL |
 |---|---|
 | Razorpay | `https://api.<domain>/api/v1/webhooks/razorpay` |
-| Shiprocket | `https://api.<domain>/api/v1/webhooks/shipping/shiprocket` |
+| Shiprocket | `https://api.<domain>/api/v1/webhooks/courier` (Shiprocket refuses a URL containing `shiprocket`, `kartrocket`, `sr` or `kr`) |
 | Google / Facebook sign-in | `https://api.<domain>/api/v1/store/auth/external/<provider>/callback` |
 
 ---

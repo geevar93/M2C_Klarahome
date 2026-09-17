@@ -81,6 +81,33 @@ internal static partial class WebhookEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        // The same receiver at a path that names no aggregator, for the configured one. Shiprocket's
+        // dashboard refuses a webhook URL containing "shiprocket", "kartrocket", "sr" or "kr", so the
+        // named path above cannot be registered with the very courier it is named after. Events are
+        // still stored under the configured provider's name, so attribution is unchanged.
+        endpoints
+            .MapPost("/webhooks/courier", async (HttpContext context) =>
+            {
+                var services = context.RequestServices;
+                var options = services.GetRequiredService<IOptions<ShippingOptions>>().Value;
+
+                return await ReceiveAsync(
+                        context,
+                        options.Provider,
+                        services.GetRequiredService<ShippingProviderRegistry>(),
+                        services.GetRequiredService<ShippingDbContext>(),
+                        options,
+                        services.GetRequiredService<IClock>(),
+                        services.GetRequiredService<ILoggerFactory>().CreateLogger("KlaraHome.Shipping.Webhook"))
+                    .ConfigureAwait(false);
+            })
+            .WithTags("Webhooks")
+            .AllowAnonymous()
+            .WithName("courierWebhook")
+            .WithSummary("Receives a signed webhook from the configured courier, at a path naming no aggregator.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         return endpoints;
     }
 

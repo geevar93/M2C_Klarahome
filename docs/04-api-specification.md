@@ -748,6 +748,8 @@ request.
 ```
 POST /api/v1/webhooks/razorpay        X-Razorpay-Signature   (HMAC-SHA256 over raw body)
 POST /api/v1/webhooks/shipping/{provider}   {provider} is the adapter key — `shiprocket` in v1
+POST /api/v1/webhooks/courier         the configured Shipping:Provider; the URL to register with Shiprocket,
+                                      which refuses one containing "shiprocket", "kartrocket", "sr" or "kr"
 POST /api/v1/webhooks/sms/{provider}   delivery receipts
 POST /api/v1/webhooks/email/{provider} bounces/complaints
 ```
