@@ -26,6 +26,9 @@ const SUGGEST_DEBOUNCE_MS = 200;
 /** Below this, the server has nothing better to offer than the shopper's own history. */
 const MIN_SUGGEST_LENGTH = 2;
 
+/** The bundled square mark, `apps/storefront/public/brand/icon-512.png`, for a store with no logo set. */
+const FALLBACK_LOGO_PATH = '/brand/icon-512.png';
+
 /**
  * Everything the shell renders, in one place.
  *
@@ -56,6 +59,9 @@ export class ShellStore {
   private readonly typed = signal('');
   private readonly served = signal<readonly SuggestionView[]>([]);
   private readonly queries = new Subject<string>();
+
+  /** The API's `Organization` and `WebSite` nodes, once they have arrived. */
+  private siteGraph: readonly unknown[] | null = null;
   private started = false;
 
   readonly storeName = computed(() => this.config.branding().storeName);
@@ -126,7 +132,7 @@ export class ShellStore {
       // The `{store}` token in the title template is the branding settings' store name, which
       // arrives here rather than with the SEO configuration. `configure` merges, so whichever of
       // the two answers second completes the pair instead of overwriting it.
-      this.seo.configure({ storeName: this.storeName() });
+      this.seo.configure({ storeName: this.storeName(), storeTagline: this.tagline() });
       this.publishSiteStructuredData();
       // The white-label mechanism (docs/10-design-system.md §6): whatever token overrides this
       // tenant's branding section carries are applied to `:root` now, during the same SSR pass
@@ -141,6 +147,10 @@ export class ShellStore {
     this.content.menu(MENU_CODES.social).subscribe((menu) => this.socialMenu.set(toNavItems(menu.items)));
     this.content.seoConfig().subscribe((seoConfig) => {
       this.seo.configure(seoConfig);
+      this.publishSiteStructuredData();
+    });
+    this.content.siteStructuredData().subscribe((nodes) => {
+      this.siteGraph = nodes;
       this.publishSiteStructuredData();
     });
 
@@ -203,6 +213,15 @@ export class ShellStore {
    * every page a crawler might enter through (docs/05-frontend-architecture.md §3.5).
    */
   private publishSiteStructuredData(): void {
+    // The API's graph when it has answered: it carries the logo, `sameAs` and the contact point,
+    // which the two nodes below cannot, and one `@graph` block links them by `@id`.
+    if (this.siteGraph) {
+      const graph = this.siteGraph.map((node) => this.withFallbackLogo(node));
+      this.seo.setJsonLd('organization', { '@context': 'https://schema.org', '@graph': graph });
+      this.seo.clearJsonLd('website');
+      return;
+    }
+
     const name = this.storeName();
     const url = this.seo.canonicalBaseUrl;
     if (!url) return;
@@ -212,6 +231,7 @@ export class ShellStore {
       '@type': 'Organization',
       name,
       url,
+      logo: this.seo.absolute(FALLBACK_LOGO_PATH),
     });
 
     this.seo.setJsonLd('website', {
@@ -225,5 +245,16 @@ export class ShellStore {
         'query-input': 'required name=search_term_string',
       },
     });
+  }
+
+  /**
+   * The `Organization` node with a logo, supplying the bundled mark when the store has uploaded
+   * none. Google shows an organisation's logo only when the markup names one, and an unset logo
+   * setting is the ordinary state of a new store, not a decision to have no logo.
+   */
+  private withFallbackLogo(node: unknown): unknown {
+    const record = node as Record<string, unknown>;
+    if (record['@type'] !== 'Organization' || record['logo']) return node;
+    return { ...record, logo: this.seo.absolute(FALLBACK_LOGO_PATH) };
   }
 }

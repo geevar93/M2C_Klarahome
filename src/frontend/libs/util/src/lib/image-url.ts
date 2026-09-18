@@ -95,6 +95,7 @@ export class ImageUrls {
           readonly width?: number | null;
           readonly height?: number | null;
           readonly alt?: string | null;
+          readonly variants?: readonly ImageVariant[] | null;
         }
       | null
       | undefined,
@@ -104,9 +105,57 @@ export class ImageUrls {
     const alt = image.alt?.trim() || fallbackAlt;
 
     if (image.url) {
-      return { src: image.url, srcset: '', width: image.width ?? null, height: image.height ?? null, alt };
+      const width = image.width ?? null;
+      const height = image.height ?? null;
+      const renditions = usableVariants(image.variants, width);
+
+      // The original is what was uploaded — a 600KB JPEG or a 3000px PNG, more often than not.
+      // The media module has already rendered WebP copies at fixed widths, so where there are any
+      // the widest of them is the `src` and the set of them is the `srcset`, and the original is
+      // only ever fetched for an image nothing was rendered for.
+      if (renditions.length > 0) {
+        return {
+          src: renditions[renditions.length - 1].url,
+          srcset: renditions.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
+          width,
+          height,
+          alt,
+        };
+      }
+
+      return { src: image.url, srcset: '', width, height, alt };
     }
 
     return this.sourceForFile(image.fileId, alt);
   }
+}
+
+/** One rendition of a stored image, as the API lists it beside the original. */
+export interface ImageVariant {
+  readonly name?: string;
+  readonly width: number;
+  readonly url: string;
+}
+
+/**
+ * The renditions worth offering a browser, narrowest first, each described by its real width.
+ *
+ * The thumbnail is dropped — it is a 160px admin preview, and offering it lets a browser on a
+ * low-DPR screen pick a blurred card. A rendition wider than the original is kept but re-described:
+ * the resizer does not enlarge, so a "960" copy of a 679px file is a 679px WebP, and a `w`
+ * descriptor that overstates it makes the browser choose on a false premise. Only the first such
+ * rendition survives, since every later one is the same file again.
+ */
+export function usableVariants(
+  variants: readonly ImageVariant[] | null | undefined,
+  intrinsicWidth: number | null,
+): ImageVariant[] {
+  const described = (variants ?? [])
+    .filter((variant) => variant.url && variant.width > 0 && variant.name !== 'thumb')
+    .sort((left, right) => left.width - right.width)
+    .map((variant) =>
+      intrinsicWidth && variant.width > intrinsicWidth ? { ...variant, width: intrinsicWidth } : variant,
+    );
+
+  return described.filter((variant, index) => described.findIndex((other) => other.width === variant.width) === index);
 }

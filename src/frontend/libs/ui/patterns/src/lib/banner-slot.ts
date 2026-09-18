@@ -21,6 +21,9 @@ import { BannerView } from './banner.model';
  * image needs alt text; a decorative strip beside a heading that already says it needs `alt=""`,
  * and inventing "Banner" for it would make a screen reader read a word that means nothing.
  *
+ * **`width` and `height` are the image's own**, so the box is reserved before the bytes arrive.
+ * The CSS still sizes it to the column; the attributes only give the browser its aspect ratio.
+ *
  * It renders nothing when the placement is empty. Reserving space for a banner that is not there is
  * a hole in the page on every load of a shop that runs no campaign.
  */
@@ -48,9 +51,25 @@ import { BannerView } from './banner.model';
       <ng-template #picture let-value>
         <picture>
           @if (value.mobileImageUrl) {
-            <source [srcset]="value.mobileImageUrl" media="(max-width: 40rem)" />
+            <source
+              [srcset]="value.mobileImageSrcset || value.mobileImageUrl"
+              [attr.sizes]="value.mobileImageSrcset ? '100vw' : null"
+              [attr.width]="value.mobileImageWidth ?? null"
+              [attr.height]="value.mobileImageHeight ?? null"
+              media="(max-width: 40rem)"
+            />
           }
-          <img [src]="value.imageUrl" [alt]="value.altText ?? ''" loading="lazy" decoding="async" />
+          <img
+            [src]="value.imageUrl"
+            [attr.srcset]="value.imageSrcset || null"
+            [attr.sizes]="value.imageSrcset ? '100vw' : null"
+            [attr.width]="value.imageWidth ?? null"
+            [attr.height]="value.imageHeight ?? null"
+            [alt]="value.altText ?? ''"
+            [attr.loading]="priority() ? 'eager' : 'lazy'"
+            [attr.fetchpriority]="priority() ? 'high' : null"
+            decoding="async"
+          />
         </picture>
       </ng-template>
     }
@@ -88,6 +107,15 @@ import { BannerView } from './banner.model';
 export class BannerSlot {
   /** The placement's banners, in priority order. */
   readonly banners = input<readonly BannerView[]>([]);
+
+  /**
+   * Whether this banner is the page's LCP element — the home page's masthead is.
+   *
+   * Loaded eagerly and fetched at high priority when it is. Lazy-loading the largest picture above
+   * the fold makes the browser wait for layout before asking for it, which is the single most
+   * expensive thing a page can do to its LCP. Every other placement stays lazy.
+   */
+  readonly priority = input(false);
 
   /** The one that wins the slot: the highest-priority one that actually has an image. */
   protected readonly banner = computed(() => this.banners().find((candidate) => candidate.imageUrl) ?? null);

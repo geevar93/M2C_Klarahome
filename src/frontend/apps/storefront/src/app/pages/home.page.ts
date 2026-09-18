@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { StoreContentService, StorePageResponse } from '@klarahome/data-access-content';
@@ -10,6 +10,7 @@ import { map } from 'rxjs';
 import { toBannerViews } from '../core/banner.mapper';
 import { CmsBlockMapper } from '../core/cms-block.mapper';
 import { RecentlyViewedStore } from '../core/recently-viewed.store';
+import { ShellStore } from '../core/shell.store';
 
 /**
  * The home page.
@@ -39,13 +40,14 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
   imports: [BannerSlot, CmsBlockRenderer, EmptyState, ProductCarousel],
   template: `
     @if (heroBanners().length > 0) {
-      <kh-banner-slot [banners]="heroBanners()" />
+      <kh-banner-slot [banners]="heroBanners()" [priority]="true" />
     }
 
     @if (blocks().length > 0) {
+      <h1 class="kh-visually-hidden">{{ heading() }}</h1>
       <kh-cms-block-renderer
         [blocks]="blocks()"
-        [prioritiseFirst]="true"
+        [prioritiseFirst]="heroBanners().length === 0"
         (productOpened)="trackOpen($event)"
       />
     } @else {
@@ -100,7 +102,24 @@ export class HomePage {
   private readonly analytics = inject(AnalyticsService);
   private readonly recent = inject(RecentlyViewedStore);
 
+  private readonly shell = inject(ShellStore);
+
   protected readonly storeHeading = 'Welcome';
+
+  /**
+   * The page's one `<h1>` when the document is made of blocks.
+   *
+   * Every block heads itself with an `<h2>`, so a composed home page had no top-level heading at
+   * all — nothing telling a crawler or a screen reader what the page is. The store's name and
+   * tagline say it, and the CMS page's own title does not: it is an editor's label ("Home page").
+   * Visually hidden, because the masthead already says the same thing in pictures; the
+   * `kh-visually-hidden` utility keeps it in the accessibility tree, which is where it belongs.
+   */
+  protected readonly heading = computed(() => {
+    const name = this.shell.storeName() || this.storeHeading;
+    const tagline = this.shell.tagline();
+    return tagline ? `${name} — ${tagline}` : name;
+  });
 
   protected readonly page = toSignal(
     this.route.data.pipe(map((data) => data['page'] as StorePageResponse | null)),
@@ -131,12 +150,19 @@ export class HomePage {
   protected readonly recentlyViewed = computed(() => this.recent.items());
 
   constructor() {
-    const page = this.page();
-    this.seo.apply({
-      title: page?.seo.metaTitle || page?.title || 'Home',
-      description: page?.seo.metaDescription || page?.summary || '',
-      canonicalPath: '/',
-      noIndex: page?.seo.noIndex ?? false,
+    // An effect rather than a one-off call, because the tagline arrives with the branding settings
+    // and nothing orders that round trip before this page's; `apply` is idempotent.
+    effect(() => {
+      const page = this.page();
+      this.seo.apply({
+        // The CMS page's own title is an editor's label — "Home page" — and as a search result it
+        // reads as a site nobody finished. An explicit meta title wins; otherwise the tagline,
+        // which is the one sentence the store has written about itself.
+        title: page?.seo.metaTitle || this.shell.tagline() || page?.title || 'Home',
+        description: page?.seo.metaDescription || page?.summary || '',
+        canonicalPath: '/',
+        noIndex: page?.seo.noIndex ?? false,
+      });
     });
   }
 

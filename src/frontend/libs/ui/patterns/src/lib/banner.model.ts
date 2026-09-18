@@ -13,8 +13,17 @@ export interface BannerView {
   readonly id: string;
   /** The desktop image, when this is a picture banner. */
   readonly imageUrl?: string | null;
+  /** The desktop image's WebP renditions as a `srcset`, empty when there are none. */
+  readonly imageSrcset?: string;
+  /** The desktop image's intrinsic size, so the box is reserved before the bytes arrive. */
+  readonly imageWidth?: number | null;
+  readonly imageHeight?: number | null;
   /** The mobile image, where a different crop was uploaded. */
   readonly mobileImageUrl?: string | null;
+  /** The mobile image's renditions as a `srcset`, falling back to its URL. */
+  readonly mobileImageSrcset?: string;
+  readonly mobileImageWidth?: number | null;
+  readonly mobileImageHeight?: number | null;
   /** The words, for an announcement bar. */
   readonly message?: string | null;
   /** Whether an announcement bar scrolls its words across the strip instead of centring them. */

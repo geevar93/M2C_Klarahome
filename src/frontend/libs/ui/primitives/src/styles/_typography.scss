@@ -55,6 +55,9 @@
 @font-face {
   font-family: 'Fraunces Fallback';
   src: local('Georgia'), local('Times New Roman');
+  // A local face has nothing to wait for, so this changes no rendering; it is declared so that no
+  // rule in the sheet leaves font loading to the browser's default, which audits rightly flag.
+  font-display: swap;
   size-adjust: 105%;
   ascent-override: 92%;
   descent-override: 24%;

@@ -43,6 +43,37 @@ const trustProxyHeaders = process.env['KH_TRUST_PROXY_HEADERS'] === 'true';
 
 const angularApp = new AngularNodeAppEngine({ allowedHosts, trustProxyHeaders });
 
+// Nothing a visitor needs, and one more line telling a scanner which exploits to try first.
+app.disable('x-powered-by');
+
+/**
+ * `www.` is not a second copy of the shop: it answers a single permanent redirect to the apex.
+ *
+ * The edge is meant to do this (infra/caddy/Caddyfile, the `www.{$KH_DOMAIN}` block), and this is
+ * the backstop for an edge that does not — a Caddyfile edited on the host, a proxy in front of a
+ * test deployment. Without it `www` serves every page with a 200 and a canonical pointing at the
+ * apex, which is two copies of the site competing for the same ranking. Declared first, so
+ * `robots.txt` and the sitemaps redirect too: a crawler that fetched them on `www` would otherwise
+ * be handed the apex's URLs from a host it considers a different site.
+ */
+app.use((request, response, next) => {
+  const host = request.get('host') ?? '';
+  const apex = host.slice(4);
+
+  // Only to an apex this process is configured to serve. `Host` is the visitor's to write, and
+  // without the check `www.anything` is a redirect to `anything`.
+  if (!/^www\./i.test(host) || !allowedHosts.includes(apex.replace(/:\d+$/, '').toLowerCase())) {
+    next();
+    return;
+  }
+
+  // The scheme the visitor used, which behind a TLS-terminating proxy is only in its header.
+  const forwarded = trustProxyHeaders ? request.get('x-forwarded-proto')?.split(',')[0]?.trim() : undefined;
+  const scheme = forwarded === 'http' || forwarded === 'https' ? forwarded : request.protocol;
+
+  response.redirect(301, `${scheme}://${apex}${request.originalUrl}`);
+});
+
 /**
  * Where the API is, for the three documents this process fetches for itself.
  *

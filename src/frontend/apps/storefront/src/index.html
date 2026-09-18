@@ -19,6 +19,14 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="apple-touch-icon" href="brand/icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
+    <!--
+      The display face every heading is set in (libs/ui/primitives/src/styles/_typography.scss).
+      Preloaded because otherwise the browser learns of it only after the stylesheet has been
+      parsed and a heading has been laid out, and the swap lands late. One file, latin subset,
+      ~35KB. `crossorigin` is required for a font preload even from the same origin, or the
+      preloaded response is not reused and the file is fetched twice.
+    -->
+    <link rel="preload" href="/fonts/fraunces-600-latin.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <kh-root></kh-root>

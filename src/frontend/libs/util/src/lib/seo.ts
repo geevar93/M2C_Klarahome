@@ -38,6 +38,12 @@ export interface SeoSiteConfig {
   readonly storeName: string;
   /** Used when a page supplies no description of its own. */
   readonly defaultMetaDescription: string;
+  /**
+   * The branding tagline, the last resort when neither the page nor the SEO settings describe it.
+   * One sentence the store wrote about itself beats a search result with no snippet and a share
+   * card with no description line.
+   */
+  readonly storeTagline: string;
   /** `summary_large_image` unless the store says otherwise. */
   readonly twitterCardType: string;
 }
@@ -68,6 +74,7 @@ const DEFAULT_SITE_CONFIG: SeoSiteConfig = {
   titleTemplate: '{title}',
   storeName: '',
   defaultMetaDescription: '',
+  storeTagline: '',
   twitterCardType: 'summary_large_image',
 };
 
@@ -82,6 +89,9 @@ const OWNED = 'data-kh-seo';
  * deployment's `canonicalBaseUrl` names.
  */
 const DEFAULT_OG_IMAGE_PATH = '/brand/og-default.png';
+
+/** Open Graph's spelling of the document language `index.html` declares. */
+const OG_LOCALE = 'en_IN';
 
 @Injectable({ providedIn: 'root' })
 export class SeoService {
@@ -132,7 +142,8 @@ export class SeoService {
     const pageTitle = metadata.title?.trim() ?? '';
     this.title.setTitle(pageTitle ? this.format(pageTitle) : pageTitle);
 
-    const description = metadata.description?.trim() || this.site.defaultMetaDescription;
+    const description =
+      metadata.description?.trim() || this.site.defaultMetaDescription || this.site.storeTagline;
     this.setTag('name', 'description', description);
 
     const robots = !this.site.allowIndexing
@@ -149,6 +160,10 @@ export class SeoService {
     this.setTag('property', 'og:type', metadata.ogType ?? 'website');
     this.setTag('property', 'og:url', this.absolute(metadata.canonicalPath));
     this.setTag('property', 'og:image', metadata.imageUrl ?? this.absolute(DEFAULT_OG_IMAGE_PATH));
+    // The two optional ones a share card reads to say whose link it is and in what language. The
+    // locale matches `<html lang="en-IN">`, in the underscore form Open Graph uses.
+    this.setTag('property', 'og:site_name', this.site.storeName);
+    this.setTag('property', 'og:locale', OG_LOCALE);
     this.setTag('name', 'twitter:card', this.site.twitterCardType);
   }
 

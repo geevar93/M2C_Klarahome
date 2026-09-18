@@ -8,7 +8,7 @@ import {
   StoreMenuResponse,
   StorePageResponse,
 } from '@klarahome/data-access-api';
-import { Observable, catchError, of, shareReplay } from 'rxjs';
+import { Observable, catchError, map, of, shareReplay } from 'rxjs';
 
 /**
  * The storefront's read side of the CMS.
@@ -29,6 +29,7 @@ export class StoreContentService {
   private readonly menus = new Map<string, Observable<StoreMenuResponse>>();
   private readonly bannersByPlacement = new Map<string, Observable<StoreBannerResponse[]>>();
   private seo?: Observable<SeoConfigResponse>;
+  private siteGraph?: Observable<readonly unknown[] | null>;
 
   /** The menu with this code, or an empty one. Cached per code. */
   menu(code: string): Observable<StoreMenuResponse> {
@@ -69,6 +70,24 @@ export class StoreContentService {
       shareReplay({ bufferSize: 1, refCount: false }),
     );
     return this.seo;
+  }
+
+  /**
+   * The site-wide nodes of the API's schema.org graph — `Organization` and `WebSite` — or `null`.
+   *
+   * The API builds them from the settings the storefront does not otherwise read: the logo, the
+   * support desk's contact point and the profiles `sameAs` lists, which are what let a search
+   * engine tie this site to the business behind it. Asked for the home path because every graph
+   * carries the same two site nodes and the home page's is the cheapest to build. `null` when the
+   * API cannot answer — no canonical origin configured, typically — and the caller falls back.
+   */
+  siteStructuredData(): Observable<readonly unknown[] | null> {
+    this.siteGraph ??= this.api.storeGetStructuredData({ path: '/' }, { silentErrors: true }).pipe(
+      map((response) => siteNodes(response.graph)),
+      catchError(() => of(null)),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+    return this.siteGraph;
   }
 
   /** A published CMS page by slug. Errors propagate: the route decides what a 404 means. */
@@ -116,4 +135,17 @@ export class StoreContentService {
     this.bannersByPlacement.set(placement, request);
     return request;
   }
+}
+
+/** The site-level nodes of a graph, or `null` when there are none to publish. */
+function siteNodes(graph: unknown): readonly unknown[] | null {
+  const nodes = (graph as { '@graph'?: unknown } | null)?.['@graph'];
+  if (!Array.isArray(nodes)) return null;
+
+  const site = nodes.filter((node) => {
+    const type = (node as { '@type'?: unknown } | null)?.['@type'];
+    return type === 'Organization' || type === 'WebSite';
+  });
+
+  return site.length > 0 ? site : null;
 }
