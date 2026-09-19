@@ -12,6 +12,7 @@ import {
   Modal,
   PageHeader,
   StatusBadge,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Button, Checkbox, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -58,6 +59,7 @@ const CYCLE_STATUSES = [
     Modal,
     PageHeader,
     StatusBadge,
+    ConfirmDialog,
   ],
   template: `
     <kh-page-header
@@ -219,12 +221,24 @@ const CYCLE_STATUSES = [
           type="button"
           [variant]="force() ? 'danger' : 'primary'"
           [disabled]="busy()"
-          (click)="confirmClose()"
+          (click)="confirming.set(true)"
         >
           {{ busy() ? 'Closing…' : closingAll() ? 'Close the period' : 'Close the cycle' }}
         </button>
       </div>
     </kh-modal>
+
+    <kh-confirm-dialog
+      [open]="confirming()"
+      [heading]="closingAll() ? 'Close the period for every seller?' : 'Close this cycle?'"
+      [message]="confirmMessage()"
+      [confirmLabel]="closingAll() ? 'Close the period' : 'Close the cycle'"
+      [confirmPhrase]="force() ? 'OVERRIDE' : null"
+      [tone]="force() ? 'danger' : 'warning'"
+      [busy]="busy()"
+      (confirmed)="confirmClose()"
+      (cancelled)="confirming.set(false)"
+    />
   `,
   styles: `
     kh-alert {
@@ -302,6 +316,17 @@ export class SettlementCyclesPage {
   protected readonly closingOne = signal<SettlementCycleResponse | null>(null);
   protected readonly closingAll = signal(false);
   protected readonly force = signal(false);
+  /** The second, typed step a close has to pass. The modal above it is where the override is chosen. */
+  protected readonly confirming = signal(false);
+
+  protected readonly confirmMessage = computed(() => {
+    const scope = this.closingAll()
+      ? 'Every open cycle in the current period is closed and what is payable is computed for every seller.'
+      : 'This cycle is closed and what is payable is computed. Nothing sold in the period can be added to it afterwards.';
+    return this.force()
+      ? `${scope} The return hold is overridden: money a return could still claw back becomes payable, and recovering it later is a debit against the seller.`
+      : scope;
+  });
 
   protected readonly page = computed(() => ({
     nextCursor: this.list.nextCursor(),
@@ -405,6 +430,7 @@ export class SettlementCyclesPage {
 
   /** One dialogue, two operations: close one seller's cycle, or close the period for everybody. */
   protected confirmClose(): void {
+    this.confirming.set(false);
     if (this.closingAll()) this.closeAll();
     else this.closeOne();
   }

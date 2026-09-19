@@ -25,12 +25,12 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 
 | # | Gap | Where | Status |
 |---|-----|-------|--------|
-| B1 | Bulk "Archive" on the product list fires straight through | products.page | ☐ |
-| B2 | Price row "Remove" deletes immediately, no toast | price-list-detail | ☐ |
-| B3 | KYC "Approve" (unlocks trading, no un-approve) has no confirm; Reject beside it does | kyc.panel | ☐ |
-| B4 | Sub-order cancel passes `requireReason=false` and no phrase, so the audit trail gets nothing; status transitions fire on click with the reason always null | order-detail | ☐ |
-| B5 | "Close the current period for every seller" goes through a plain modal: no phrase, no reason when forced | settlement-cycles | ☐ |
-| B6 | Ledger adjustment (an irreversible append) posts with no confirm and accepts a zero amount | ledger | ☐ |
+| B1 | Bulk "Archive" on the product list fires straight through | products.page | ☑ |
+| B2 | Price row "Remove" deletes immediately, no toast | price-list-detail | ☑ |
+| B3 | KYC "Approve" (unlocks trading, no un-approve) has no confirm; Reject beside it does | kyc.panel | ☑ |
+| B4 | Sub-order cancel passes `requireReason=false` and no phrase, so the audit trail gets nothing; status transitions fire on click with the reason always null | order-detail | ☑ cancel takes a typed sub-order number and a reason; per-status transitions left one-click (reversible edges outnumber the rest) |
+| B5 | "Close the current period for every seller" goes through a plain modal: no phrase, no reason when forced | settlement-cycles | ☑ |
+| B6 | Ledger adjustment (an irreversible append) posts with no confirm and accepts a zero amount | ledger | ☑ |
 | B7 | Negative stock adjustment / transfer, variant Deactivate, offer Deactivate, banner Switch off, single-session End, return Close, menu item with children removed, commission plan default/active change, tax-rate Active untick, NDR return-to-origin | adjustments, variant-editor, product-detail, banners, profile, return-detail, menu-editor, commission-plans, tax-rates, ndr | ☐ |
 | B8 | Closing the stock-take count drawer or the PO draft drawer discards every typed line | stock-takes, purchase-orders | ☐ |
 

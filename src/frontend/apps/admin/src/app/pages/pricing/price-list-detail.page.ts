@@ -16,6 +16,7 @@ import {
   EntityOption,
   EntityPicker,
   PageHeader,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Button, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map } from 'rxjs';
@@ -64,6 +65,7 @@ interface DraftItem {
     Icon,
     PageHeader,
     Skeleton,
+    ConfirmDialog,
   ],
   template: `
     <kh-page-header
@@ -108,7 +110,7 @@ interface DraftItem {
                   size="sm"
                   variant="tertiary"
                   [disabled]="busyId() === row.id"
-                  (click)="remove(row)"
+                  (click)="removing.set(row)"
                 >
                   Remove
                 </button>
@@ -228,6 +230,15 @@ interface DraftItem {
         </aside>
       </div>
     }
+    <kh-confirm-dialog
+      [open]="removing() !== null"
+      heading="Remove this price"
+      message="The listing stops selling at this price the moment it is removed and falls back to whichever list claims it next. A mis-click here changes what a product sells for."
+      confirmLabel="Remove it"
+      [busy]="busyId() !== null"
+      (confirmed)="remove()"
+      (cancelled)="removing.set(null)"
+    />
   `,
   styles: `
     kh-alert {
@@ -442,13 +453,21 @@ export class PriceListDetailPage {
     });
   }
 
-  protected remove(row: PriceListItemResponse): void {
+  /** The price row a Remove is waiting to be confirmed on, or null. */
+  protected readonly removing = signal<PriceListItemResponse | null>(null);
+
+  protected remove(): void {
+    const row = this.removing();
+    this.removing.set(null);
+    if (!row) return;
+
     this.busyId.set(row.id);
     this.actionError.set(null);
 
     this.pricing.deletePriceListItem(this.id, row.id).subscribe({
       next: () => {
         this.busyId.set(null);
+        this.toasts.success('Price removed. The listing falls back to the next list that claims it.');
         this.items.refresh();
         this.load();
       },

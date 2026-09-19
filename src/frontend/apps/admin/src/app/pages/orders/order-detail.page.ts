@@ -385,20 +385,6 @@ interface CancelDraft {
           </tbody>
         </table>
 
-        <kh-field
-          label="Reason"
-          for="cancel-reason"
-          hint="Recorded on the timeline and shown to the customer."
-        >
-          <input
-            khControl
-            id="cancel-reason"
-            type="text"
-            maxlength="200"
-            [value]="cancelReason()"
-            (input)="cancelReason.set($any($event.target).value)"
-          />
-        </kh-field>
       }
 
       <div slot="footer">
@@ -416,9 +402,10 @@ interface CancelDraft {
       heading="Cancel these items"
       message="Stock goes back, any payment is refunded, and the customer is told. This cannot be undone."
       confirmLabel="Cancel them"
-      [requireReason]="false"
+      [confirmPhrase]="cancelling()?.subOrderNumber ?? null"
+      [requireReason]="true"
       [busy]="busy()"
-      (confirmed)="cancel()"
+      (confirmed)="cancel($event.reason)"
       (cancelled)="confirmCancel.set(false)"
     />
   `,
@@ -652,7 +639,7 @@ export class OrderDetailPage {
     );
   }
 
-  protected cancel(): void {
+  protected cancel(reason: string): void {
     const part = this.cancelling();
     if (!part || this.busy()) return;
 
@@ -676,7 +663,7 @@ export class OrderDetailPage {
 
     this.act(
       this.orders.cancelSubOrder(part.id, {
-        reason: this.cancelReason() || null,
+        reason: reason.trim() || null,
         lines: isWhole ? null : lines,
       }),
       `${part.subOrderNumber} cancelled.`,

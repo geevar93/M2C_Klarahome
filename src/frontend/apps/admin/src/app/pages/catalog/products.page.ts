@@ -20,6 +20,7 @@ import {
   Modal,
   PageHeader,
   toneFor,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Button, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -51,7 +52,7 @@ import { tableDate, tableDateTime } from '../../core/format';
  */
 @Component({
   selector: 'kh-products-page',
-  imports: [HasPermission, Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink],
+  imports: [HasPermission, Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink, ConfirmDialog],
   template: `
     <kh-page-header heading="Products" description="Everything the catalogue holds, whoever created it.">
       <a khButton variant="primary" routerLink="/catalog/products/new" *khHasPermission="'catalog.product.manage'">
@@ -186,6 +187,15 @@ import { tableDate, tableDateTime } from '../../core/format';
         </button>
       </div>
     </kh-modal>
+    <kh-confirm-dialog
+      [open]="archiving() !== null"
+      heading="Archive these products"
+      [message]="archiveMessage()"
+      confirmLabel="Archive them"
+      [busy]="busy()"
+      (confirmed)="confirmArchive()"
+      (cancelled)="archiving.set(null)"
+    />
   `,
   styles: `
     kh-alert {
@@ -375,8 +385,32 @@ export class ProductsPage implements OnDestroy {
     this.list.setFilters(filters);
   }
 
+  /** Which products a bulk archive is waiting on the operator to confirm, or null. */
+  protected readonly archiving = signal<readonly string[] | null>(null);
+
+  protected readonly archiveMessage = computed(() => {
+    const count = this.archiving()?.length ?? 0;
+    return `${count} ${count === 1 ? 'product comes' : 'products come'} off the storefront and out of every seller's offers. Archiving is not undone by publishing again.`;
+  });
+
   protected runBulk(action: { key: string; ids: readonly string[] }): void {
     if (action.ids.length === 0 || this.busy()) return;
+
+    // Publish and unpublish are a click apart from their reverse; archive is not, so it asks.
+    if (action.key === 'archive') {
+      this.archiving.set(action.ids);
+      return;
+    }
+    this.execute(action);
+  }
+
+  protected confirmArchive(): void {
+    const ids = this.archiving();
+    this.archiving.set(null);
+    if (ids) this.execute({ key: 'archive', ids });
+  }
+
+  private execute(action: { key: string; ids: readonly string[] }): void {
 
     const status: ProductStatus =
       action.key === 'publish' ? 'Active' : action.key === 'unpublish' ? 'Inactive' : 'Archived';

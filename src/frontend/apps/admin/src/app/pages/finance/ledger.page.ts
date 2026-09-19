@@ -25,6 +25,7 @@ import {
   KpiCard,
   Modal,
   PageHeader,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -89,6 +90,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     KpiCard,
     Modal,
     PageHeader,
+    ConfirmDialog,
   ],
   template: `
     <kh-page-header heading="Ledger" description="Every movement of money between the store and its sellers.">
@@ -366,11 +368,22 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
 
       <div slot="footer">
         <button khButton type="button" variant="tertiary" (click)="adjusting.set(false)">Cancel</button>
-        <button khButton type="button" variant="primary" [disabled]="busy()" (click)="postAdjustment()">
+        <button khButton type="button" variant="primary" [disabled]="busy()" (click)="reviewAdjustment()">
           {{ busy() ? 'Posting…' : 'Post it' }}
         </button>
       </div>
     </kh-modal>
+
+    <kh-confirm-dialog
+      [open]="confirmingAdjustment()"
+      heading="Post this adjustment?"
+      [message]="adjustmentSummary()"
+      confirmLabel="Post it"
+      tone="warning"
+      [busy]="busy()"
+      (confirmed)="postAdjustment()"
+      (cancelled)="confirmingAdjustment.set(false)"
+    />
   `,
   styles: `
     kh-alert {
@@ -732,19 +745,44 @@ export class LedgerPage {
 
   // ---- The one write ------------------------------------------------------------------------------
 
-  protected postAdjustment(): void {
+  protected readonly confirmingAdjustment = signal(false);
+
+  protected readonly adjustmentSummary = computed(() => {
+    const amount = Number(this.adjustAmount()) || 0;
+    const what = this.adjustDirection() === 'Credit' ? 'A credit' : 'A debit';
+    return `${what} of ${amount.toFixed(2)} goes on the ledger as a row of its own. A ledger row is never edited or deleted, only offset by another adjustment.`;
+  });
+
+  /** Checks the form and, if it holds together, asks once more before it is written. */
+  protected reviewAdjustment(): void {
     const vendorId = this.adjustVendorId().trim();
     const reason = this.adjustReason().trim();
+    const amount = Number(this.adjustAmount());
 
     if (!vendorId || !reason) {
       this.adjustError.set('An adjustment needs a seller and a reason.');
       return;
     }
+    if (!(amount > 0)) {
+      this.adjustError.set('The amount has to be more than zero.');
+      return;
+    }
+
+    this.adjustError.set(null);
+    this.confirmingAdjustment.set(true);
+  }
+
+  protected postAdjustment(): void {
+    this.confirmingAdjustment.set(false);
+    const vendorId = this.adjustVendorId().trim();
+    const reason = this.adjustReason().trim();
+    const amount = Number(this.adjustAmount());
+    if (!vendorId || !reason || !(amount > 0)) return;
 
     const body: AdjustmentBody = {
       vendorId,
       direction: this.adjustDirection(),
-      amount: Number(this.adjustAmount()) || 0,
+      amount,
       reason,
     };
 
