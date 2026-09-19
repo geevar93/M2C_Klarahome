@@ -41,6 +41,32 @@ public sealed record PaymentCaptured(
     DateTimeOffset CapturedAt) : IntegrationEvent;
 
 /// <summary>
+/// Money was collected against an order that had already been cancelled.
+/// </summary>
+/// <remarks>
+/// Published alongside <see cref="PaymentCaptured"/>, never instead of it: the money did come in.
+/// It exists because the cancellation's own refund ran while nothing had been captured and so gave
+/// nothing back — this is what gets the shopper their money when the capture turns up afterwards.
+/// </remarks>
+/// <param name="PaymentId">The collection.</param>
+/// <param name="OrderId">The cancelled order.</param>
+/// <param name="OrderNumber">Its number.</param>
+/// <param name="CustomerId">The shopper.</param>
+/// <param name="Reference">The gateway's payment id.</param>
+/// <param name="Amount">What was captured.</param>
+/// <param name="CurrencyCode">ISO 4217 code the amount is in.</param>
+/// <param name="CapturedAt">When the gateway captured it.</param>
+public sealed record PaymentCapturedOnCancelledOrder(
+    Guid PaymentId,
+    Guid OrderId,
+    string OrderNumber,
+    Guid CustomerId,
+    string? Reference,
+    decimal Amount,
+    string CurrencyCode,
+    DateTimeOffset CapturedAt) : IntegrationEvent;
+
+/// <summary>
 /// A collection was refused, or never completed.
 /// </summary>
 /// <remarks>

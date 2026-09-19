@@ -1,5 +1,6 @@
 using System.Globalization;
 using KlaraHome.Contracts.Orders;
+using KlaraHome.Contracts.Payments;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Payments.Domain;
@@ -52,7 +53,8 @@ internal sealed partial class OrderLifecycleHandlers(
     IClock clock,
     ILogger<OrderLifecycleHandlers> logger)
     : IIntegrationEventHandler<SubOrderConfirmed>,
-        IIntegrationEventHandler<SubOrderCancelled>
+        IIntegrationEventHandler<SubOrderCancelled>,
+        IIntegrationEventHandler<PaymentCapturedOnCancelledOrder>
 {
     /// <summary>
     /// Opens the cash record for a confirmed cash-on-delivery parcel.
@@ -190,6 +192,79 @@ internal sealed partial class OrderLifecycleHandlers(
         RefundRaised(logger, integrationEvent.SubOrderNumber, amount, raised.Value.Status);
     }
 
+    /// <summary>
+    /// Gives back money that was captured after its order had already been cancelled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The cancellation handler above ran while nothing had been captured, so it rightly refunded
+    /// nothing. When the capture arrives later — a webhook held up, the unpaid-order sweeper first to
+    /// act — this is the refund that cancellation would have raised, for everything still refundable.
+    /// </para>
+    /// <para>
+    /// Governed by the same switch and the same approval threshold as every cancellation refund, and
+    /// keyed on the payment, so a redelivery raises nothing and a resend asks the gateway under the
+    /// same idempotency key.
+    /// </para>
+    /// </remarks>
+    public async Task HandleAsync(
+        PaymentCapturedOnCancelledOrder integrationEvent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(integrationEvent);
+
+        var governance = await settings.GetAsync<PaymentSettings>(cancellationToken).ConfigureAwait(false);
+
+        if (!governance.AutoRefundOnCancellation)
+        {
+            LateCaptureNotRefunded(logger, integrationEvent.OrderNumber, integrationEvent.Amount);
+            return;
+        }
+
+        var payment = await context.Payments
+            .Include(candidate => candidate.Refunds)
+            .FirstOrDefaultAsync(candidate => candidate.Id == integrationEvent.PaymentId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (payment is null || payment.AmountRefundable <= 0m)
+        {
+            return;
+        }
+
+        var key = $"late-capture:{payment.Id}";
+
+        var already = await context.Refunds
+            .AnyAsync(refund => refund.IdempotencyKey == key, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (already)
+        {
+            return;
+        }
+
+        var raised = await workflow
+            .RaiseRefundAsync(
+                payment,
+                payment.AmountRefundable,
+                $"Order {integrationEvent.OrderNumber} was cancelled before its payment was confirmed.",
+                key,
+                initiatedBy: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (raised.IsFailure)
+        {
+            RefundNotRaised(logger, integrationEvent.OrderNumber, raised.Error.Message);
+            return;
+        }
+
+        await refunds.SendAsync(payment, raised.Value, cancellationToken).ConfigureAwait(false);
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        RefundRaised(logger, integrationEvent.OrderNumber, raised.Value.Amount, raised.Value.Status);
+    }
+
     /// <summary>Stands down cash nobody is going to collect, because the parcel was cancelled.</summary>
     private async Task WaiveCashAsync(SubOrderCancelled integrationEvent, CancellationToken cancellationToken)
     {
@@ -264,4 +339,9 @@ internal sealed partial class OrderLifecycleHandlers(
     [LoggerMessage(EventId = 1612, Level = LogLevel.Error,
         Message = "No refund was raised for cancelled sub-order {SubOrderNumber}: {Detail}")]
     private static partial void RefundNotRaised(ILogger logger, string subOrderNumber, string detail);
+
+    [LoggerMessage(EventId = 1613, Level = LogLevel.Error,
+        Message = "Order {OrderNumber} was cancelled and then paid {Amount}. Automatic refunds on "
+                  + "cancellation are switched off, so it must be refunded by hand.")]
+    private static partial void LateCaptureNotRefunded(ILogger logger, string orderNumber, decimal amount);
 }

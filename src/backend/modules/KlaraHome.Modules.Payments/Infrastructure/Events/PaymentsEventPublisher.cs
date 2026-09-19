@@ -54,6 +54,23 @@ internal sealed class PaymentsEventPublisher(
             payment.CapturedAt ?? clock.UtcNow));
     }
 
+    /// <summary>Money was collected against an order that had already been cancelled.</summary>
+    /// <param name="payment">The collection, already captured.</param>
+    public void CapturedOnCancelledOrder(Payment payment)
+    {
+        ArgumentNullException.ThrowIfNull(payment);
+
+        outbox.Enqueue(new PaymentCapturedOnCancelledOrder(
+            payment.Id,
+            payment.OrderId,
+            payment.OrderNumber,
+            payment.CustomerId,
+            payment.ProviderPaymentId,
+            payment.AmountCaptured,
+            payment.CurrencyCode,
+            payment.CapturedAt ?? clock.UtcNow));
+    }
+
     /// <summary>A collection was refused, or never completed.</summary>
     /// <param name="payment">The collection.</param>
     public void Failed(Payment payment)

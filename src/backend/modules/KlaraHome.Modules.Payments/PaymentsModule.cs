@@ -185,5 +185,8 @@ public sealed class PaymentsModule : IModule
 
         services.AddScoped<IIntegrationEventHandler<SubOrderCancelled>>(
             provider => provider.GetRequiredService<OrderLifecycleHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<PaymentCapturedOnCancelledOrder>>(
+            provider => provider.GetRequiredService<OrderLifecycleHandlers>());
     }
 }

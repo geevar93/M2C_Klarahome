@@ -169,6 +169,15 @@ internal sealed partial class PaymentWorkflow(
         if (!alreadySettled)
         {
             events.Captured(payment);
+
+            // The order was cancelled before this capture was heard of, so the cancellation's own
+            // refund found nothing captured and gave nothing back. Raised as an event rather than
+            // here so the refund is sent after this transaction commits, by the same handler that
+            // refunds every other cancellation.
+            if (confirmed.Value == PaymentCaptureOutcome.OrderCancelled)
+            {
+                events.CapturedOnCancelledOrder(payment);
+            }
         }
 
         return Result.Success();

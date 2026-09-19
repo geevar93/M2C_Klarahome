@@ -237,4 +237,85 @@ public sealed class PaymentsWorkflowTests(KlaraHomeSchemaFixture fixture) : Comm
 
         Assert.Equal(1, refundCount);
     }
+
+    /// <summary>
+    /// A capture that lands after the order was already cancelled — the webhook held up, the
+    /// unpaid-order sweeper first to act — is recorded and refunded in full, the order stays
+    /// cancelled, and a redelivered capture raises no second refund.
+    /// </summary>
+    [Fact]
+    public async Task A_capture_after_cancellation_is_refunded_once()
+    {
+        SkipWithoutDocker();
+
+        Factory.Features["identity.mobile-otp-login"] = true;
+        var admin = await SignedInAdministratorAsync();
+        var scenario = new PaymentsScenario(admin, Cancellation);
+        var offer = await scenario.OfferAsync(price: 349m);
+
+        var (shopper, _) = await SignedInShopperAsync();
+        var (order, _) = await scenario.PlaceOrderAsync(shopper, offer);
+
+        // Cancelled while still awaiting payment, so the cancellation's own refund finds nothing.
+        await ReadAsync(await shopper.PostAsJsonAsync(
+            $"/api/v1/store/orders/{order.OrderId}/cancel",
+            new { reason = "Payment was not completed in time." },
+            Cancellation));
+
+        await OutboxDrain.RunAsync(Factory, Database, Cancellation);
+
+        Assert.Equal(0, await Database.CountAsync(
+            "SELECT COUNT(*) FROM payments.refunds WHERE order_id = $1",
+            Cancellation,
+            order.OrderId));
+
+        // Then the capture turns up.
+        var paid = Factory.Gateway.PayOrder(order.ProviderOrderId!, order.Amount);
+        var captured = Webhook.PaymentCaptured(order.ProviderOrderId!, paid.ProviderPaymentId, order.Amount);
+
+        await PostRawAsync(
+            CreateClient(),
+            "/api/v1/webhooks/razorpay",
+            captured,
+            ("X-Razorpay-Signature", Webhook.Sign(captured)));
+
+        await GatewayEventDrain.RunOnceAsync(Factory, Cancellation);
+        await OutboxDrain.RunAsync(Factory, Database, Cancellation);
+
+        var refunds = await Database.RowsAsync(
+            "SELECT amount, status FROM payments.refunds WHERE order_id = $1",
+            Cancellation,
+            order.OrderId);
+
+        var refund = Assert.Single(refunds);
+        Assert.Equal(order.Amount, (decimal)refund["amount"]!);
+        Assert.Equal("Processed", (string)refund["status"]!);
+
+        Assert.Equal("Refunded", await Database.ScalarAsync<string>(
+            "SELECT status FROM payments.payments WHERE order_id = $1 AND provider <> 'internal_cod'",
+            Cancellation,
+            order.OrderId));
+
+        Assert.Equal("Cancelled", await Database.ScalarAsync<string>(
+            "SELECT status FROM orders.orders WHERE id = $1",
+            Cancellation,
+            order.OrderId));
+
+        // The same capture delivered again under a fresh event id: applied, and nothing more owed.
+        var again = Webhook.PaymentCaptured(order.ProviderOrderId!, paid.ProviderPaymentId, order.Amount);
+
+        await PostRawAsync(
+            CreateClient(),
+            "/api/v1/webhooks/razorpay",
+            again,
+            ("X-Razorpay-Signature", Webhook.Sign(again)));
+
+        await GatewayEventDrain.RunOnceAsync(Factory, Cancellation);
+        await OutboxDrain.RunAsync(Factory, Database, Cancellation);
+
+        Assert.Equal(1, await Database.CountAsync(
+            "SELECT COUNT(*) FROM payments.refunds WHERE order_id = $1",
+            Cancellation,
+            order.OrderId));
+    }
 }

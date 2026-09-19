@@ -49,6 +49,19 @@ public sealed record PaymentCaptureFact(
     decimal AmountCaptured,
     DateTimeOffset CapturedAt);
 
+/// <summary>What applying a capture did to the order.</summary>
+public enum PaymentCaptureOutcome
+{
+    /// <summary>The order was confirmed on it, now or by an earlier delivery of the same fact.</summary>
+    Confirmed = 0,
+
+    /// <summary>
+    /// Every part of the order had already been cancelled, so there was nothing to confirm. The
+    /// money is in and the goods are not going out: the caller owes the shopper a refund.
+    /// </summary>
+    OrderCancelled = 1,
+}
+
 /// <summary>Why a collection did not happen.</summary>
 /// <param name="OrderId">The order.</param>
 /// <param name="PaymentId">The collection that failed.</param>
@@ -103,9 +116,17 @@ public interface IOrderPaymentSync
         CancellationToken cancellationToken = default);
 
     /// <summary>Confirms every part of the order that was waiting for this money.</summary>
+    /// <remarks>
+    /// A capture can land after the order was cancelled — a webhook that could not be processed in
+    /// time, and the unpaid-order sweeper got there first. That is a success with
+    /// <see cref="PaymentCaptureOutcome.OrderCancelled"/>, not a failure: the fact is true and must be
+    /// recorded, and retrying it would never confirm anything.
+    /// </remarks>
     /// <param name="capture">What the gateway captured, already verified against its API.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<Result> MarkPaidAsync(PaymentCaptureFact capture, CancellationToken cancellationToken = default);
+    Task<Result<PaymentCaptureOutcome>> MarkPaidAsync(
+        PaymentCaptureFact capture,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Records that the collection failed, leaving the order retryable.</summary>
     /// <param name="failure">What the gateway refused, and why.</param>

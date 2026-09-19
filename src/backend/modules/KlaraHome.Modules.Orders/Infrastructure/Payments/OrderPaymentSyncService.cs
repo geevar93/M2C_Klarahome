@@ -82,7 +82,7 @@ internal sealed partial class OrderPaymentSyncService(
     }
 
     /// <inheritdoc />
-    public async Task<Result> MarkPaidAsync(
+    public async Task<Result<PaymentCaptureOutcome>> MarkPaidAsync(
         PaymentCaptureFact capture,
         CancellationToken cancellationToken = default)
     {
@@ -92,7 +92,7 @@ internal sealed partial class OrderPaymentSyncService(
 
         if (order is null)
         {
-            return Result.Failure(OrdersErrors.NotFound("order"));
+            return Result.Failure<PaymentCaptureOutcome>(OrdersErrors.NotFound("order"));
         }
 
         // The mirror moves whether or not any part was still waiting, so a redelivery repairs a
@@ -125,7 +125,7 @@ internal sealed partial class OrderPaymentSyncService(
 
                 if (reopened.IsFailure)
                 {
-                    return reopened;
+                    return Result.Failure<PaymentCaptureOutcome>(reopened.Error);
                 }
             }
 
@@ -142,7 +142,7 @@ internal sealed partial class OrderPaymentSyncService(
 
             if (confirmed.IsFailure)
             {
-                return confirmed;
+                return Result.Failure<PaymentCaptureOutcome>(confirmed.Error);
             }
         }
 
@@ -151,9 +151,18 @@ internal sealed partial class OrderPaymentSyncService(
         if (waiting.Count > 0)
         {
             OrderConfirmed(logger, order.OrderNumber, waiting.Count, capture.AmountCaptured);
+            return Result.Success(PaymentCaptureOutcome.Confirmed);
         }
 
-        return Result.Success();
+        // Nothing was waiting and nothing ever went out: the money arrived after the order was
+        // cancelled. The mirror still says Paid, because it is — the refund that follows moves it on.
+        if (order.SubOrders.All(subOrder => subOrder.Status == SubOrderStatus.Cancelled))
+        {
+            CapturedAfterCancellation(logger, order.OrderNumber, capture.AmountCaptured, capture.Reference);
+            return Result.Success(PaymentCaptureOutcome.OrderCancelled);
+        }
+
+        return Result.Success(PaymentCaptureOutcome.Confirmed);
     }
 
     /// <inheritdoc />
@@ -276,4 +285,13 @@ internal sealed partial class OrderPaymentSyncService(
         string orderNumber,
         int count,
         decimal amount);
+
+    [LoggerMessage(EventId = 1441, Level = LogLevel.Warning,
+        Message = "Order {OrderNumber} was already cancelled when payment {Reference} of {Amount} was "
+                  + "captured. Nothing was confirmed; the payment is owed back.")]
+    private static partial void CapturedAfterCancellation(
+        ILogger logger,
+        string orderNumber,
+        decimal amount,
+        string reference);
 }
