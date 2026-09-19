@@ -149,13 +149,14 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
       <kh-entity-drawer
         [heading]="editing() ? 'Edit attribute' : 'New attribute'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Attribute"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

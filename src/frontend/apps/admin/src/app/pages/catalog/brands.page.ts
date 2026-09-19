@@ -105,13 +105,14 @@ import { MediaPicker } from './media-picker';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit brand' : 'New brand'"
         [subtitle]="editing()?.slug ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Brand"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

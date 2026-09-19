@@ -177,6 +177,7 @@ import { tableDate } from '../../core/format';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit tax rate' : 'New tax rate'"
         [subtitle]="editing()?.hsnCode ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
@@ -184,7 +185,7 @@ import { tableDate } from '../../core/format';
           description="Changing a live row changes what past invoices would recompute to. To change a rate, end this row's window and add another."
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

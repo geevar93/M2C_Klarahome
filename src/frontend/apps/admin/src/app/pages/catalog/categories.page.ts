@@ -98,13 +98,14 @@ interface CategoryRow {
       <kh-entity-drawer
         [heading]="editingId() ? 'Edit category' : 'New category'"
         [subtitle]="parentName()"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Category"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editingId() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

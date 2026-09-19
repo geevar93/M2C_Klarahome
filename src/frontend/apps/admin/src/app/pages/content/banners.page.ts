@@ -134,13 +134,14 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit banner' : 'New banner'"
         [subtitle]="editing()?.placement ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Banner"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

@@ -38,13 +38,14 @@ import { MediaManager } from './media-manager';
     <kh-entity-drawer
       [heading]="editing() ? 'Edit variant' : 'New variant'"
       [subtitle]="editing()?.sku ?? 'A new size, colour or pack of this product'"
+      [dirty]="form.dirty()"
       (closed)="cancelled.emit()"
     >
       <kh-form-shell
         heading="Variant"
         [summary]="summary()"
         [saving]="saving()"
-        [dirty]="true"
+        [dirty]="form.dirty()"
         [submitLabel]="editing() ? 'Save variant' : 'Add variant'"
         (submitted)="save()"
         (cancelled)="cancelled.emit()"

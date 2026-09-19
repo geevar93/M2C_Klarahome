@@ -92,6 +92,8 @@ export interface FormField {
   readonly problem: Signal<string | null>;
   /** What the field shows: the server's objection if there is one, else the client's. */
   readonly error: Signal<string | null>;
+  /** Whether the value differs from what it was last `reset` to — i.e. from what is saved. */
+  readonly dirty: Signal<boolean>;
   set(value: string): void;
   markTouched(): void;
   reset(value?: string): void;
@@ -121,6 +123,9 @@ export function formField(
   const value = signal(initial);
   const touched = signal(false);
   const serverError = signal<string | null>(null);
+  // What the field was last filled with: `reset` moves it, `set` does not, so "dirty" means
+  // "differs from what was loaded or saved", not "has ever been typed in".
+  const baseline = signal(initial);
 
   const problem = computed<string | null>(() => {
     const current = value();
@@ -136,6 +141,7 @@ export function formField(
     touched,
     problem,
     error: computed(() => serverError() ?? (touched() || submitted() ? problem() : null)),
+    dirty: computed(() => value() !== baseline()),
     set: (next) => {
       value.set(next);
       serverError.set(null);
@@ -143,6 +149,7 @@ export function formField(
     markTouched: () => touched.set(true),
     reset: (next = initial) => {
       value.set(next);
+      baseline.set(next);
       touched.set(false);
       serverError.set(null);
     },
@@ -154,6 +161,8 @@ export interface FormGroup<T extends Record<string, FormField>> {
   readonly fields: T;
   /** True when no field has a problem. What a submit button is disabled by. */
   readonly isValid: Signal<boolean>;
+  /** True when any field differs from what it was last reset to. What "Unsaved changes" means. */
+  readonly dirty: Signal<boolean>;
   /** The trimmed values, keyed as the fields are. */
   values(): Record<keyof T, string>;
   /** Called on submit; makes every message visible at once. Answers whether the form is valid. */
@@ -207,6 +216,7 @@ export function formGroup<T extends Record<string, FormField>>(
     fields,
     submitted,
     isValid: computed(() => entries.every(([, field]) => field.problem() === null)),
+    dirty: computed(() => entries.some(([, field]) => field.dirty())),
     applyServerErrors: (errors) => {
       const unmatched: string[] = [];
       if (!errors) return unmatched;

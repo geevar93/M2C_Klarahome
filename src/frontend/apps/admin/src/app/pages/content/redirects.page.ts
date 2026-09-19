@@ -118,13 +118,14 @@ const STATUS_CODES = [
       <kh-entity-drawer
         [heading]="editing() ? 'Edit redirect' : 'New redirect'"
         [subtitle]="editing()?.fromPath ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Redirect"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

@@ -201,13 +201,14 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       <kh-entity-drawer
         [heading]="editing() ? 'Edit plan' : 'New plan'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Commission plan"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

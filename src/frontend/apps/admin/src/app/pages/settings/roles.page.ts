@@ -118,13 +118,14 @@ const SCOPES: readonly { value: RoleScope; label: string; hint: string }[] = [
       <kh-entity-drawer
         [heading]="editing() ? 'Edit role' : 'New role'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Role"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

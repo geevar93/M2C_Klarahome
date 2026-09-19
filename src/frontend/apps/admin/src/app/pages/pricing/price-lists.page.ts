@@ -138,13 +138,14 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit price list' : 'New price list'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Price list"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"
