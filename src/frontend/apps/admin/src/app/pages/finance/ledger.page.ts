@@ -9,6 +9,7 @@ import {
   SettlementsAdminService,
   StatutoryExtractResponse,
   VendorBalanceResponse,
+  LedgerEntryType,
   VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
@@ -32,21 +33,24 @@ import { Observable, map } from 'rxjs';
 import { describeError } from '../../core/describe-error';
 import { tableDate, tableDateTime, tableMoney } from '../../core/format';
 
-/** The entry types the ledger records, from `LedgerEntryTypes`. */
-const ENTRY_TYPES = [
-  { value: 'sale', label: 'Sale' },
-  { value: 'commission', label: 'Commission' },
-  { value: 'platform_tax', label: 'Tax on platform charges' },
-  { value: 'platform_fee', label: 'Marketplace fee' },
-  { value: 'payment_fee', label: 'Gateway fee' },
-  { value: 'shipping_fee', label: 'Freight' },
-  { value: 'refund', label: 'Refund' },
-  { value: 'refund_commission_reversal', label: 'Commission reversed' },
-  { value: 'tcs', label: 'TCS' },
-  { value: 'tds', label: 'TDS' },
-  { value: 'adjustment', label: 'Adjustment' },
-  { value: 'payout', label: 'Payout' },
-] as const;
+/**
+ * The entry types the ledger records, typed against the generated enum so the compiler catches
+ * a casing drift — the first version of this list was snake_case and matched nothing.
+ */
+const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
+  { value: 'Sale', label: 'Sale' },
+  { value: 'Commission', label: 'Commission' },
+  { value: 'PlatformTax', label: 'Tax on platform charges' },
+  { value: 'PlatformFee', label: 'Marketplace fee' },
+  { value: 'PaymentFee', label: 'Gateway fee' },
+  { value: 'ShippingFee', label: 'Freight' },
+  { value: 'Refund', label: 'Refund' },
+  { value: 'RefundCommissionReversal', label: 'Commission reversed' },
+  { value: 'Tcs', label: 'TCS' },
+  { value: 'Tds', label: 'TDS' },
+  { value: 'Adjustment', label: 'Adjustment' },
+  { value: 'Payout', label: 'Payout' },
+];
 
 /**
  * The vendor ledger, and what can be read off it.
@@ -119,7 +123,7 @@ const ENTRY_TYPES = [
             inputId="ledger-vendor"
             hint="Search by name or code, or paste a seller id."
             [search]="vendorSearch"
-            (chose)="vendorId.set($event?.id ?? '')"
+            (chose)="chooseVendor($event?.id ?? '')"
           />
         }
         <kh-field label="From" for="ledger-from" [optional]="true">
@@ -595,6 +599,12 @@ export class LedgerPage {
 
   protected entryLabel(type: string): string {
     return ENTRY_TYPES.find((entry) => entry.value === type)?.label ?? type;
+  }
+
+  /** The statement's seller is also the entries table's; choosing one refilters both. */
+  protected chooseVendor(id: string): void {
+    this.vendorId.set(id);
+    this.applyFilters(this.values());
   }
 
   protected applyFilters(values: FilterValues): void {

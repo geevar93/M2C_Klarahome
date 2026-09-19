@@ -340,7 +340,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
                 </div>
                 <div>
                   <dt>How</dt>
-                  <dd>{{ current.refundMode ?? '—' }}</dd>
+                  <dd>{{ refundModeLabel(current.refundMode) }}</dd>
                 </div>
               }
             </dl>
@@ -777,6 +777,12 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReturnDetailPage {
+  /** The same words the refund modal offers; the API's enum never reaches the screen. */
+  protected refundModeLabel(mode: string | null | undefined): string {
+    if (!mode) return '—';
+    return mode === 'StoreCredit' ? 'Store credit' : mode === 'Original' ? 'The original payment method' : mode;
+  }
+
   private readonly returns = inject(ReturnsAdminService);
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);

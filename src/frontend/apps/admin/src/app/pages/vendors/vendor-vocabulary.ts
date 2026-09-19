@@ -38,6 +38,10 @@ export const BUSINESS_TYPES: readonly Choice<VendorBusinessType>[] = [
   { value: 'Trust', label: 'Trust' },
 ];
 
+export function businessTypeLabel(type: VendorBusinessType | string | null | undefined): string {
+  return BUSINESS_TYPES.find((entry) => entry.value === type)?.label ?? (type || '—');
+}
+
 export const KYC_DOCUMENT_TYPES: readonly Choice<KycDocumentType>[] = [
   { value: 'Pan', label: 'PAN card' },
   { value: 'Gstin', label: 'GST registration' },

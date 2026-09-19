@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   AdminUserResponse,
   IdentityAdminService,
@@ -14,6 +14,7 @@ import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
+import { userTypeLabel } from './identity-vocabulary';
 
 const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = [
   { value: 'Active', label: 'Active', hint: 'They can sign in.' },
@@ -41,6 +42,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
 @Component({
   selector: 'kh-user-detail-page',
   imports: [
+    RouterLink,
     Alert,
     Badge,
     Button,
@@ -210,9 +212,15 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
                 }
               </dd>
               <dt>Kind</dt>
-              <dd>{{ current.userType }}</dd>
+              <dd>{{ userTypeLabel(current.userType) }}</dd>
               <dt>Seller</dt>
-              <dd>{{ current.vendorId ?? 'Not a seller account' }}</dd>
+              <dd>
+                @if (current.vendorId; as vendorId) {
+                  <a class="link" [routerLink]="['/vendors', vendorId]">Seller {{ vendorId.slice(0, 8) }}</a>
+                } @else {
+                  Not a seller account
+                }
+              </dd>
               <dt>Created</dt>
               <dd>{{ dateTime(current.createdAt) }}</dd>
               <dt>Last signed in</dt>
@@ -356,6 +364,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UserDetailPage {
+  protected readonly userTypeLabel = userTypeLabel;
   private readonly identity = inject(IdentityAdminService);
   private readonly route = inject(ActivatedRoute);
   private readonly toasts = inject(ToastService);
@@ -387,7 +396,7 @@ export class UserDetailPage {
   protected readonly subtitle = computed(() => {
     const current = this.user();
     if (!current) return null;
-    return `${current.userType} · created ${tableDateTime(current.createdAt)}`;
+    return `${userTypeLabel(current.userType)} · created ${tableDateTime(current.createdAt)}`;
   });
 
   protected readonly statusHint = computed(

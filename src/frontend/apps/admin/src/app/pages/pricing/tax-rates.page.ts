@@ -97,7 +97,7 @@ import { tableDate } from '../../core/format';
           slot="filters"
           [filters]="filters"
           [values]="values()"
-          [searchable]="false"
+          searchLabel="Search by HSN code"
           (changed)="applyFilters($event)"
         />
 
@@ -452,7 +452,7 @@ export class TaxRatesPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: TaxRateFilters = {
-      hsnCode: values['hsnCode'],
+      hsnCode: values['q'],
       activeOnly: values['activeOnly'] === 'true' ? true : undefined,
     };
     this.list.setFilters(filters);

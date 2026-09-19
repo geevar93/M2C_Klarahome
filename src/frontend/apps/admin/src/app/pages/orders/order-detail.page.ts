@@ -215,7 +215,7 @@ interface CancelDraft {
                       <kh-badge tone="info">Shown to the customer</kh-badge>
                     }
                   </span>
-                  <span class="note">{{ event.actorType }}</span>
+                  <span class="note">{{ actorLabel(event.actorType) }}</span>
                 </li>
               } @empty {
                 <li class="hint">Nothing has happened yet.</li>
@@ -550,6 +550,22 @@ interface CancelDraft {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrderDetailPage {
+  /** `OrderActor` on the server, said in words. */
+  protected actorLabel(actor: string): string {
+    switch (actor) {
+      case 'Customer':
+        return 'By the customer';
+      case 'Vendor':
+        return 'By the seller';
+      case 'Platform':
+        return 'By store staff';
+      case 'System':
+        return 'Automatically';
+      default:
+        return actor;
+    }
+  }
+
   private readonly orders = inject(OrdersAdminService);
   private readonly documents = inject(DocumentPrintService);
   private readonly route = inject(ActivatedRoute);

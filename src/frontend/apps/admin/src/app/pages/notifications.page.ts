@@ -21,6 +21,7 @@ import { Alert, Button } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../core/describe-error';
+import { tableDateTime } from '../core/format';
 
 /**
  * The notifications centre.
@@ -131,7 +132,7 @@ export class NotificationsPage {
     `${row.eventKey} to ${row.recipient}`;
 
   protected readonly columns: readonly DataTableColumn<NotificationLogResponse>[] = [
-    { key: 'createdAt', label: 'Queued', kind: 'date', value: (row) => row.createdAt },
+    { key: 'createdAt', label: 'Queued', kind: 'date', value: (row) => tableDateTime(row.createdAt) },
     { key: 'eventKey', label: 'Event', value: (row) => row.eventKey },
     { key: 'channel', label: 'Channel', value: (row) => row.channel },
     { key: 'recipient', label: 'Recipient', value: (row) => row.recipient },

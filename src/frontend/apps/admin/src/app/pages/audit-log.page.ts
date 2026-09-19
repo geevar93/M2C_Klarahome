@@ -34,7 +34,7 @@ import { toAuditEntry } from '../core/audit.mapper';
       <kh-filter-bar
         [filters]="filters"
         [values]="values()"
-        [searchable]="false"
+        searchLabel="Action, e.g. orders.order.cancelled"
         (changed)="applyFilters($event)"
       />
 
@@ -146,6 +146,7 @@ export class AuditLogPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: AuditLogFilters = {
+      action: values['q'] || undefined,
       entityType: values['entityType'],
       from: values['from'],
       to: values['to'],

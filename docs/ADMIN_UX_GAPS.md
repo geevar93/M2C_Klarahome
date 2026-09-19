@@ -15,7 +15,7 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | A2 | Session expiry is silent: when refresh fails the store clears but nothing navigates or explains; the login page never says why you were sent there | `core/shell.layout.ts`, `pages/auth/login.page.ts` | ☑ |
 | A3 | `[dirty]="true"` hard-coded on `kh-form-shell` in 14 drawers/forms, so "Unsaved changes" is always lit and means nothing; `kh-entity-drawer` has no `dismissible`, so Escape/backdrop discards a part-filled form | brands, categories, attributes, suppliers, warehouses, variant-editor, banners, redirects, commission-plans, vendor/profile, roles, shipping-zones ×2, price-lists, tax-rates | ☑ |
 | A4 | Permission gating applied to "New" but not to the edit/delete path beside it, or absent entirely | products (New/Import/bulk), brands, categories, attributes, fulfilment (all), ndr (Decide), price-lists (all), tax-rates (edit/delete), commission-plans (row edit), shipments (print/sync), return-detail (Close), vendor-detail sub-panels (`canManage=true`) | ☑ |
-| A5 | Raw enums reach the screen where a vocabulary exists | users + user-detail (`Vendor` → Seller), vendor-detail + vendor/profile (constitution), pages.page (kind), commission-plans (planType), return-detail (refundMode), order-detail timeline (actorType) | ☐ |
+| A5 | Raw enums reach the screen where a vocabulary exists | users + user-detail (`Vendor` → Seller), vendor-detail + vendor/profile (constitution), pages.page (kind), commission-plans (planType), return-detail (refundMode), order-detail timeline (actorType) | ☑ |
 | A6 | Raw ids shown where a name or link is available | users/user-detail `vendorId`, price-list-detail `listingId`, promotion redemptions `orderId`, fulfilment parcel `id`, adjustments `actorId`, ledger `vendorId`, vendors list `commissionPlanId`, vendor-detail staff `userId`, reports runs `reportKey`, shipping-zones override seller | ☐ |
 | A7 | Data table: filtered-empty state has no "Clear filters"; "about N in total" and KPI tile values are unformatted numbers | `libs/ui/admin` data-table, kpi-card, dashboard | ☐ |
 | A8 | Filters never written to the URL, so a filtered queue cannot be shared or restored by Back | every list page | ⏳ design decision (filter-bar docs say URL; no page does it) |
@@ -49,10 +49,10 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | # | Gap | Where | Status |
 |---|-----|-------|--------|
 | D1 | Password minimum is 8 on the login set-password step but 12 on profile and forgot-password | login.page | ☐ |
-| D2 | Ledger `ENTRY_TYPES` values are snake_case but the enum is PascalCase: the Kind filter matches nothing and labels fall through raw | ledger | ☐ |
-| D3 | Choosing a seller for a statement does not refilter the entries table | ledger | ☐ |
-| D4 | Notifications "Queued" column prints the raw ISO timestamp | notifications.page | ☐ |
-| D5 | Tax-rates HSN search is dead code (`searchable=false`, reads a filter that does not exist); notifications search is off; audit-log promises actor/action filters it lacks | tax-rates, notifications, audit-log | ☐ |
+| D2 | Ledger `ENTRY_TYPES` values are snake_case but the enum is PascalCase: the Kind filter matches nothing and labels fall through raw | ledger | ☑ |
+| D3 | Choosing a seller for a statement does not refilter the entries table | ledger | ☑ |
+| D4 | Notifications "Queued" column prints the raw ISO timestamp | notifications.page | ☑ |
+| D5 | Tax-rates HSN search is dead code (`searchable=false`, reads a filter that does not exist); notifications search is off; audit-log promises actor/action filters it lacks | tax-rates, notifications, audit-log | ☑ tax-rates and audit-log search; notifications recipient search ⏳ (API has no recipient filter) |
 | D6 | Large detail forms skip the validators their create dialog uses | vendor-detail legal record (gstin/pincode/required), collection-detail (name/slug), reports schedule (name/key), users create (vendorId required for Vendor) | ☐ |
 | D7 | Fields with no inline validation: redirects `toPath`, page-composer schedule `publishAt`, banners alt text, feature-flags percentage clamp, shipping-zones PIN ranges silently dropped, serviceable-regions rows silently dropped, return approve amount / QC quantity, PO rejected quantity without reason | as named | ☐ |
 | D8 | No success toast | variant-editor (save, activate), price-lists toggle, promotion-detail toggle, kyc reject, bank-accounts (primary/remove), pickup-locations remove, collection-detail remove, reports delete schedule | ☐ |

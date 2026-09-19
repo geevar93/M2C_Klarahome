@@ -5,6 +5,7 @@ import { Alert, Button, Checkbox, Control, Field, ProductImage, Skeleton } from 
 import { ImageUrls, ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
+import { businessTypeLabel } from '../vendors/vendor-vocabulary';
 import { MediaPicker } from '../catalog/media-picker';
 
 /**
@@ -213,7 +214,7 @@ import { MediaPicker } from '../catalog/media-picker';
               <dt>Legal name</dt>
               <dd>{{ current.legalName }}</dd>
               <dt>Constitution</dt>
-              <dd>{{ current.businessType }}</dd>
+              <dd>{{ businessTypeLabel(current.businessType) }}</dd>
               <dt>PAN</dt>
               <dd>{{ current.pan ?? '—' }}</dd>
               <dt>GSTIN</dt>
@@ -328,6 +329,7 @@ import { MediaPicker } from '../catalog/media-picker';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VendorProfilePage {
+  protected readonly businessTypeLabel = businessTypeLabel;
   private readonly vendors = inject(VendorsAdminService);
   private readonly images = inject(ImageUrls);
   private readonly toasts = inject(ToastService);

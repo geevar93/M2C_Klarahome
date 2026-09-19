@@ -28,12 +28,8 @@ import { Observable, map } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
+import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
 
-const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = [
-  { value: 'Staff', label: 'Store staff', hint: 'Works for the platform.' },
-  { value: 'Vendor', label: "A seller's user", hint: 'Needs the seller id they belong to.' },
-  { value: 'Customer', label: 'A customer', hint: 'Shops on the storefront; has no back office.' },
-];
 
 /**
  * Who may sign in.
@@ -115,9 +111,9 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
       <ng-template khCell="identity" let-row>
         <a class="link" [routerLink]="['/settings/users', row.id]">{{ row.email ?? row.mobile ?? row.id }}</a>
         <span class="note">
-          {{ row.userType }}
+          {{ userTypeLabel(row.userType) }}
           @if (row.vendorId) {
-            · seller {{ row.vendorId }}
+            · <a class="link" [routerLink]="['/vendors', row.vendorId]">seller {{ row.vendorId.slice(0, 8) }}</a>
           }
         </span>
       </ng-template>
@@ -255,6 +251,7 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UsersPage {
+  protected readonly userTypeLabel = userTypeLabel;
   private readonly identity = inject(IdentityAdminService);
   private readonly vendors = inject(VendorsAdminService);
   private readonly router = inject(Router);

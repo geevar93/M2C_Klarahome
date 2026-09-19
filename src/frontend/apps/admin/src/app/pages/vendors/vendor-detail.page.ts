@@ -24,7 +24,7 @@ import { BankAccountsPanel } from './bank-accounts.panel';
 import { KycPanel } from './kyc.panel';
 import { PickupLocationsPanel } from './pickup-locations.panel';
 import { ServiceableRegionsPanel } from './serviceable-regions.panel';
-import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
+import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
 
 /**
  * One seller, as the platform sees them.
@@ -161,8 +161,8 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
                 [value]="businessType()"
                 (change)="businessType.set($any($event.target).value)"
               >
-                @for (type of businessTypes; track type) {
-                  <option [value]="type">{{ type }}</option>
+                @for (choice of businessTypes; track choice.value) {
+                  <option [value]="choice.value">{{ choice.label }}</option>
                 }
               </select>
             </kh-field>
@@ -554,16 +554,7 @@ export class VendorDetailPage {
   /** The platform's states, so nobody types an identifier (Step 28B, deliverable 3). */
   protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
 
-  protected readonly businessTypes: readonly VendorBusinessType[] = [
-    'Individual',
-    'SoleProprietorship',
-    'Partnership',
-    'LimitedLiabilityPartnership',
-    'PrivateLimited',
-    'PublicLimited',
-    'HinduUndividedFamily',
-    'Trust',
-  ];
+  protected readonly businessTypes = BUSINESS_TYPES;
 
   protected readonly dateTime = tableDateTime;
   protected readonly id = this.route.snapshot.paramMap.get('id') ?? '';

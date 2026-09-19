@@ -556,7 +556,7 @@ export class CommissionPlansPage {
 
   protected readonly columns: readonly DataTableColumn<CommissionPlanResponse>[] = [
     { key: 'name', label: 'Plan', kind: 'custom' },
-    { key: 'planType', label: 'How', value: (row) => row.planType, width: '9rem' },
+    { key: 'planType', label: 'How', value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType, width: '12rem' },
     {
       key: 'defaultRate',
       label: 'Default rate',
