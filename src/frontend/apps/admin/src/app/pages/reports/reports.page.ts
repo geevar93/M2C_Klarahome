@@ -625,6 +625,7 @@ export class ReportsPage {
       next: () => {
         this.busy.set(false);
         this.deleting.set(null);
+        this.toasts.success('Schedule deleted.');
         this.loadSchedules();
       },
       error: (error: unknown) => {

@@ -309,7 +309,7 @@ interface ConditionDraft {
 
             <div class="actions">
               <button khButton type="button" variant="primary" [disabled]="busy()" (click)="saveRule()">
-                Save the rule
+                {{ busy() ? 'Saving…' : 'Save the rule' }}
               </button>
               @if (collection()?.kind === 'Rule') {
                 <button
@@ -802,6 +802,7 @@ export class CollectionDetailPage {
         this.busy.set(false);
         this.pinProductId.set('');
         this.fill(saved);
+        this.toasts.success('Collection updated.');
         this.items.refresh();
       },
       error: (error: unknown) => this.fail(error, 'The products could not be changed.'),

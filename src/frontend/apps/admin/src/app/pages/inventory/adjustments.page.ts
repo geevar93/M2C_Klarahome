@@ -128,7 +128,7 @@ import { tableDateTime } from '../../core/format';
           </kh-field>
 
           <button khButton type="button" variant="primary" [disabled]="busy()" (click)="adjust()">
-            Record the movement
+            {{ busy() ? 'Recording…' : 'Record the movement' }}
           </button>
         </section>
 
@@ -189,7 +189,7 @@ import { tableDateTime } from '../../core/format';
           </kh-field>
 
           <button khButton type="button" variant="primary" [disabled]="busy()" (click)="transfer()">
-            Move the stock
+            {{ busy() ? 'Moving…' : 'Move the stock' }}
           </button>
         </section>
       </div>

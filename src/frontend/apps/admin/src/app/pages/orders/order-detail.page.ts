@@ -572,7 +572,6 @@ export class OrderDetailPage {
   protected readonly cancelling = signal<SubOrderResponse | null>(null);
   protected readonly confirmCancel = signal(false);
   protected readonly cancelDraft = signal<readonly CancelDraft[]>([]);
-  protected readonly cancelReason = signal('');
 
   protected readonly subtitle = computed(() => {
     const current = this.order();
@@ -616,7 +615,6 @@ export class OrderDetailPage {
 
   protected startCancel(part: SubOrderResponse): void {
     this.cancelling.set(part);
-    this.cancelReason.set('');
     this.cancelDraft.set(
       part.lines
         .map((line) => {

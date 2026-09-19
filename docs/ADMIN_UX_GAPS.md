@@ -48,15 +48,15 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 
 | # | Gap | Where | Status |
 |---|-----|-------|--------|
-| D1 | Password minimum is 8 on the login set-password step but 12 on profile and forgot-password | login.page | ☐ |
+| D1 | Password minimum is 8 on the login set-password step but 12 on profile and forgot-password | login.page | ☑ |
 | D2 | Ledger `ENTRY_TYPES` values are snake_case but the enum is PascalCase: the Kind filter matches nothing and labels fall through raw | ledger | ☑ |
 | D3 | Choosing a seller for a statement does not refilter the entries table | ledger | ☑ |
 | D4 | Notifications "Queued" column prints the raw ISO timestamp | notifications.page | ☑ |
 | D5 | Tax-rates HSN search is dead code (`searchable=false`, reads a filter that does not exist); notifications search is off; audit-log promises actor/action filters it lacks | tax-rates, notifications, audit-log | ☑ tax-rates and audit-log search; notifications recipient search ⏳ (API has no recipient filter) |
 | D6 | Large detail forms skip the validators their create dialog uses | vendor-detail legal record (gstin/pincode/required), collection-detail (name/slug), reports schedule (name/key), users create (vendorId required for Vendor) | ☐ |
 | D7 | Fields with no inline validation: redirects `toPath`, page-composer schedule `publishAt`, banners alt text, feature-flags percentage clamp, shipping-zones PIN ranges silently dropped, serviceable-regions rows silently dropped, return approve amount / QC quantity, PO rejected quantity without reason | as named | ☐ |
-| D8 | No success toast | variant-editor (save, activate), price-lists toggle, promotion-detail toggle, kyc reject, bank-accounts (primary/remove), pickup-locations remove, collection-detail remove, reports delete schedule | ☐ |
-| D9 | No busy label while saving | stock (adjust/settings), adjustments, feature-flags, vendor-detail ×2, collection-detail rule, page-composer transition | ☐ |
+| D8 | No success toast | variant-editor (save, activate), price-lists toggle, promotion-detail toggle, kyc reject, bank-accounts (primary/remove), pickup-locations remove, collection-detail remove, reports delete schedule | ☑ |
+| D9 | No busy label while saving | stock (adjust/settings), adjustments, feature-flags, vendor-detail ×2, collection-detail rule, page-composer transition | ☑ |
 | D10 | Export CSV reuses the Import modal, so an export is headed "Import products" | products.page | ☐ |
 | D11 | Promotion detail and collection detail are large forms with no unsaved-changes guard; promotion `[dirty]` hard-coded | promotion-detail, collection-detail, navigation.ts | ☐ |
 | D12 | vendor/profile "Undo changes" on one form resets the other form too | vendor/profile | ☑ |

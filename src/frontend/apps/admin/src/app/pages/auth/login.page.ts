@@ -323,7 +323,7 @@ export class LoginPage {
     currentPassword: formField('', [required('Your temporary password')], this.passwordChangeSubmitted),
     newPassword: formField(
       '',
-      [required('A new password'), minLength(8, 'The new password')],
+      [required('A new password'), minLength(12, 'The new password')],
       this.passwordChangeSubmitted,
     ),
   });

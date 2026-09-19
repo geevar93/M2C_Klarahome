@@ -479,6 +479,7 @@ export class PriceListsPage {
     request.subscribe({
       next: () => {
         this.busyId.set(null);
+        this.toasts.success(row.isActive ? 'Price list switched off.' : 'Price list switched on.');
         this.list.refresh();
       },
       error: (error: unknown) => {

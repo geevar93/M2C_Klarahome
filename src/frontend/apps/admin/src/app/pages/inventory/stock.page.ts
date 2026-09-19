@@ -288,7 +288,7 @@ import { tableDateTime } from '../../core/format';
           Cancel
         </button>
         <button khButton type="button" variant="primary" [disabled]="busy()" (click)="adjust()">
-          Record the movement
+          {{ busy() ? 'Recording…' : 'Record the movement' }}
         </button>
       </div>
     </kh-modal>
@@ -348,7 +348,7 @@ import { tableDateTime } from '../../core/format';
           Cancel
         </button>
         <button khButton type="button" variant="primary" [disabled]="busy()" (click)="saveSettings()">
-          Save
+          {{ busy() ? 'Saving…' : 'Save' }}
         </button>
       </div>
     </kh-modal>

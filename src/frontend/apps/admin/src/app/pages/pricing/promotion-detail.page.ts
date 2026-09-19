@@ -1234,10 +1234,11 @@ export class PromotionDetailPage {
       next: (saved) => {
         this.busy.set(false);
         this.promotion.set(saved);
+        this.toasts.success(saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.');
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.summary.set([describeError(error, 'That could not be changed.')]);
+        this.toasts.danger(describeError(error, 'The promotion could not be switched.'));
       },
     });
   }

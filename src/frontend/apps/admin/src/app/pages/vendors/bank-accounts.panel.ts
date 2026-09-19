@@ -429,6 +429,7 @@ export class BankAccountsPanel {
     this.vendors.makeBankAccountPrimary(id, account.id).subscribe({
       next: () => {
         this.busy.set(false);
+        this.toasts.success('Payouts now go to this account.');
         this.load(id);
         this.changed.emit();
       },
@@ -473,6 +474,7 @@ export class BankAccountsPanel {
       next: () => {
         this.busy.set(false);
         this.removing.set(null);
+        this.toasts.success('Bank account removed.');
         this.load(id);
         this.changed.emit();
       },

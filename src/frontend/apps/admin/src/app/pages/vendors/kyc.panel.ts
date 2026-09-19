@@ -408,6 +408,7 @@ export class KycPanel {
       next: () => {
         this.busy.set(false);
         this.rejecting.set(null);
+        this.toasts.success('Document rejected. The seller has been told why.');
         this.load(id);
         this.changed.emit();
       },

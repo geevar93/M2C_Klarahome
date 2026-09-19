@@ -253,7 +253,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
               [disabled]="busy()"
               (click)="saveLegal()"
             >
-              Save the legal record
+              {{ busy() ? 'Saving…' : 'Save the legal record' }}
             </button>
 
             @if (current.statusReason) {
@@ -315,7 +315,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
               [disabled]="busy()"
               (click)="assignPlan()"
             >
-              Save the plan
+              {{ busy() ? 'Saving…' : 'Save the plan' }}
             </button>
           </section>
 

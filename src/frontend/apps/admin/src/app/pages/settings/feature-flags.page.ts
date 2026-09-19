@@ -128,7 +128,7 @@ import { describeError } from '../../core/describe-error';
               [disabled]="busyKey() !== null"
               (click)="saveRollout()"
             >
-              Save the rollout
+              {{ busyKey() !== null ? 'Saving…' : 'Save the rollout' }}
             </button>
           </div>
         </section>
