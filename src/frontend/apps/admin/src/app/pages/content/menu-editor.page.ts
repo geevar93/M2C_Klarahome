@@ -111,7 +111,7 @@ interface ItemDraft {
             [removable]="true"
             emptyMessage="This menu is empty. Add an item to start."
             (reordered)="reorder($event)"
-            (removed)="removeItem($event)"
+            (removed)="requestRemove($event)"
           />
 
           <button khButton type="button" size="sm" class="add" (click)="addItem()">
@@ -282,6 +282,15 @@ interface ItemDraft {
       [busy]="busy()"
       (confirmed)="remove()"
       (cancelled)="deleting.set(false)"
+    />
+    <kh-confirm-dialog
+      [open]="removing() !== null"
+      heading="Remove this item and what is under it?"
+      [message]="removingChildCount() + (removingChildCount() === 1 ? ' item sits' : ' items sit') + ' under this one and would go with it. Nothing is saved until the menu is saved.'"
+      confirmLabel="Remove them"
+      tone="warning"
+      (confirmed)="confirmRemove()"
+      (cancelled)="removing.set(null)"
     />
   `,
   styles: `
@@ -460,6 +469,29 @@ export class MenuEditorPage implements HasUnsavedChanges {
       },
     ]);
     this.dirty.set(true);
+  }
+
+  /** An item whose removal would take children with it, waiting to be confirmed. */
+  protected readonly removing = signal<string | null>(null);
+
+  protected readonly removingChildCount = computed(() => {
+    const id = this.removing();
+    return id ? this.items().filter((item) => item.parentId === id).length : 0;
+  });
+
+  protected requestRemove(itemId: string): void {
+    const children = this.items().filter((item) => item.parentId === itemId).length;
+    if (children === 0) {
+      this.removeItem(itemId);
+      return;
+    }
+    this.removing.set(itemId);
+  }
+
+  protected confirmRemove(): void {
+    const id = this.removing();
+    this.removing.set(null);
+    if (id) this.removeItem(id);
   }
 
   protected removeItem(itemId: string): void {

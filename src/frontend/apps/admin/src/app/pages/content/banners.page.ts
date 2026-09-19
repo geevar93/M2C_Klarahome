@@ -123,7 +123,7 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
           size="sm"
           variant="tertiary"
           [disabled]="busyId() === row.id"
-          (click)="toggle(row)"
+          (click)="row.isActive ? switchingOff.set(row) : toggle(row)"
         >
           {{ row.isActive ? 'Switch off' : 'Switch on' }}
         </button>
@@ -362,6 +362,16 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
       [busy]="saving()"
       (confirmed)="remove()"
       (cancelled)="deleting.set(false)"
+    />
+    <kh-confirm-dialog
+      [open]="switchingOff() !== null"
+      heading="Switch this banner off?"
+      [message]="'\u201C' + (switchingOff()?.name ?? '') + '\u201D comes off the storefront the moment it is switched off. It can be switched back on from here.'"
+      confirmLabel="Switch it off"
+      tone="warning"
+      [busy]="busyId() !== null"
+      (confirmed)="confirmSwitchOff()"
+      (cancelled)="switchingOff.set(null)"
     />
   `,
   styles: `
@@ -677,6 +687,15 @@ export class BannersPage {
     });
   }
 
+  /** A live banner a Switch off is waiting to be confirmed on. Switching on needs no such pause. */
+  protected readonly switchingOff = signal<BannerResponse | null>(null);
+
+  protected confirmSwitchOff(): void {
+    const row = this.switchingOff();
+    this.switchingOff.set(null);
+    if (row) this.toggle(row);
+  }
+
   protected toggle(row: BannerResponse): void {
     this.busyId.set(row.id);
     this.actionError.set(null);
@@ -684,6 +703,7 @@ export class BannersPage {
     this.content.setBannerActive(row.id, !row.isActive).subscribe({
       next: () => {
         this.busyId.set(null);
+        this.toasts.success(row.isActive ? 'Banner switched off.' : 'Banner switched on.');
         this.list.refresh();
       },
       error: (error: unknown) => {

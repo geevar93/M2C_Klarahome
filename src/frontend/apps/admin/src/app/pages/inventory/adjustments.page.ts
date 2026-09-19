@@ -5,7 +5,7 @@ import {
   StockLedgerEntryResponse,
   StockMovementReason,
 } from '@klarahome/data-access-admin';
-import { FilterBar, FilterValues, PageHeader } from '@klarahome/ui-admin';
+import { FilterBar, FilterValues, PageHeader, ConfirmDialog } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
@@ -29,7 +29,7 @@ import { tableDateTime } from '../../core/format';
  */
 @Component({
   selector: 'kh-adjustments-page',
-  imports: [Alert, Badge, Button, Control, Field, FilterBar, PageHeader, Skeleton],
+  imports: [Alert, Badge, Button, Control, Field, FilterBar, PageHeader, Skeleton, ConfirmDialog],
   template: `
     <kh-page-header
       heading="Adjustments and transfers"
@@ -127,7 +127,7 @@ import { tableDateTime } from '../../core/format';
             />
           </kh-field>
 
-          <button khButton type="button" variant="primary" [disabled]="busy()" (click)="adjust()">
+          <button khButton type="button" variant="primary" [disabled]="busy()" (click)="reviewAdjust()">
             {{ busy() ? 'Recording…' : 'Record the movement' }}
           </button>
         </section>
@@ -257,6 +257,15 @@ import { tableDateTime } from '../../core/format';
         </div>
       </section>
     }
+    <kh-confirm-dialog
+      [open]="confirmingWriteOff()"
+      heading="Write this stock off?"
+      [message]="writeOffMessage()"
+      confirmLabel="Write it off"
+      [busy]="busy()"
+      (confirmed)="adjust()"
+      (cancelled)="confirmingWriteOff.set(false)"
+    />
   `,
   styles: `
     kh-alert {
@@ -439,7 +448,28 @@ export class AdjustmentsPage {
     ledger.load();
   }
 
+  /** A negative movement waiting to be confirmed: stock written off is not written back by a click. */
+  protected readonly confirmingWriteOff = signal(false);
+
+  protected readonly writeOffMessage = computed(() => {
+    const item = this.chosen();
+    const change = Number(this.adjustForm.fields.change.value());
+    return `${Math.abs(change)} of ${item?.sku ?? 'this SKU'} comes off the shelf count. The ledger keeps the row; undoing it is another movement, not a delete.`;
+  });
+
+  protected reviewAdjust(): void {
+    const item = this.chosen();
+    if (!item || !this.adjustForm.submit() || this.busy()) return;
+    const change = Number(this.adjustForm.values().change);
+    if (Number.isFinite(change) && change < 0) {
+      this.confirmingWriteOff.set(true);
+      return;
+    }
+    this.adjust();
+  }
+
   protected adjust(): void {
+    this.confirmingWriteOff.set(false);
     const item = this.chosen();
     if (!item || !this.adjustForm.submit() || this.busy()) return;
 
