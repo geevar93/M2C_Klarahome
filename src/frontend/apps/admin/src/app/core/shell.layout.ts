@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { Router, RouterOutlet } from '@angular/router';
 import {
   IdentityAdminService,
   ImpersonationStore,
@@ -71,6 +71,7 @@ export class ShellLayout {
   private readonly vendors = inject(VendorsAdminService);
   private readonly signInFlow = inject(SignInFlow);
   private readonly storage = inject(BrowserStorage);
+  private readonly router = inject(Router);
 
   protected readonly navOpen = signal(false);
   protected readonly searchOpen = signal(false);
@@ -152,6 +153,22 @@ export class ShellLayout {
   });
 
   constructor() {
+    // The session ending underneath the shell. The interceptor has already tried the refresh
+    // cookie and been refused, and `AuthService` has cleared the store; what is left is a user on
+    // a screen every request from which now fails. A sign-out the user asked for also empties the
+    // session, and `SignInFlow` says which of the two this is.
+    let hadSession = this.session.isAuthenticated();
+    effect(() => {
+      const signedIn = this.session.isAuthenticated();
+      if (signedIn) {
+        hadSession = true;
+        return;
+      }
+      if (!hadSession || this.signInFlow.signingOut()) return;
+      hadSession = false;
+      void this.signInFlow.sessionEnded(this.router.url);
+    });
+
     // Counted once on entry rather than polled. See `NotificationCentreService` for why.
     if (this.session.hasPermission('notifications.log.read')) {
       this.notifications.refreshAttentionCount().subscribe({ error: () => undefined });
