@@ -17,9 +17,9 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | A4 | Permission gating applied to "New" but not to the edit/delete path beside it, or absent entirely | products (New/Import/bulk), brands, categories, attributes, fulfilment (all), ndr (Decide), price-lists (all), tax-rates (edit/delete), commission-plans (row edit), shipments (print/sync), return-detail (Close), vendor-detail sub-panels (`canManage=true`) | ☑ |
 | A5 | Raw enums reach the screen where a vocabulary exists | users + user-detail (`Vendor` → Seller), vendor-detail + vendor/profile (constitution), pages.page (kind), commission-plans (planType), return-detail (refundMode), order-detail timeline (actorType) | ☑ |
 | A6 | Raw ids shown where a name or link is available | users/user-detail `vendorId`, price-list-detail `listingId`, promotion redemptions `orderId`, fulfilment parcel `id`, adjustments `actorId`, ledger `vendorId`, vendors list `commissionPlanId`, vendor-detail staff `userId`, reports runs `reportKey`, shipping-zones override seller | ☐ |
-| A7 | Data table: filtered-empty state has no "Clear filters"; "about N in total" and KPI tile values are unformatted numbers | `libs/ui/admin` data-table, kpi-card, dashboard | ☐ |
+| A7 | Data table: filtered-empty state has no "Clear filters"; "about N in total" and KPI tile values are unformatted numbers | `libs/ui/admin` data-table, kpi-card, dashboard | ☑ table offers Clear the filters (wired on products, orders, shipments, returns, users); counts and KPI values formatted |
 | A8 | Filters never written to the URL, so a filtered queue cannot be shared or restored by Back | every list page | ⏳ design decision (filter-bar docs say URL; no page does it) |
-| A9 | Modal Escape only fires with focus inside the panel; the top-bar account menu has no outside-click/Escape dismissal | `modal.ts`, `admin-top-bar.ts` | ☐ |
+| A9 | Modal Escape only fires with focus inside the panel; the top-bar account menu has no outside-click/Escape dismissal | `modal.ts`, `admin-top-bar.ts` | ☑ |
 
 ## B. Destructive or irreversible actions without a confirm / reason
 
@@ -60,7 +60,7 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | D10 | Export CSV reuses the Import modal, so an export is headed "Import products" | products.page | ☑ |
 | D11 | Promotion detail and collection detail are large forms with no unsaved-changes guard; promotion `[dirty]` hard-coded | promotion-detail, collection-detail, navigation.ts | ☑ |
 | D12 | vendor/profile "Undo changes" on one form resets the other form too | vendor/profile | ☑ |
-| D13 | Users create dialog is not a `<form>` (Enter does not submit) | users.page | ☐ |
+| D13 | Users create dialog is not a `<form>` (Enter does not submit) | users.page | ☑ |
 | D14 | Profile: "End the other 1 session(s)" pluralisation; session timestamps date-only; TOTP secret has no copy control | profile.page | ☑ plural, timestamps and a confirm on End; TOTP copy control left |
 
 ## E. Missing cross-entity links

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, computed } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Skeleton } from '@klarahome/ui-primitives';
@@ -38,7 +38,7 @@ import { Skeleton } from '@klarahome/ui-primitives';
         <span class="value muted" title="The server does not count this">—</span>
         <span class="kh-visually-hidden">Not counted</span>
       } @else {
-        <span class="value">{{ value() }}</span>
+        <span class="value">{{ shown() }}</span>
       }
       @if (hint(); as text) {
         <span class="hint">{{ text }}</span>
@@ -94,6 +94,11 @@ export class KpiCard {
   readonly label = input.required<string>();
   /** The figure. `null` means the server did not count, which is not the same as zero. */
   readonly value = input<number | string | null | undefined>(null);
+  /** A count with its thousands separators; a string as given. */
+  protected readonly shown = computed(() => {
+    const value = this.value();
+    return typeof value === 'number' ? value.toLocaleString('en-IN') : value;
+  });
   readonly hint = input<string | null>(null);
   readonly loading = input(false);
   /** Where the figure is explained. Absent makes the card a plain tile rather than a link. */

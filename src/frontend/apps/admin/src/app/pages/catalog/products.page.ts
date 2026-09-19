@@ -75,6 +75,8 @@ import { tableDate, tableDateTime } from '../../core/format';
 
     <kh-data-table
       label="Products"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -290,6 +292,7 @@ import { tableDate, tableDateTime } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductsPage implements OnDestroy {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   private readonly session = inject(SessionStore);
   private readonly catalog = inject(CatalogAdminService);
   private readonly documents = inject(DocumentPrintService);

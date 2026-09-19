@@ -87,6 +87,8 @@ import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
 
     <kh-data-table
       label="Users"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -142,6 +144,10 @@ import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
       @if (createError(); as message) {
         <kh-alert tone="danger" heading="It could not be created">{{ message }}</kh-alert>
       }
+
+      <!-- A real form, so Enter submits and a password manager sees the fields; the footer's
+           button belongs to it through the form attribute because it lives in another slot. -->
+      <form id="user-create-form" (submit)="submitCreate($event)" novalidate>
 
       <kh-field label="Email" for="user-email" [error]="form.fields.email.error()">
         <input
@@ -202,9 +208,11 @@ import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
         }
       </fieldset>
 
+      </form>
+
       <div slot="footer">
         <button khButton type="button" variant="tertiary" (click)="creating.set(false)">Cancel</button>
-        <button khButton type="button" variant="primary" [disabled]="saving()" (click)="create()">
+        <button khButton type="submit" form="user-create-form" variant="primary" [disabled]="saving()">
           {{ saving() ? 'Creating…' : 'Create and open' }}
         </button>
       </div>
@@ -251,6 +259,7 @@ import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UsersPage {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   protected readonly userTypeLabel = userTypeLabel;
   private readonly identity = inject(IdentityAdminService);
   private readonly vendors = inject(VendorsAdminService);
@@ -382,6 +391,11 @@ export class UsersPage {
     this.roleCodes.set([]);
     this.form.reset({ email: '', mobile: '', vendorId: '' });
     this.creating.set(true);
+  }
+
+  protected submitCreate(event: Event): void {
+    event.preventDefault();
+    this.create();
   }
 
   protected create(): void {

@@ -82,6 +82,8 @@ import { tableDateTime, tableMoney } from '../../core/format';
 
     <kh-data-table
       label="Shipments"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -520,6 +522,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShipmentsPage {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   private readonly fulfilment = inject(FulfilmentService);
   private readonly documents = inject(DocumentPrintService);
   private readonly media = inject(MediaLibraryService);
