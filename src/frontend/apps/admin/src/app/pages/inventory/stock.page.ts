@@ -161,6 +161,9 @@ import { tableDateTime } from '../../core/format';
         [subtitle]="item.warehouseCode + ' · ' + item.quantityOnHand + ' on hand'"
         (closed)="closeLedger()"
       >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
         <p class="hint">
           Every movement, newest first. The balance after each one is what the platform believed at that
           moment — nothing here can be edited, which is what makes it worth reading.
@@ -239,6 +242,9 @@ import { tableDateTime } from '../../core/format';
       [dismissible]="!busy()"
       (closed)="adjustFor.set(null)"
     >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
       @if (adjustFor(); as item) {
         <p class="hint">
           {{ item.sku }} at {{ item.warehouseCode }} — {{ item.quantityOnHand }} on hand,
@@ -305,6 +311,9 @@ import { tableDateTime } from '../../core/format';
       [dismissible]="!busy()"
       (closed)="settingsFor.set(null)"
     >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
       @if (settingsFor(); as item) {
         <p class="hint">{{ item.sku }} at {{ item.warehouseCode }}.</p>
 
@@ -365,6 +374,9 @@ import { tableDateTime } from '../../core/format';
       [dismissible]="!busy()"
       (closed)="tracking.set(false)"
     >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
       <p class="hint">
         Opens a stock row at zero so the listing can be received into and sold. It moves no stock.
       </p>
@@ -524,6 +536,13 @@ export class StockPage {
   protected readonly values = signal<FilterValues>({});
   protected readonly busy = signal(false);
   protected readonly actionError = signal<string | null>(null);
+  /**
+   * A failure raised from inside a modal or drawer, shown inside it.
+   *
+   * The page-level alert is behind the open panel, so a refused save there is a button that
+   * seemed to do nothing. This is the same message, in front of the person who pressed it.
+   */
+  protected readonly dialogError = signal<string | null>(null);
 
   protected readonly ledgerFor = signal<StockItemResponse | null>(null);
   protected readonly ledger = signal<ReturnType<InventoryAdminService['ledger']> | null>(null);
@@ -682,12 +701,12 @@ export class StockPage {
     const values = this.adjustForm.values();
     const change = Number(values.change);
     if (!Number.isFinite(change) || change === 0) {
-      this.actionError.set('A movement of zero is not a movement. Enter a positive or negative number.');
+      this.dialogError.set('A movement of zero is not a movement. Enter a positive or negative number.');
       return;
     }
 
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory
       .adjust({
@@ -706,7 +725,7 @@ export class StockPage {
         },
         error: (error: unknown) => {
           this.busy.set(false);
-          this.actionError.set(describeError(error, 'That movement was refused.'));
+          this.dialogError.set(describeError(error, 'That movement was refused.'));
         },
       });
   }
@@ -727,7 +746,7 @@ export class StockPage {
 
     const values = this.settingsForm.values();
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory
       .configure(item.id, {
@@ -747,7 +766,7 @@ export class StockPage {
         },
         error: (error: unknown) => {
           this.busy.set(false);
-          this.actionError.set(describeError(error, 'Those settings could not be saved.'));
+          this.dialogError.set(describeError(error, 'Those settings could not be saved.'));
         },
       });
   }

@@ -42,7 +42,7 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | C2 | Secondary fetches swallowed into `[]` → false empty states | reports (schedules), vendor/performance (definitions), roles (permission catalogue), shell (notification count) | ☑ |
 | C3 | Product offers table says "No seller has listed this" while loading; stock ledger drawer says "Nothing has moved" while loading; profile sessions list has no skeleton | product-detail, stock, profile | ☑ |
 | C4 | No empty state at all | feature-flags, shipping-zones (zero zones), reports catalogue, ledger "work it out" panels | ☑ feature flags, shipping zones; reports catalogue and ledger panels left |
-| C5 | Errors rendered in the page-level alert *behind* the open modal/drawer | stock (adjust, settings), purchase-orders (draft, receive), stock-takes | ☐ |
+| C5 | Errors rendered in the page-level alert *behind* the open modal/drawer | stock (adjust, settings), purchase-orders (draft, receive), stock-takes | ☑ |
 
 ## D. Validation and feedback
 
@@ -58,7 +58,7 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | D8 | No success toast | variant-editor (save, activate), price-lists toggle, promotion-detail toggle, kyc reject, bank-accounts (primary/remove), pickup-locations remove, collection-detail remove, reports delete schedule | ☑ |
 | D9 | No busy label while saving | stock (adjust/settings), adjustments, feature-flags, vendor-detail ×2, collection-detail rule, page-composer transition | ☑ |
 | D10 | Export CSV reuses the Import modal, so an export is headed "Import products" | products.page | ☑ |
-| D11 | Promotion detail and collection detail are large forms with no unsaved-changes guard; promotion `[dirty]` hard-coded | promotion-detail, collection-detail, navigation.ts | ☐ |
+| D11 | Promotion detail and collection detail are large forms with no unsaved-changes guard; promotion `[dirty]` hard-coded | promotion-detail, collection-detail, navigation.ts | ☑ |
 | D12 | vendor/profile "Undo changes" on one form resets the other form too | vendor/profile | ☑ |
 | D13 | Users create dialog is not a `<form>` (Enter does not submit) | users.page | ☐ |
 | D14 | Profile: "End the other 1 session(s)" pluralisation; session timestamps date-only; TOTP secret has no copy control | profile.page | ☑ plural, timestamps and a confirm on End; TOTP copy control left |
@@ -67,9 +67,9 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 
 | # | Gap | Where | Status |
 |---|-----|-------|--------|
-| E1 | Order → its shipments; shipment → its order; return → its order; NDR row → order; returns list → order; fulfilment queue → order | order-detail, shipments, return-detail, ndr, returns, fulfilment | ☐ |
-| E2 | Seller detail → its products, ledger, payouts, cycles; payout item → seller; settlement cycle → seller and payout run; ledger row → seller | vendor-detail, payout-detail, payouts, settlement-cycles, ledger | ☐ |
-| E3 | Stock row → product; warehouse stock count → stock list; supplier → its POs; collection item → product | stock, warehouses, suppliers, collection-detail | ☐ |
+| E1 | Order → its shipments; shipment → its order; return → its order; NDR row → order; returns list → order; fulfilment queue → order | order-detail, shipments, return-detail, ndr, returns, fulfilment | ☑ shipment → order, return → order; NDR/returns list/fulfilment rows carry no order id (API) and order → shipments needs URL filters (A8) |
+| E2 | Seller detail → its products, ledger, payouts, cycles; payout item → seller; settlement cycle → seller and payout run; ledger row → seller | vendor-detail, payout-detail, payouts, settlement-cycles, ledger | ☑ payout item → seller, cycle → seller and payout run; seller → its ledger/payouts needs URL filters (A8) |
+| E3 | Stock row → product; warehouse stock count → stock list; supplier → its POs; collection item → product | stock, warehouses, suppliers, collection-detail | ☑ collection item → product; stock row carries no product id, warehouse/supplier links need URL filters (A8) |
 | E4 | Order list customer name is inert (no customer route exists) | orders | ⏳ |
 
 ## F. Thin screens (features, not fixes)

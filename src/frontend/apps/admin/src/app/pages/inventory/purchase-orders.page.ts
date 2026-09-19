@@ -143,6 +143,9 @@ interface ReceiptLine {
         [subtitle]="order.status + ' · ' + money(order.total)"
         (closed)="viewing.set(null)"
       >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
         <table>
           <thead>
             <tr>
@@ -227,6 +230,9 @@ interface ReceiptLine {
         [dirty]="lines().length > 0 || supplierId() !== '' || warehouseId() !== ''"
         (closed)="drafting.set(false)"
       >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
         <kh-field label="Supplier" for="po-supplier">
           <select
             khControl
@@ -381,6 +387,9 @@ interface ReceiptLine {
       [dismissible]="!busy()"
       (closed)="receiving.set(null)"
     >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
       @if (receiving(); as order) {
         <p class="hint">
           {{ order.number }} — count what arrived. Only the accepted quantity goes into stock; what is
@@ -586,6 +595,13 @@ export class PurchaseOrdersPage {
   protected readonly lineSearch = signal<FilterValues>({});
   protected readonly busy = signal(false);
   protected readonly actionError = signal<string | null>(null);
+  /**
+   * A failure raised from inside a modal or drawer, shown inside it.
+   *
+   * The page-level alert is behind the open panel, so a refused save there is a button that
+   * seemed to do nothing. This is the same message, in front of the person who pressed it.
+   */
+  protected readonly dialogError = signal<string | null>(null);
 
   protected readonly viewing = signal<PurchaseOrderResponse | null>(null);
   protected readonly drafting = signal(false);
@@ -736,12 +752,12 @@ export class PurchaseOrdersPage {
     }));
 
     if (lines.some((line) => line.quantityOrdered <= 0)) {
-      this.actionError.set('Every line needs a quantity of at least one.');
+      this.dialogError.set('Every line needs a quantity of at least one.');
       return;
     }
 
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory
       .createPurchaseOrder({
@@ -761,7 +777,7 @@ export class PurchaseOrdersPage {
         },
         error: (error: unknown) => {
           this.busy.set(false);
-          this.actionError.set(describeError(error, 'That purchase order could not be created.'));
+          this.dialogError.set(describeError(error, 'That purchase order could not be created.'));
         },
       });
   }
@@ -820,12 +836,12 @@ export class PurchaseOrdersPage {
       .filter((line) => line.accepted > 0 || line.rejected > 0);
 
     if (lines.length === 0) {
-      this.actionError.set('Nothing was counted. Enter what arrived on at least one line.');
+      this.dialogError.set('Nothing was counted. Enter what arrived on at least one line.');
       return;
     }
 
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory.receivePurchaseOrder(order.id, { notes: null, lines }).subscribe({
       next: (receipt) => {
@@ -837,7 +853,7 @@ export class PurchaseOrdersPage {
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.actionError.set(describeError(error, 'That delivery could not be booked in.'));
+        this.dialogError.set(describeError(error, 'That delivery could not be booked in.'));
       },
     });
   }
@@ -845,7 +861,7 @@ export class PurchaseOrdersPage {
   private act(request: ReturnType<InventoryAdminService['submitPurchaseOrder']>, message: string): void {
     if (this.busy()) return;
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     request.subscribe({
       next: (updated) => {
@@ -856,7 +872,7 @@ export class PurchaseOrdersPage {
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.actionError.set(describeError(error, 'That could not be done.'));
+        this.dialogError.set(describeError(error, 'That could not be done.'));
       },
     });
   }

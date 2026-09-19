@@ -28,6 +28,7 @@ import {
   EntityPicker,
   FormShell,
   PageHeader,
+  HasUnsavedChanges,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map } from 'rxjs';
@@ -126,7 +127,7 @@ const NEW = 'new';
           description="What it takes off, from what, and when."
           [summary]="summary()"
           [saving]="busy()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="isNew() ? 'Create promotion' : 'Save changes'"
           (submitted)="save()"
           (cancelled)="back()"
@@ -909,7 +910,7 @@ const NEW = 'new';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PromotionDetailPage {
+export class PromotionDetailPage implements HasUnsavedChanges {
   private readonly pricing = inject(PricingAdminService);
   private readonly catalog = inject(CatalogAdminService);
   private readonly vendors = inject(VendorsAdminService);
@@ -1100,6 +1101,11 @@ export class PromotionDetailPage {
 
   protected back(): void {
     void this.router.navigate(['/promotions']);
+  }
+
+  /** What `unsavedChangesGuard` asks. The rule's own fields; the pickers beside them save with it. */
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty() && !this.busy();
   }
 
   // ---- Tiers ------------------------------------------------------------------------------------

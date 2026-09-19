@@ -93,7 +93,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
   template: `
     <kh-page-header
       [heading]="rma()?.returnNumber || 'Return'"
-      [crumbs]="[{ label: 'Returns', path: '/returns' }]"
+      [crumbs]="crumbs()"
       [description]="subtitle()"
     >
       @if (rma(); as current) {
@@ -777,6 +777,16 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReturnDetailPage {
+  /** Returns, then the order this one came off — the one hop a returns desk makes most. */
+  protected readonly crumbs = computed(() => {
+    const current = this.rma();
+    return current
+      ? [
+          { label: 'Returns', path: '/returns' },
+          { label: current.orderNumber, path: `/orders/${current.orderId}` },
+        ]
+      : [{ label: 'Returns', path: '/returns' }];
+  });
   /** The same words the refund modal offers; the API's enum never reaches the screen. */
   protected refundModeLabel(mode: string | null | undefined): string {
     if (!mode) return '—';

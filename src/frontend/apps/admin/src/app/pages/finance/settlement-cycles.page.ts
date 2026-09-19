@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { CycleFilters, SettlementCycleResponse, SettlementsAdminService } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
@@ -60,6 +61,7 @@ const CYCLE_STATUSES = [
     PageHeader,
     StatusBadge,
     ConfirmDialog,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -112,7 +114,13 @@ const CYCLE_STATUSES = [
         <button type="button" class="link" (click)="open(row)">
           {{ row.vendorName ?? row.vendorCode ?? row.vendorId }}
         </button>
-        <span class="note">{{ tableDate(row.periodStart) }} → {{ tableDate(row.periodEnd) }}</span>
+        <span class="note">
+          {{ tableDate(row.periodStart) }} → {{ tableDate(row.periodEnd) }}
+          · <a class="link" [routerLink]="['/vendors', row.vendorId]">seller</a>
+          @if (row.payoutBatchId; as batch) {
+            · <a class="link" [routerLink]="['/payouts', batch]">payout run</a>
+          }
+        </span>
       </ng-template>
 
       <ng-template khCell="status" let-row>

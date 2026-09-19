@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   PayoutBatchResponse,
   PayoutItemResponse,
@@ -56,6 +56,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
     PageHeader,
     Skeleton,
     StatusBadge,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -133,7 +134,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
         emptyMessage="This run has no payments in it."
       >
         <ng-template khCell="vendor" let-row>
-          <span class="name">{{ row.vendorName ?? row.vendorCode ?? row.vendorId }}</span>
+          <a class="link name" [routerLink]="['/vendors', row.vendorId]">{{ row.vendorName ?? row.vendorCode ?? row.vendorId }}</a>
           @if (row.destinationLast4) {
             <span class="note">••••{{ row.destinationLast4 }}</span>
           } @else {

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import {
   DocumentPrintService,
   FulfilmentService,
@@ -63,6 +64,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
     Icon,
     PageHeader,
     StatusBadge,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -105,8 +107,8 @@ import { tableDateTime, tableMoney } from '../../core/format';
       />
 
       <ng-template khCell="orderNumber" let-row>
-        <button type="button" class="link" (click)="open(row)">{{ row.orderNumber }}</button>
-        <span class="note">{{ row.subOrderNumber }}</span>
+        <a class="link" [routerLink]="['/orders', row.orderId]">{{ row.orderNumber }}</a>
+        <button type="button" class="link note" (click)="open(row)">{{ row.subOrderNumber }} · parcel</button>
       </ng-template>
 
       <ng-template khCell="awb" let-row>

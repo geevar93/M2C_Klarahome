@@ -110,6 +110,9 @@ interface CountLine {
         subtitle="Every tracked item in the warehouse is counted unless you narrow it later."
         (closed)="creating.set(false)"
       >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
         <kh-field label="Warehouse" for="take-warehouse">
           <select
             khControl
@@ -166,6 +169,9 @@ interface CountLine {
         [dirty]="countsDirty()"
         (closed)="viewing.set(null)"
       >
+      @if (dialogError(); as message) {
+        <kh-alert tone="danger">{{ message }}</kh-alert>
+      }
         @if (take.status === 'Submitted') {
           <kh-alert tone="info" heading="This count is closed">
             Its variances have been written to the stock ledger as corrections. It cannot be changed.
@@ -347,6 +353,13 @@ export class StockTakesPage {
   protected readonly values = signal<FilterValues>({});
   protected readonly busy = signal(false);
   protected readonly actionError = signal<string | null>(null);
+  /**
+   * A failure raised from inside a modal or drawer, shown inside it.
+   *
+   * The page-level alert is behind the open panel, so a refused save there is a button that
+   * seemed to do nothing. This is the same message, in front of the person who pressed it.
+   */
+  protected readonly dialogError = signal<string | null>(null);
 
   protected readonly creating = signal(false);
   protected readonly viewing = signal<StockTakeResponse | null>(null);
@@ -463,7 +476,7 @@ export class StockTakesPage {
   protected create(): void {
     if (this.busy()) return;
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory
       .createStockTake({
@@ -483,7 +496,7 @@ export class StockTakesPage {
         },
         error: (error: unknown) => {
           this.busy.set(false);
-          this.actionError.set(describeError(error, 'That stock take could not be started.'));
+          this.dialogError.set(describeError(error, 'That stock take could not be started.'));
         },
       });
   }
@@ -511,12 +524,12 @@ export class StockTakesPage {
       }));
 
     if (lines.length === 0) {
-      this.actionError.set('Nothing has been counted yet.');
+      this.dialogError.set('Nothing has been counted yet.');
       return;
     }
 
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     this.inventory.countStockTake(take.id, { lines }).subscribe({
       next: (updated) => {
@@ -526,7 +539,7 @@ export class StockTakesPage {
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.actionError.set(describeError(error, 'Those counts could not be saved.'));
+        this.dialogError.set(describeError(error, 'Those counts could not be saved.'));
       },
     });
   }
@@ -537,7 +550,7 @@ export class StockTakesPage {
 
     this.submitting.set(false);
     this.busy.set(true);
-    this.actionError.set(null);
+    this.dialogError.set(null);
 
     // Saved first, so what is submitted is what is on screen. Submitting a stock take whose last
     // three counts were still in the browser would correct the wrong quantities.
@@ -560,13 +573,13 @@ export class StockTakesPage {
           },
           error: (error: unknown) => {
             this.busy.set(false);
-            this.actionError.set(describeError(error, 'The count could not be submitted.'));
+            this.dialogError.set(describeError(error, 'The count could not be submitted.'));
           },
         });
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.actionError.set(
+        this.dialogError.set(
           describeError(error, 'The counts could not be saved, so nothing was submitted.'),
         );
       },
@@ -589,7 +602,7 @@ export class StockTakesPage {
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.actionError.set(describeError(error, 'That stock take could not be abandoned.'));
+        this.dialogError.set(describeError(error, 'That stock take could not be abandoned.'));
       },
     });
   }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CancelLineBody,
   DocumentPrintService,
@@ -9,7 +9,7 @@ import {
   OrdersAdminService,
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import { ConfirmDialog, Modal, PageHeader, StatusBadge, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -66,6 +66,7 @@ interface CancelDraft {
     PageHeader,
     Skeleton,
     StatusBadge,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -98,7 +99,12 @@ interface CancelDraft {
                 <div>
                   <h2>{{ part.subOrderNumber }}</h2>
                   <p class="hint">
-                    {{ part.vendorName ?? 'Seller' }} ·
+                    @if (isPlatform()) {
+                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{ part.vendorName ?? 'Seller' }}</a>
+                    } @else {
+                      {{ part.vendorName ?? 'Seller' }}
+                    }
+                    ·
                     {{ money(part.netTotal, part.currencyCode) }}
                     @if (part.dispatchDueAt; as due) {
                       · dispatch due {{ when(due) }}
@@ -537,6 +543,9 @@ interface CancelDraft {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrderDetailPage {
+  private readonly session = inject(SessionStore);
+  /** A seller has no seller directory to link into; platform staff do. */
+  protected readonly isPlatform = computed(() => !this.session.session()?.vendorId);
   /** `OrderActor` on the server, said in words. */
   protected actorLabel(actor: string): string {
     switch (actor) {
