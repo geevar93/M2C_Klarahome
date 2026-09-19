@@ -10,7 +10,7 @@ import {
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
 import { EntityDrawer, FormShell, PageHeader } from '@klarahome/ui-admin';
-import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton, EmptyState } from '@klarahome/ui-primitives';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
@@ -70,6 +70,7 @@ interface ZoneView {
     Icon,
     PageHeader,
     Skeleton,
+    EmptyState,
   ],
   template: `
     <kh-page-header
@@ -256,6 +257,15 @@ interface ZoneView {
             </table>
           }
         </section>
+      } @empty {
+        <kh-empty-state
+          heading="No shipping zone yet"
+          message="Until a zone exists, no address can be served and checkout has no delivery option to offer. Start with one zone that covers every PIN code, then narrow it."
+        >
+          <button khButton type="button" variant="primary" *khHasPermission="'shipping.rate.manage'" (click)="startCreate()">
+            New zone
+          </button>
+        </kh-empty-state>
       }
     }
 

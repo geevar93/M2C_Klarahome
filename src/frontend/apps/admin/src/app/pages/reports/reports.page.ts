@@ -135,7 +135,11 @@ const WEEKDAYS = [
         changed — make a new one instead.
       </p>
 
-      @if (schedules().length === 0) {
+      @if (schedulesError(); as message) {
+        <kh-alert tone="danger" heading="The schedules could not be loaded">{{ message }}</kh-alert>
+      } @else if (schedulesLoading()) {
+        <kh-skeleton height="6rem" />
+      } @else if (schedules().length === 0) {
         <p class="empty">Nothing is scheduled.</p>
       } @else {
         <ul class="schedules">
@@ -654,11 +658,22 @@ export class ReportsPage {
     this.loadSchedules();
   }
 
+  protected readonly schedulesLoading = signal(false);
+  protected readonly schedulesError = signal<string | null>(null);
+
   private loadSchedules(): void {
+    this.schedulesLoading.set(true);
+    this.schedulesError.set(null);
     this.reporting.schedules(false).subscribe({
-      next: (schedules) => this.schedules.set(schedules),
-      // Not fatal: the catalogue above is still usable without the timetable.
-      error: () => this.schedules.set([]),
+      next: (schedules) => {
+        this.schedulesLoading.set(false);
+        this.schedules.set(schedules);
+      },
+      // Not fatal to the catalogue above, but "nothing is scheduled" would be a lie.
+      error: (error: unknown) => {
+        this.schedulesLoading.set(false);
+        this.schedulesError.set(describeError(error, 'The timetable could not be fetched.'));
+      },
     });
   }
 }

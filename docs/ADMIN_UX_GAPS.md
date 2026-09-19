@@ -32,16 +32,16 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | B5 | "Close the current period for every seller" goes through a plain modal: no phrase, no reason when forced | settlement-cycles | ☑ |
 | B6 | Ledger adjustment (an irreversible append) posts with no confirm and accepts a zero amount | ledger | ☑ |
 | B7 | Negative stock adjustment / transfer, variant Deactivate, offer Deactivate, banner Switch off, single-session End, return Close, menu item with children removed, commission plan default/active change, tax-rate Active untick, NDR return-to-origin | adjustments, variant-editor, product-detail, banners, profile, return-detail, menu-editor, commission-plans, tax-rates, ndr | ☐ |
-| B8 | Closing the stock-take count drawer or the PO draft drawer discards every typed line | stock-takes, purchase-orders | ☐ |
+| B8 | Closing the stock-take count drawer or the PO draft drawer discards every typed line | stock-takes, purchase-orders | ☑ |
 
 ## C. Missing loading / empty / error states
 
 | # | Gap | Where | Status |
 |---|-----|-------|--------|
-| C1 | Shipments "courier messages that failed" table never shows an error: a failed fetch reads "Nothing has failed" | shipments | ☐ |
-| C2 | Secondary fetches swallowed into `[]` → false empty states | reports (schedules), vendor/performance (definitions), roles (permission catalogue), shell (notification count) | ☐ |
-| C3 | Product offers table says "No seller has listed this" while loading; stock ledger drawer says "Nothing has moved" while loading; profile sessions list has no skeleton | product-detail, stock, profile | ☐ |
-| C4 | No empty state at all | feature-flags, shipping-zones (zero zones), reports catalogue, ledger "work it out" panels | ☐ |
+| C1 | Shipments "courier messages that failed" table never shows an error: a failed fetch reads "Nothing has failed" | shipments | ☑ |
+| C2 | Secondary fetches swallowed into `[]` → false empty states | reports (schedules), vendor/performance (definitions), roles (permission catalogue), shell (notification count) | ☑ |
+| C3 | Product offers table says "No seller has listed this" while loading; stock ledger drawer says "Nothing has moved" while loading; profile sessions list has no skeleton | product-detail, stock, profile | ☑ |
+| C4 | No empty state at all | feature-flags, shipping-zones (zero zones), reports catalogue, ledger "work it out" panels | ☑ feature flags, shipping zones; reports catalogue and ledger panels left |
 | C5 | Errors rendered in the page-level alert *behind* the open modal/drawer | stock (adjust, settings), purchase-orders (draft, receive), stock-takes | ☐ |
 
 ## D. Validation and feedback
@@ -57,11 +57,11 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | D7 | Fields with no inline validation: redirects `toPath`, page-composer schedule `publishAt`, banners alt text, feature-flags percentage clamp, shipping-zones PIN ranges silently dropped, serviceable-regions rows silently dropped, return approve amount / QC quantity, PO rejected quantity without reason | as named | ☐ |
 | D8 | No success toast | variant-editor (save, activate), price-lists toggle, promotion-detail toggle, kyc reject, bank-accounts (primary/remove), pickup-locations remove, collection-detail remove, reports delete schedule | ☑ |
 | D9 | No busy label while saving | stock (adjust/settings), adjustments, feature-flags, vendor-detail ×2, collection-detail rule, page-composer transition | ☑ |
-| D10 | Export CSV reuses the Import modal, so an export is headed "Import products" | products.page | ☐ |
+| D10 | Export CSV reuses the Import modal, so an export is headed "Import products" | products.page | ☑ |
 | D11 | Promotion detail and collection detail are large forms with no unsaved-changes guard; promotion `[dirty]` hard-coded | promotion-detail, collection-detail, navigation.ts | ☐ |
 | D12 | vendor/profile "Undo changes" on one form resets the other form too | vendor/profile | ☑ |
 | D13 | Users create dialog is not a `<form>` (Enter does not submit) | users.page | ☐ |
-| D14 | Profile: "End the other 1 session(s)" pluralisation; session timestamps date-only; TOTP secret has no copy control | profile.page | ☐ |
+| D14 | Profile: "End the other 1 session(s)" pluralisation; session timestamps date-only; TOTP secret has no copy control | profile.page | ☑ plural, timestamps and a confirm on End; TOTP copy control left |
 
 ## E. Missing cross-entity links
 

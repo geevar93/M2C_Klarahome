@@ -132,7 +132,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
         lost in the meantime.
       </p>
 
-      <table>
+      @if (events.error(); as message) {
+        <kh-alert tone="danger" heading="The failed messages could not be loaded">{{ message }}</kh-alert>
+      }
+
+      <table [attr.aria-busy]="events.loading()">
         <thead>
           <tr>
             <th scope="col">Received</th>
@@ -144,6 +148,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
           </tr>
         </thead>
         <tbody>
+          @if (events.loading() && events.rows().length === 0) {
+            <tr>
+              <td colspan="6" class="hint">Loading…</td>
+            </tr>
+          }
           @for (event of events.rows(); track event.id) {
             <tr>
               <td>{{ when(event.receivedAt) }}</td>

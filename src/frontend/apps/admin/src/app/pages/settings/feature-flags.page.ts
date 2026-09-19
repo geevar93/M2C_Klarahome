@@ -74,6 +74,8 @@ import { describeError } from '../../core/describe-error';
               </button>
             </div>
           </li>
+        } @empty {
+          <li class="hint">No feature flag is declared for this deployment.</li>
         }
       </ul>
 

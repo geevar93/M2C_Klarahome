@@ -181,6 +181,11 @@ import { tableDateTime } from '../../core/format';
             </tr>
           </thead>
           <tbody>
+            @if (ledger()?.loading() && ledgerRows().length === 0) {
+              <tr>
+                <td colspan="5" class="hint">Loading…</td>
+              </tr>
+            }
             @for (entry of ledgerRows(); track entry.id) {
               <tr>
                 <td>{{ when(entry) }}</td>

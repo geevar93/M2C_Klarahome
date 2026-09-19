@@ -105,7 +105,9 @@ import { ReportRunner } from '../reports/report-runner';
     <section class="reports">
       <h2>Your figures</h2>
 
-      @if (reports().length === 0) {
+      @if (reportsError(); as message) {
+        <kh-alert tone="danger" heading="Your figures could not be loaded">{{ message }}</kh-alert>
+      } @else if (reports().length === 0) {
         <p class="note">No report is available to you yet.</p>
       } @else {
         <div class="picker">
@@ -187,6 +189,7 @@ export class VendorPerformancePage {
   protected readonly vendor = signal<VendorResponse | null>(null);
   protected readonly balance = signal<VendorBalanceResponse | null>(null);
   protected readonly reports = signal<readonly ReportDefinition[]>([]);
+  protected readonly reportsError = signal<string | null>(null);
   protected readonly selectedKey = signal('');
 
   protected readonly loading = signal(false);
@@ -204,8 +207,8 @@ export class VendorPerformancePage {
         this.reports.set(definitions);
         this.selectedKey.set(definitions[0]?.key ?? '');
       },
-      // Not fatal: the tiles above are still the seller's own money.
-      error: () => this.reports.set([]),
+      // Not fatal to the tiles above, which are still the seller's own money — but it is said.
+      error: (error: unknown) => this.reportsError.set(describeError(error, 'The reports could not be fetched.')),
     });
   }
 

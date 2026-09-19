@@ -195,6 +195,10 @@ const SCOPES: readonly { value: RoleScope; label: string; hint: string }[] = [
             {{ selected().length }} permission{{ selected().length === 1 ? '' : 's' }} ticked
           </p>
 
+          @if (groupsError(); as message) {
+            <kh-alert tone="danger" heading="The permission catalogue could not be loaded">{{ message }}</kh-alert>
+          }
+
           @for (group of groups(); track group.group) {
             <fieldset>
               <legend>{{ humanise(group.group) }}</legend>
@@ -269,6 +273,7 @@ export class RolesPage {
 
   protected readonly roles = signal<readonly RoleResponse[]>([]);
   protected readonly groups = signal<readonly PermissionGroupResponse[]>([]);
+  protected readonly groupsError = signal<string | null>(null);
   protected readonly loading = signal(false);
   protected readonly loadError = signal<string | null>(null);
   protected readonly saving = signal(false);
@@ -398,8 +403,9 @@ export class RolesPage {
 
     this.identity.permissions().subscribe({
       next: (groups) => this.groups.set(groups),
-      // Without the catalogue the editor has nothing to tick, and that is what it will show.
-      error: () => this.groups.set([]),
+      // Without the catalogue the editor has nothing to tick; an empty editor must not read as "this
+      // role grants nothing", so the failure is said where the checkboxes would be.
+      error: (error: unknown) => this.groupsError.set(describeError(error, 'The catalogue could not be fetched.')),
     });
   }
 }

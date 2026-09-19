@@ -163,6 +163,7 @@ interface CountLine {
       <kh-entity-drawer
         [heading]="'Stock take ' + take.number"
         [subtitle]="take.status + ' · ' + take.lines.length + ' items'"
+        [dirty]="countsDirty()"
         (closed)="viewing.set(null)"
       >
         @if (take.status === 'Submitted') {
@@ -356,6 +357,18 @@ export class StockTakesPage {
   protected readonly scheduledFor = signal('');
   protected readonly notes = signal('');
   protected readonly countLines = signal<readonly CountLine[]>([]);
+
+  /** Whether any count or note differs from what the server last saved for this take. */
+  protected readonly countsDirty = computed(() => {
+    const take = this.viewing();
+    if (!take) return false;
+    const saved = new Map(take.lines.map((line) => [line.stockItemId, line]));
+    return this.countLines().some((line) => {
+      const was = saved.get(line.stockItemId);
+      const counted = was?.countedQuantity === null || was?.countedQuantity === undefined ? '' : String(was.countedQuantity);
+      return line.counted !== counted || line.note !== (was?.note ?? '');
+    });
+  });
 
   protected readonly page = computed(() => ({
     nextCursor: this.list.nextCursor(),

@@ -224,6 +224,7 @@ interface ReceiptLine {
       <kh-entity-drawer
         heading="New purchase order"
         subtitle="Saved as a draft. Nothing is ordered until it is submitted."
+        [dirty]="lines().length > 0 || supplierId() !== '' || warehouseId() !== ''"
         (closed)="drafting.set(false)"
       >
         <kh-field label="Supplier" for="po-supplier">

@@ -59,7 +59,7 @@ import { tableDate, tableDateTime } from '../../core/format';
         <kh-icon name="plus" size="sm" />
         New product
       </a>
-      <button khButton type="button" *khHasPermission="'catalog.import.run'" (click)="importOpen.set(true)">
+      <button khButton type="button" *khHasPermission="'catalog.import.run'" (click)="openImport()">
         <kh-icon name="download" size="sm" />
         Import CSV
       </button>
@@ -108,24 +108,31 @@ import { tableDate, tableDateTime } from '../../core/format';
 
     <kh-modal
       [open]="importOpen()"
-      heading="Import products"
+      [heading]="jobKind() === 'export' ? 'Export products' : 'Import products'"
       width="44rem"
       [dismissible]="!importing()"
       (closed)="closeImport()"
     >
-      <p class="hint">
-        A CSV in the platform's own column order. Download the template if you have not imported before — a
-        file with the wrong headings fails every row.
-      </p>
+      @if (jobKind() === 'export') {
+        <p class="hint">
+          The whole catalogue is being written to a CSV. The link appears below when it is ready; it is the same
+          column order the import accepts.
+        </p>
+      } @else {
+        <p class="hint">
+          A CSV in the platform's own column order. Download the template if you have not imported before — a
+          file with the wrong headings fails every row.
+        </p>
 
-      <div class="import-actions">
-        <label class="upload">
-          <input type="file" accept=".csv,text/csv" [disabled]="importing()" (change)="startImport($event)" />
-          <kh-icon name="plus" size="sm" />
-          {{ importing() ? 'Importing…' : 'Choose a CSV' }}
-        </label>
-        <button khButton type="button" size="sm" (click)="downloadTemplate()">Download the template</button>
-      </div>
+        <div class="import-actions">
+          <label class="upload">
+            <input type="file" accept=".csv,text/csv" [disabled]="importing()" (change)="startImport($event)" />
+            <kh-icon name="plus" size="sm" />
+            {{ importing() ? 'Importing…' : 'Choose a CSV' }}
+          </label>
+          <button khButton type="button" size="sm" (click)="downloadTemplate()">Download the template</button>
+        </div>
+      }
 
       @if (importError(); as message) {
         <kh-alert tone="danger" heading="The import could not start">{{ message }}</kh-alert>
@@ -294,6 +301,8 @@ export class ProductsPage implements OnDestroy {
   protected readonly busy = signal(false);
 
   protected readonly importOpen = signal(false);
+  /** The one modal serves both jobs; this is which of them it is showing. */
+  protected readonly jobKind = signal<'import' | 'export'>('import');
   protected readonly importing = signal(false);
   protected readonly importError = signal<string | null>(null);
   protected readonly job = signal<CatalogJobResponse | null>(null);
@@ -462,9 +471,15 @@ export class ProductsPage implements OnDestroy {
     });
   }
 
+  protected openImport(): void {
+    this.jobKind.set('import');
+    this.importOpen.set(true);
+  }
+
   protected exportAll(): void {
     this.catalog.exportProducts().subscribe({
       next: (created) => {
+        this.jobKind.set('export');
         this.importOpen.set(true);
         this.watch(created);
       },
