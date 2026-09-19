@@ -11,7 +11,7 @@ import {
   VendorsAdminService,
   VendorStaffResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import { ConfirmDialog, EntityOption, EntityPicker, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Rating, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map } from 'rxjs';
@@ -120,18 +120,18 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
 
       <div class="layout">
         <div class="column">
-          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="true" (changed)="loadReadiness()" />
+          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="canVerify()" (changed)="loadReadiness()" />
 
           <kh-bank-accounts-panel
             [vendorId]="id"
-            [canManage]="true"
-            [canVerify]="true"
+            [canManage]="canManage()"
+            [canVerify]="canVerify()"
             (changed)="loadReadiness()"
           />
 
-          <kh-pickup-locations-panel [vendorId]="id" [canManage]="true" (changed)="loadReadiness()" />
+          <kh-pickup-locations-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
 
-          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="true" (changed)="loadReadiness()" />
+          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
         </div>
 
         <div class="column">
@@ -524,6 +524,11 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VendorDetailPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('vendors.vendor.manage'));
+  protected readonly canVerify = computed(() => this.session.hasPermission('vendors.kyc.verify'));
+
   private readonly vendors = inject(VendorsAdminService);
   private readonly identity = inject(IdentityAdminService);
 

@@ -5,7 +5,7 @@ import {
   TaxRateResolutionResponse,
   TaxRateResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   ConfirmDialog,
@@ -102,7 +102,11 @@ import { tableDate } from '../../core/format';
         />
 
         <ng-template khCell="hsnCode" let-row>
-          <button type="button" class="link" (click)="startEdit(row)">{{ row.hsnCode }}</button>
+          @if (canManage()) {
+            <button type="button" class="link" (click)="startEdit(row)">{{ row.hsnCode }}</button>
+          } @else {
+            {{ row.hsnCode }}
+          }
           @if (row.description) {
             <span class="note">{{ row.description }}</span>
           }
@@ -377,6 +381,10 @@ import { tableDate } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TaxRatesPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('pricing.tax-rate.manage'));
+
   private readonly pricing = inject(PricingAdminService);
   private readonly toasts = inject(ToastService);
 

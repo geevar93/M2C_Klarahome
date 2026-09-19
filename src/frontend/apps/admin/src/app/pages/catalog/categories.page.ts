@@ -6,6 +6,7 @@ import {
   CategoryNode,
   CategoryResponse,
 } from '@klarahome/data-access-admin';
+import { HasPermission } from '@klarahome/data-access-auth';
 import { ConfirmDialog, EntityDrawer, FormShell, PageHeader } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
@@ -41,6 +42,7 @@ interface CategoryRow {
 @Component({
   selector: 'kh-categories-page',
   imports: [
+    HasPermission,
     Alert,
     Badge,
     Button,
@@ -59,7 +61,7 @@ interface CategoryRow {
       heading="Categories"
       description="The shape of the catalogue. A product sits in exactly one of these."
     >
-      <button khButton type="button" variant="primary" (click)="startCreate(null)">
+      <button khButton type="button" variant="primary" *khHasPermission="'catalog.taxonomy.manage'" (click)="startCreate(null)">
         <kh-icon name="plus" size="sm" />
         New top-level category
       </button>
@@ -85,7 +87,7 @@ interface CategoryRow {
               <kh-badge tone="warning">Hidden</kh-badge>
             }
 
-            <span class="row-actions">
+            <span class="row-actions" *khHasPermission="'catalog.taxonomy.manage'">
               <button khButton type="button" size="sm" (click)="startEdit(row.node.id)">Edit</button>
               <button khButton type="button" size="sm" (click)="startCreate(row.node.id)">Add child</button>
             </span>

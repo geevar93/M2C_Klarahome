@@ -238,7 +238,15 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
                 </button>
               }
               @if (can('Closed')) {
-                <button khButton type="button" [disabled]="busy()" (click)="close()">Close it</button>
+                <button
+                  khButton
+                  type="button"
+                  *khHasPermission="'returns.return.manage'"
+                  [disabled]="busy()"
+                  (click)="close()"
+                >
+                  Close it
+                </button>
               }
               @if (current.nextStatuses.length === 0) {
                 <p class="hint">Nothing further. This return is finished.</p>

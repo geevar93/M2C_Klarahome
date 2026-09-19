@@ -319,7 +319,14 @@ import { tableDateTime, tableMoney } from '../../core/format';
           <button khButton type="button" size="sm" [disabled]="busy()" (click)="printLabel(parcel)">
             Print the label
           </button>
-          <button khButton type="button" size="sm" [disabled]="busy()" (click)="sync(parcel)">
+          <button
+            khButton
+            type="button"
+            size="sm"
+            *khHasPermission="'shipping.shipment.manage'"
+            [disabled]="busy()"
+            (click)="sync(parcel)"
+          >
             Ask the courier
           </button>
           <button

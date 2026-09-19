@@ -8,6 +8,7 @@ import {
   ProductListItem,
   ProductStatus,
 } from '@klarahome/data-access-admin';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   BulkAction,
   CellTemplate,
@@ -50,14 +51,14 @@ import { tableDate, tableDateTime } from '../../core/format';
  */
 @Component({
   selector: 'kh-products-page',
-  imports: [Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink],
+  imports: [HasPermission, Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink],
   template: `
     <kh-page-header heading="Products" description="Everything the catalogue holds, whoever created it.">
-      <a khButton variant="primary" routerLink="/catalog/products/new">
+      <a khButton variant="primary" routerLink="/catalog/products/new" *khHasPermission="'catalog.product.manage'">
         <kh-icon name="plus" size="sm" />
         New product
       </a>
-      <button khButton type="button" (click)="importOpen.set(true)">
+      <button khButton type="button" *khHasPermission="'catalog.import.run'" (click)="importOpen.set(true)">
         <kh-icon name="download" size="sm" />
         Import CSV
       </button>
@@ -272,6 +273,7 @@ import { tableDate, tableDateTime } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductsPage implements OnDestroy {
+  private readonly session = inject(SessionStore);
   private readonly catalog = inject(CatalogAdminService);
   private readonly documents = inject(DocumentPrintService);
   private readonly toasts = inject(ToastService);
@@ -349,6 +351,8 @@ export class ProductsPage implements OnDestroy {
    * reason string is what the table shows on hover.
    */
   protected readonly bulkActions = computed<readonly BulkAction[]>(() => {
+    // Nothing to offer a reader: the route admits `catalog.product.read`, the actions need more.
+    if (!this.session.hasPermission('catalog.product.manage')) return [];
     const reason = this.busy() ? 'Another bulk action is still running.' : null;
     return [
       { key: 'publish', label: 'Publish', disabledReason: reason },

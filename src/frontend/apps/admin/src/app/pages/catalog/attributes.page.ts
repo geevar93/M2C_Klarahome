@@ -7,6 +7,7 @@ import {
   AttributeSetResponse,
   CatalogAdminService,
 } from '@klarahome/data-access-admin';
+import { HasPermission } from '@klarahome/data-access-auth';
 import { ConfirmDialog, EntityDrawer, FormShell, PageHeader } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService, formField, formGroup, required } from '@klarahome/util';
@@ -46,6 +47,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
 @Component({
   selector: 'kh-attributes-page',
   imports: [
+    HasPermission,
     Alert,
     Badge,
     Button,
@@ -64,7 +66,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
       heading="Attributes"
       description="What the catalogue can say about a product, and which of those a shopper can filter by."
     >
-      <button khButton type="button" variant="primary" (click)="startCreate()">
+      <button khButton type="button" variant="primary" *khHasPermission="'catalog.taxonomy.manage'" (click)="startCreate()">
         <kh-icon name="plus" size="sm" />
         New attribute
       </button>
@@ -114,7 +116,15 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
                 </td>
                 <td class="numeric">{{ attribute.options.length || '—' }}</td>
                 <td>
-                  <button khButton type="button" size="sm" (click)="startEdit(attribute)">Edit</button>
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    *khHasPermission="'catalog.taxonomy.manage'"
+                    (click)="startEdit(attribute)"
+                  >
+                    Edit
+                  </button>
                 </td>
               </tr>
             } @empty {

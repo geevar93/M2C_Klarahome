@@ -8,7 +8,7 @@ import {
   CommissionRulePayload,
   VendorsAdminService,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   DataTable,
@@ -111,7 +111,11 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
           emptyMessage="No commission plan has been created yet."
         >
           <ng-template khCell="name" let-row>
-            <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+            @if (canManage()) {
+              <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+            } @else {
+              {{ row.name }}
+            }
             <span class="note">
               <code>{{ row.code }}</code>
               @if (row.description) {
@@ -501,6 +505,10 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CommissionPlansPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('vendors.commission.manage'));
+
   private readonly vendors = inject(VendorsAdminService);
   private readonly catalog = inject(CatalogAdminService);
   private readonly toasts = inject(ToastService);
