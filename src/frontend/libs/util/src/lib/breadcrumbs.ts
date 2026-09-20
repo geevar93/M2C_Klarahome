@@ -100,7 +100,16 @@ export class BreadcrumbTrail {
       if (!definition) continue;
 
       const label = typeof definition === 'function' ? definition(route) : definition;
-      if (label) crumbs.push({ label, path });
+      if (!label) continue;
+
+      // Route data is inherited by a child with an empty path, so `/account`'s index route reports
+      // its parent's `breadcrumb: 'Account'` a second time, at the same URL — the trail read
+      // `Home / Account / Account`. A crumb that repeats the one before it, for the same path, is
+      // that inheritance rather than a real level, and a trail cannot contain the same page twice.
+      const previous = crumbs.at(-1);
+      if (previous && previous.path === path && previous.label === label) continue;
+
+      crumbs.push({ label, path });
     }
 
     // The last crumb is where the user already is; a link to the current page is noise for a

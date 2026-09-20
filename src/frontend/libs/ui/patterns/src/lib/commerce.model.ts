@@ -80,6 +80,17 @@ export interface OrderSummaryView {
   readonly walletApplied: Money | null;
   /** What the gateway will be asked for: the total less store credit. */
   readonly amountPayable: Money | null;
+  /**
+   * The GST already inside the amounts above, or null when there is none.
+   *
+   * Deliberately not a row. Every other entry in `rows` is additive — the reader is meant to run
+   * down the column and arrive at the total — and GST on an Indian storefront is not: the prices
+   * a shopper saw on the product page already contain it. Sitting it among the additive lines
+   * with a note saying otherwise put a figure in the stack that must be *ignored* for the
+   * arithmetic to work, which is how "Items ₹2,348, Taxes ₹251.58, Total ₹2,348" reads as a
+   * mistake. It belongs under the total, as a statement about what the total contains.
+   */
+  readonly taxIncluded: Money | null;
   /** "You saved ₹410" — the API's discount total, not a subtraction done here. */
   readonly savings: Money | null;
 }

@@ -99,9 +99,15 @@ export class CommerceMapper {
   /**
    * The price panel, from a quote.
    *
-   * Every row is conditional on the quote having a figure for it, and the labels say what the money
-   * actually is: "Taxes (GST)" rather than "Tax", because an Indian customer reads a price that is
-   * already inclusive and needs to see that the line is a breakdown, not an addition.
+   * Every row is conditional on the quote having a figure for it.
+   *
+   * **Every row here is additive, and GST is not one.** It used to be — a "Taxes (GST)" line with
+   * the note "Included in the item prices above", sitting in the middle of the stack. On a basket
+   * of ₹2,348 with ₹0 delivery that rendered as `Items ₹2,348 / Delivery ₹0 / Taxes ₹251.58 /
+   * Total ₹2,348`, and a customer running down the column arrives at ₹2,599.58 and concludes the
+   * total is wrong. The note asked them to *exclude* one line from a list whose whole purpose is
+   * to be summed. The tax is now `taxIncluded` on the view and is stated under the total, where it
+   * describes the total rather than pretending to build it.
    */
   summaryFromQuote(quote: QuoteResult, options: { totalLabel?: string } = {}): OrderSummaryView {
     const currency = quote.currencyCode || INR;
@@ -123,14 +129,6 @@ export class CommerceMapper {
       rows.push({ label: 'Cash on delivery fee', amount: money(quote.codFee, currency) });
     }
 
-    if (quote.taxTotal > 0) {
-      rows.push({
-        label: 'Taxes (GST)',
-        amount: money(quote.taxTotal, currency),
-        note: 'Included in the item prices above',
-      });
-    }
-
     if (quote.roundingAdjustment !== 0) {
       rows.push({ label: 'Rounding', amount: money(quote.roundingAdjustment, currency) });
     }
@@ -146,6 +144,7 @@ export class CommerceMapper {
         quote.walletApplied > 0 && quote.amountPayable !== quote.grandTotal
           ? money(quote.amountPayable, currency)
           : null,
+      taxIncluded: quote.taxTotal > 0 ? money(quote.taxTotal, currency) : null,
       savings: quote.discountTotal > 0 ? money(quote.discountTotal, currency) : null,
     };
   }
@@ -166,13 +165,6 @@ export class CommerceMapper {
     });
 
     if (order.codFee > 0) rows.push({ label: 'Cash on delivery fee', amount: money(order.codFee, currency) });
-    if (order.taxTotal > 0) {
-      rows.push({
-        label: 'Taxes (GST)',
-        amount: money(order.taxTotal, currency),
-        note: 'Included in the item prices above',
-      });
-    }
     if (order.roundingAdjustment !== 0) {
       rows.push({ label: 'Rounding', amount: money(order.roundingAdjustment, currency) });
     }
@@ -189,6 +181,7 @@ export class CommerceMapper {
       totalLabel: order.cancelledTotal > 0 ? 'Net total' : 'Total',
       walletApplied: order.walletApplied > 0 ? money(order.walletApplied, currency) : null,
       amountPayable: null,
+      taxIncluded: order.taxTotal > 0 ? money(order.taxTotal, currency) : null,
       savings: order.discountTotal > 0 ? money(order.discountTotal, currency) : null,
     };
   }
