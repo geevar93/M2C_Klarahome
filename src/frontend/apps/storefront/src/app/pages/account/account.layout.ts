@@ -1,8 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  afterNextRender,
   computed,
   inject,
 } from '@angular/core';
@@ -40,9 +38,11 @@ const LINKS: readonly AccountLink[] = [
  * sign-out control are the same everywhere inside the account, and nine copies of them is nine
  * chances for one to fall behind.
  *
- * On a phone it is a horizontal scroller above the content, and from `lg` a column beside it. Not a
- * drawer — the account menu is the primary navigation of this section, and putting it behind a tap
- * would make every move between orders and addresses two gestures instead of one.
+ * A stacked list above the content on a phone, and from `lg` the same list as a column beside it.
+ * Not a drawer — the account menu is the primary navigation of this section, and putting it behind
+ * a tap would make every move between orders and addresses two gestures instead of one. Not a
+ * sideways scroller either, which is what it was: eight entries never fitted one phone-width row,
+ * so half the menu sat off-screen behind a swipe nobody could see was available.
  *
  * `routerLinkActive` with `aria-current="page"` rather than a colour alone: which section you are in
  * has to be available to somebody who cannot see the highlight.
@@ -55,29 +55,25 @@ const LINKS: readonly AccountLink[] = [
       <nav class="menu" aria-label="Your account">
         <p class="greeting">
           <span>Signed in as</span>
-          <strong>{{ profile.displayName() || 'your account' }}</strong>
+          <strong [title]="profile.displayName()">{{ profile.displayName() || 'your account' }}</strong>
         </p>
 
-        <!-- The wrapper exists so the strip can carry a fade at its edges. A pseudo-element on the
-             scroller itself scrolls away with the content; this one stays over the edge. -->
-        <div class="strip">
-          <ul>
-            @for (link of links(); track link.path) {
-              <li>
-                <a
-                  [routerLink]="link.path"
-                  routerLinkActive="active"
-                  [routerLinkActiveOptions]="{ exact: !!link.exact }"
-                  #active="routerLinkActive"
-                  [attr.aria-current]="active.isActive ? 'page' : null"
-                >
-                  <kh-icon [name]="link.icon" size="sm" />
-                  {{ link.label }}
-                </a>
-              </li>
-            }
-          </ul>
-        </div>
+        <ul>
+          @for (link of links(); track link.path) {
+            <li>
+              <a
+                [routerLink]="link.path"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: !!link.exact }"
+                #active="routerLinkActive"
+                [attr.aria-current]="active.isActive ? 'page' : null"
+              >
+                <kh-icon [name]="link.icon" size="sm" />
+                {{ link.label }}
+              </a>
+            </li>
+          }
+        </ul>
 
         <button khButton variant="tertiary" type="button" (click)="signOut()">Sign out</button>
       </nav>
@@ -145,60 +141,48 @@ const LINKS: readonly AccountLink[] = [
       color: var(--color-text-muted);
     }
 
-    /* An address is one long unbreakable token; without this it sets the panel's min-content width
-       and, before the track floor above, took the whole page with it. */
+    /* One line, clipped, rather than broken mid-token. An email address is a single unbreakable
+       word, and letting it break anywhere put the last character of the domain alone on a second
+       line — in a 16rem sidebar, founder@klarahome.localhos / t. The full value stays in the DOM,
+       so a screen reader still reads all of it and the title attribute shows it on hover; only the
+       painting is shortened. */
     .greeting strong {
       font-size: var(--text-base);
       color: var(--color-text);
-      overflow-wrap: anywhere;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .strip {
-      position: relative;
-      margin-block-end: var(--space-3);
-    }
+    /* Stacked, never a sideways scroller.
 
-    /* The affordance that says the strip continues. It replaces the native scrollbar, which
-       scrollbar-width: thin did not make thin on Windows — it rendered as a full-height grey bar
-       across the menu and read as a rendering fault rather than as navigation. A gradient into the
-       panel's own surface, so it works in every theme. */
-    .strip::after {
-      content: '';
-      position: absolute;
-      inset-block: 0;
-      inset-inline-end: 0;
-      inline-size: var(--space-6);
-      pointer-events: none;
-      background: linear-gradient(
-        to right,
-        transparent,
-        var(--color-surface-raised)
-      );
-    }
+       It used to be a horizontal strip on a phone, on the reasoning that the account menu should
+       stay one gesture away. In practice eight items never fit: the row was cut off mid-item at
+       whatever the screen ran out at, the entries past the edge were invisible until you thought
+       to swipe a strip that does not look swipeable, and every attempt to signal the overflow —
+       a native scrollbar, then a fade — was a decoration apologising for a layout that did not
+       fit. A menu you can see all of needs no affordance.
 
+       auto-fit rather than a breakpoint: one column when the card is narrow, two only when there
+       is room for two 12rem cells, decided by the space actually available rather than by a guess
+       about the device. 12rem is chosen so that every phone gets the single stacked column — a
+       390px screen leaves 324px inside the card, short of the 388px two cells would need — and a
+       tablet, where a column of eight full-width rows would be a waste of the width, gets two. The
+       lg rule below pins it back to one column, because there it is a 16rem sidebar and two
+       columns in it would be a pair of stubs. */
     ul {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
       gap: var(--space-1);
       list-style: none;
-      margin: 0;
+      margin: 0 0 var(--space-2);
       padding: 0;
-      overflow-x: auto;
-      /* Hidden rather than thin: the fade above is the affordance now. */
-      scrollbar-width: none;
-    }
-
-    ul::-webkit-scrollbar {
-      display: none;
     }
 
     @media (min-width: 1024px) {
-      .strip::after {
-        content: none;
-      }
-
       ul {
-        flex-direction: column;
-        overflow: visible;
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
@@ -227,13 +211,7 @@ const LINKS: readonly AccountLink[] = [
       background: var(--color-primary-subtle);
       color: var(--color-primary);
       font-weight: var(--weight-medium);
-      box-shadow: inset 0 -2px 0 var(--color-accent);
-    }
-
-    @media (min-width: 1024px) {
-      a.active {
-        box-shadow: inset 2px 0 0 var(--color-accent);
-      }
+      box-shadow: inset 2px 0 0 var(--color-accent);
     }
 
     /* Separated from the links: signing out is not a ninth place to go. */
@@ -251,19 +229,9 @@ export class AccountLayout {
   protected readonly profile = inject(ProfileStore);
   private readonly flags = inject(FeatureFlags);
   private readonly flow = inject(SignInFlow);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   constructor() {
     this.profile.loadOnce();
-
-    // The menu is a horizontal scroller on a phone (`ul` below `lg`), and the active section is not
-    // always the first one in it — landing on `/account/wallet` from a link should not leave its
-    // entry sitting off the right edge of the strip.
-    afterNextRender(() => {
-      this.host.nativeElement
-        .querySelector('.menu a.active')
-        ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-    });
   }
 
   /**
