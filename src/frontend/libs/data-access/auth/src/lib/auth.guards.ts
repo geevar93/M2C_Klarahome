@@ -72,10 +72,40 @@ export const permissionGuard = (...permissions: readonly string[]): CanActivateF
   };
 };
 
-/** Keeps a signed-in user off the sign-in screen. */
-export const anonymousOnlyGuard: CanActivateFn = (): boolean | UrlTree => {
+/**
+ * The one place a `returnUrl` query parameter is turned into somewhere safe to go.
+ *
+ * A `returnUrl` arrives in a query string, which means anybody can put anything in it. Only a path
+ * beginning with a single `/` is honoured — `//evil.example` is a protocol-relative URL and would
+ * send the customer off-site with our own sign-in page as the referrer, which is the open-redirect
+ * this check exists for (docs/07-security-compliance.md). A path back into `/auth` is refused too:
+ * the sign-in screens are never a destination, and returning to one loops.
+ *
+ * Exported so every caller that reads a `returnUrl` — this guard and `SignInFlow.complete` alike —
+ * checks it the same way; a validation rule that exists twice is a rule that will eventually say
+ * two different things about the same string.
+ */
+export function safeReturnUrl(returnUrl: string | null | undefined, fallback: string): string {
+  if (!returnUrl) return fallback;
+  if (!returnUrl.startsWith('/') || returnUrl.startsWith('//')) return fallback;
+  if (returnUrl.startsWith('/auth')) return fallback;
+  return returnUrl;
+}
+
+/**
+ * Keeps a signed-in user off the sign-in screen.
+ *
+ * A `returnUrl` on the URL they arrived with is honoured rather than discarded: a signed-in
+ * customer who follows an old "sign in to continue" link from an email should land where that link
+ * meant to send them, not on the home page.
+ */
+export const anonymousOnlyGuard: CanActivateFn = (route): boolean | UrlTree => {
   const store = inject(SessionStore);
-  return store.isAuthenticated() ? inject(Router).createUrlTree(['/']) : true;
+  if (!store.isAuthenticated()) return true;
+
+  const router = inject(Router);
+  const returnUrl = safeReturnUrl(route.queryParamMap.get('returnUrl'), '/');
+  return router.parseUrl(returnUrl);
 };
 
 /**

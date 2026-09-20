@@ -279,6 +279,8 @@ export const DESTINATIONS: readonly AdminDestination[] = [
     permissions: ['pricing.promotion.read'],
     platformOnly: true,
     hidden: true,
+    // The largest form in the back office: a rule, its scope and its tiers, all unsaved until Save.
+    guardUnsavedChanges: true,
     load: () => import('../pages/pricing/promotion-detail.page').then((m) => m.PromotionDetailPage),
   },
   {
@@ -374,6 +376,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
     permissions: ['content.content.manage'],
     platformOnly: true,
     hidden: true,
+    guardUnsavedChanges: true,
     load: () => import('../pages/content/collection-detail.page').then((m) => m.CollectionDetailPage),
   },
   {
@@ -509,6 +512,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
     icon: 'home',
     permissions: ['platform.settings.manage'],
     platformOnly: true,
+    guardUnsavedChanges: true,
     load: () => import('../pages/settings/store-settings.page').then((m) => m.StoreSettingsPage),
   },
   {

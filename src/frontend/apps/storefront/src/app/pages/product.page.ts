@@ -170,6 +170,15 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
             khButton
             variant="secondary"
             type="button"
+            [disabled]="!buyBox() || adding() || buying()"
+            (click)="buyNow()"
+          >
+            {{ buying() ? 'Opening checkout…' : 'Buy now' }}
+          </button>
+          <button
+            khButton
+            variant="tertiary"
+            type="button"
             [attr.aria-pressed]="isWishlisted()"
             (click)="toggleWishlist()"
           >
@@ -192,7 +201,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
         }
 
         @if (buyBox()?.isCodAllowed) {
-          <kh-badge tone="info">Cash on delivery available</kh-badge>
+          <kh-badge tone="info" class="cod">Cash on delivery available</kh-badge>
         }
 
         @if (product().shortDescription) {
@@ -281,10 +290,18 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
         <span class="bar-price">{{ offer.price | khMoney }}</span>
         <button
           khButton
-          variant="primary"
-          [block]="true"
+          variant="secondary"
           type="button"
-          [disabled]="adding()"
+          [disabled]="adding() || buying()"
+          (click)="buyNow()"
+        >
+          {{ buying() ? 'Opening…' : 'Buy now' }}
+        </button>
+        <button
+          khButton
+          variant="primary"
+          type="button"
+          [disabled]="adding() || buying()"
           (click)="addToCart()"
         >
           {{ adding() ? 'Adding…' : 'Add to cart' }}
@@ -485,8 +502,16 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       inline-size: 100%;
     }
 
-    .quantity > button:last-child {
+    /* "Buy now" and "Save for later" each take a full row beneath: the fast path is one tap
+       wide, and the quiet path never sits beside the primary action pretending to be its equal. */
+    .quantity > button:nth-child(n + 3) {
       grid-column: 1 / -1;
+    }
+
+    /* A label sized to its words. The column stretches its children, and a stretched badge is a
+       banner. */
+    .cod {
+      align-self: flex-start;
     }
 
     .net,
@@ -621,6 +646,7 @@ export class ProductPage {
 
   protected readonly quantity = signal(1);
   protected readonly adding = signal(false);
+  protected readonly buying = signal(false);
 
   // ---- Writing a review, asking a question (Step 28B, deliverable 20) ----------------------------
 
@@ -799,6 +825,36 @@ export class ProductPage {
     this.chosenListingId.set(offer.listingId);
     this.quantity.set(1);
     this.announcer.announce(`Buying from ${offer.sellerName}.`);
+  }
+
+  /**
+   * The fast path: into the cart and straight to the checkout in one tap.
+   *
+   * It is the same add as "Add to cart" — the same line, the same quantity, the same seller —
+   * followed by the navigation the shopper would otherwise make by hand. Nothing about the order
+   * is decided here; the checkout still reads the basket the API holds.
+   */
+  protected buyNow(): void {
+    const offer = this.buyBox();
+    if (!offer || this.adding() || this.buying()) return;
+
+    this.buying.set(true);
+    this.cart.add(offer.listingId, this.quantity()).subscribe({
+      next: () => {
+        this.analytics.track(AnalyticsEvents.addToCart, {
+          item_id: this.selectedVariantId(),
+          item_name: this.title(),
+          price: offer.price.amount,
+          quantity: this.quantity(),
+        });
+        this.buying.set(false);
+        void this.router.navigate(['/checkout']);
+      },
+      error: (error: unknown) => {
+        this.buying.set(false);
+        this.toasts.warning(this.cart.describeFailure(error));
+      },
+    });
   }
 
   protected addToCart(): void {

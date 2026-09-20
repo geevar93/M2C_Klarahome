@@ -8,7 +8,7 @@ import {
 } from '@klarahome/data-access-admin';
 import { EntityDrawer, FormShell } from '@klarahome/ui-admin';
 import { Button, Checkbox, Control, Field } from '@klarahome/ui-primitives';
-import { formGroup, formField, required } from '@klarahome/util';
+import { ToastService, formGroup, formField, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { MediaManager } from './media-manager';
@@ -38,13 +38,14 @@ import { MediaManager } from './media-manager';
     <kh-entity-drawer
       [heading]="editing() ? 'Edit variant' : 'New variant'"
       [subtitle]="editing()?.sku ?? 'A new size, colour or pack of this product'"
+      [dirty]="form.dirty()"
       (closed)="cancelled.emit()"
     >
       <kh-form-shell
         heading="Variant"
         [summary]="summary()"
         [saving]="saving()"
-        [dirty]="true"
+        [dirty]="form.dirty()"
         [submitLabel]="editing() ? 'Save variant' : 'Add variant'"
         (submitted)="save()"
         (cancelled)="cancelled.emit()"
@@ -296,6 +297,7 @@ import { MediaManager } from './media-manager';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VariantEditor {
+  private readonly toasts = inject(ToastService);
   private readonly catalog = inject(CatalogAdminService);
 
   readonly productId = input.required<string>();
@@ -411,6 +413,7 @@ export class VariantEditor {
     request.subscribe({
       next: (result) => {
         this.saving.set(false);
+        this.toasts.success(variant ? 'Variant saved.' : 'Variant added.');
         this.saved.emit(result);
       },
       error: (error: unknown) => {
@@ -435,6 +438,7 @@ export class VariantEditor {
     request.subscribe({
       next: (result) => {
         this.saving.set(false);
+        this.toasts.success(variant.status === 'Active' ? 'Variant deactivated.' : 'Variant activated.');
         this.saved.emit(result);
       },
       error: (error: unknown) => {

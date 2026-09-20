@@ -133,6 +133,9 @@ import { Button, Icon } from '@klarahome/ui-primitives';
       border-block-start: 1px solid var(--color-border);
     }
   `,
+  host: {
+    '(document:keydown.escape)': 'onDocumentEscape($event)',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Modal {
@@ -178,6 +181,20 @@ export class Modal {
 
   protected requestClose(): void {
     if (this.dismissible()) this.closed.emit();
+  }
+
+  /**
+   * Escape from wherever focus is.
+   *
+   * The panel's own handler covers the usual case; this covers focus having been moved out to
+   * the page behind (a toast, a link's own focus) without the dialog having closed, which
+   * otherwise leaves a modal that Escape cannot reach.
+   */
+  protected onDocumentEscape(event: Event): void {
+    if (!this.open() || event.defaultPrevented) return;
+    const panel = this.panel()?.nativeElement;
+    if (panel && panel.contains(event.target as Node)) return;
+    this.requestClose();
   }
 
   protected onKeydown(event: KeyboardEvent): void {

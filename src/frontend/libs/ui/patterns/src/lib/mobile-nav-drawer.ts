@@ -35,7 +35,10 @@ import { NavItem, isInternalHref } from './navigation.model';
         </button>
       </div>
 
-      <nav aria-label="Main menu">
+      <!-- No aria-label: the drawer around it already carries one ("Menu"), and a nav labelled
+           again inside an already-labelled dialog is a screen reader announcing the same word
+           twice for no reason. -->
+      <nav>
         <ul class="level-1">
           @for (item of menu(); track item.label) {
             <li>

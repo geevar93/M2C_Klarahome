@@ -115,13 +115,14 @@ import { describeError, fieldErrors } from '../../core/describe-error';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit supplier' : 'New supplier'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Supplier"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"

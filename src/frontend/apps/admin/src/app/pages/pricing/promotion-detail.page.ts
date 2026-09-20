@@ -28,6 +28,7 @@ import {
   EntityPicker,
   FormShell,
   PageHeader,
+  HasUnsavedChanges,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map } from 'rxjs';
@@ -126,7 +127,7 @@ const NEW = 'new';
           description="What it takes off, from what, and when."
           [summary]="summary()"
           [saving]="busy()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="isNew() ? 'Create promotion' : 'Save changes'"
           (submitted)="save()"
           (cancelled)="back()"
@@ -909,7 +910,7 @@ const NEW = 'new';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PromotionDetailPage {
+export class PromotionDetailPage implements HasUnsavedChanges {
   private readonly pricing = inject(PricingAdminService);
   private readonly catalog = inject(CatalogAdminService);
   private readonly vendors = inject(VendorsAdminService);
@@ -1102,6 +1103,11 @@ export class PromotionDetailPage {
     void this.router.navigate(['/promotions']);
   }
 
+  /** What `unsavedChangesGuard` asks. The rule's own fields; the pickers beside them save with it. */
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty() && !this.busy();
+  }
+
   // ---- Tiers ------------------------------------------------------------------------------------
 
   protected addTier(): void {
@@ -1234,10 +1240,11 @@ export class PromotionDetailPage {
       next: (saved) => {
         this.busy.set(false);
         this.promotion.set(saved);
+        this.toasts.success(saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.');
       },
       error: (error: unknown) => {
         this.busy.set(false);
-        this.summary.set([describeError(error, 'That could not be changed.')]);
+        this.toasts.danger(describeError(error, 'The promotion could not be switched.'));
       },
     });
   }

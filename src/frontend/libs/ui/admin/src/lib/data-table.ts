@@ -228,7 +228,14 @@ export class CellTemplate {
               </tr>
             } @empty {
               <tr>
-                <td class="empty" [attr.colspan]="columnCount()">{{ emptyMessage() }}</td>
+                <td class="empty" [attr.colspan]="columnCount()">
+                  {{ emptyMessage() }}
+                  @if (filtered()) {
+                    <button khButton type="button" size="sm" variant="tertiary" (click)="filtersCleared.emit()">
+                      Clear the filters
+                    </button>
+                  }
+                </td>
               </tr>
             }
           }
@@ -240,7 +247,7 @@ export class CellTemplate {
       <p class="count">
         {{ rows().length }} shown
         @if (total(); as rowCount) {
-          <span class="muted">· about {{ rowCount }} in total</span>
+          <span class="muted">· about {{ formatCount(rowCount) }} in total</span>
         }
       </p>
 
@@ -428,6 +435,10 @@ export class CellTemplate {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataTable<TRow> {
+  protected formatCount(count: number): string {
+    return count.toLocaleString('en-IN');
+  }
+
   private readonly storage = inject(BrowserStorage);
 
   private static sequence = 0;
@@ -447,6 +458,13 @@ export class DataTable<TRow> {
   readonly sort = input<TableSort | null>(null);
   readonly loading = input(false);
   readonly emptyMessage = input('Nothing matches these filters.');
+  /**
+   * Whether a filter is narrowing the list. With it, an empty table offers to clear the filters,
+   * because "nothing matches" and "there is nothing" call for different next moves and the table
+   * cannot tell them apart on its own.
+   */
+  readonly filtered = input(false);
+  readonly filtersCleared = output<void>();
 
   readonly selectable = input(false);
   readonly bulkActions = input<readonly BulkAction[]>([]);

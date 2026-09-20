@@ -38,21 +38,33 @@ import { MoneyPipe } from '@klarahome/i18n';
       gap: var(--space-1) var(--space-2);
     }
 
+    /* The two commerce colour roles, not the generic text ones. They exist for exactly this
+       component (see the Commerce block in _tokens.scss): the price is the most-read number on the
+       page and a theme must be able to move it without moving body copy with it. This component
+       read the generic text and muted-text roles instead, which left both commerce tokens dead. */
     .now {
       font-size: var(--kh-price-size, var(--text-lg));
       font-weight: var(--weight-bold);
-      color: var(--color-text);
+      color: var(--color-price);
     }
 
     .mrp {
       font-size: var(--text-sm);
-      color: var(--color-text-muted);
+      color: var(--color-price-was);
     }
 
+    /* A tinted strip rather than coloured text. A saving is the one thing on a listing card a
+       shopper scans for, and at --text-sm next to two other numbers it was losing that scan to
+       the price beside it; the fill gives it an edge to find without making it larger than the
+       price it is discounting. The strip is the theme's accent, which is what puts the second hue
+       on every product card in the grid rather than only on the announcement bar. */
     .off {
+      padding: 0 var(--space-1);
+      border-radius: var(--radius-sm);
+      background: var(--color-accent-surface);
       font-size: var(--text-sm);
-      font-weight: var(--weight-medium);
-      color: var(--color-success);
+      font-weight: var(--weight-semibold);
+      color: var(--color-savings);
     }
 
     .tax {

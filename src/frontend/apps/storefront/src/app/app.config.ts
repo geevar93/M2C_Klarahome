@@ -9,12 +9,13 @@ import {
   withHttpTransferCacheOptions,
   withIncrementalHydration,
 } from '@angular/platform-browser';
-import { provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
+import { TitleStrategy, provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
 import { provideKlaraHomeErrorHandling, provideKlaraHomeHttp } from '@klarahome/data-access-auth';
 import { provideKlaraHomeI18n } from '@klarahome/i18n';
 import { RuntimeConfig, provideRuntimeConfig } from '@klarahome/util';
 
 import { appRoutes } from './app.routes';
+import { AppTitleStrategy } from './core/title.strategy';
 import { isTransferCacheable } from './core/transfer-cache';
 
 /**
@@ -61,6 +62,10 @@ export function appConfig(config: RuntimeConfig): ApplicationConfig {
       ),
 
       provideKlaraHomeHttp(config),
+
+      // Owns the document title; see `core/title.strategy.ts` for why it replaced the equivalent
+      // logic that used to run on `ResolveEnd` in `app.ts`.
+      { provide: TitleStrategy, useClass: AppTitleStrategy },
     ],
   };
 }

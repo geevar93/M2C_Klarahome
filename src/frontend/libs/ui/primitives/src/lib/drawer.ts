@@ -41,7 +41,8 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
         class="panel"
         role="dialog"
         aria-modal="true"
-        [attr.aria-label]="label()"
+        [attr.aria-label]="labelledBy() ? null : label()"
+        [attr.aria-labelledby]="labelledBy()"
         tabindex="-1"
         (keydown)="onKeydown($event)"
       >
@@ -136,6 +137,12 @@ export class Drawer {
   readonly side = input<DrawerSide>('start');
   /** The accessible name. A dialog without one is announced as "dialog" and nothing else. */
   readonly label = input.required<string>();
+  /**
+   * The id of an element inside the panel — typically its `<h2>` — to use as the accessible name
+   * instead of `label`. When set, `aria-labelledby` replaces `aria-label`: a screen reader then
+   * reads the sheet's own visible heading rather than a second, easily-drifting copy of it.
+   */
+  readonly labelledBy = input<string | null>(null);
   /**
    * Asked to close — by Escape, by the backdrop, or by a control inside. The parent owns the
    * `open` state, so a drawer never closes itself behind the back of whatever opened it.

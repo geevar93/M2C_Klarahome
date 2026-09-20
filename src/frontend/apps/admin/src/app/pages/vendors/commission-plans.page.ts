@@ -8,7 +8,7 @@ import {
   CommissionRulePayload,
   VendorsAdminService,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   DataTable,
@@ -111,7 +111,11 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
           emptyMessage="No commission plan has been created yet."
         >
           <ng-template khCell="name" let-row>
-            <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+            @if (canManage()) {
+              <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+            } @else {
+              {{ row.name }}
+            }
             <span class="note">
               <code>{{ row.code }}</code>
               @if (row.description) {
@@ -201,13 +205,14 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       <kh-entity-drawer
         [heading]="editing() ? 'Edit plan' : 'New plan'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Commission plan"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"
@@ -500,6 +505,10 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CommissionPlansPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('vendors.commission.manage'));
+
   private readonly vendors = inject(VendorsAdminService);
   private readonly catalog = inject(CatalogAdminService);
   private readonly toasts = inject(ToastService);
@@ -547,7 +556,7 @@ export class CommissionPlansPage {
 
   protected readonly columns: readonly DataTableColumn<CommissionPlanResponse>[] = [
     { key: 'name', label: 'Plan', kind: 'custom' },
-    { key: 'planType', label: 'How', value: (row) => row.planType, width: '9rem' },
+    { key: 'planType', label: 'How', value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType, width: '12rem' },
     {
       key: 'defaultRate',
       label: 'Default rate',

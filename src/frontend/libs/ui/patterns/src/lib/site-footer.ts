@@ -115,10 +115,25 @@ interface SocialLink {
       }
     }
 
+    /* The inverse surface, which is the theme's ink. A footer one shade off the page ground is a
+       page that never ends; a dark one is a floor, and it is the single largest area of a
+       storefront where a theme's darkest colour can be seen at full strength rather than as a
+       hairline or a line of type. The inverse-surface role is exactly this, and it had no caller
+       on the storefront before.
+
+       Everything below therefore reads its colour from the inverse side of the token set: the
+       hairlines from the inverse border, the focus ring from the inverse focus ring (the ink ring
+       is invisible on an ink band), and the quiet type from a mix of the inverse text with the
+       ground beneath it rather than from the muted-text role, which is a mid-tone chosen to read
+       on a *light* surface and disappears here. */
     footer {
-      border-block-start: 1px solid var(--color-border);
-      background: var(--color-surface);
-      padding-block: var(--space-6);
+      background: var(--color-surface-inverse);
+      color: var(--color-text-inverse);
+      padding-block: var(--space-8);
+    }
+
+    footer :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+      outline-color: var(--color-focus-ring-inverse);
     }
 
     /* Reserved only while a page has registered a sticky action, the same rule as the shell's
@@ -133,7 +148,7 @@ interface SocialLink {
       gap: var(--space-6);
       margin-block-end: var(--space-6);
       padding-block-end: var(--space-6);
-      border-block-end: 1px solid var(--color-border);
+      border-block-end: 1px solid var(--color-border-inverse);
     }
 
     .group-title {
@@ -142,7 +157,10 @@ interface SocialLink {
       font-weight: var(--weight-bold);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: var(--color-text-muted);
+      /* The accent, at the strength each theme checked against a light ground — which is also
+         where it is legible on ink. A column heading is a label, not an action, so it takes the
+         second hue rather than the primary, and it is the one coloured thing in the footer. */
+      color: var(--color-accent-muted);
     }
 
     .group-title a {
@@ -171,7 +189,7 @@ interface SocialLink {
       display: inline-flex;
       align-items: center;
       min-height: var(--touch-target-min);
-      color: var(--color-text);
+      color: var(--color-text-inverse);
       text-decoration: none;
       font-size: var(--text-sm);
     }
@@ -199,14 +217,16 @@ interface SocialLink {
       min-inline-size: var(--touch-target-min);
       min-block-size: var(--touch-target-min);
       padding-inline: var(--space-2);
-      border: 1px solid var(--color-border);
+      border: 1px solid var(--color-border-inverse);
       border-radius: var(--radius-full);
-      color: var(--color-text);
+      color: var(--color-text-inverse);
     }
 
+    /* A lift off the ink rather than a fill from the light side of the token set: the surface and
+       muted roles are both light colours and would flash a white disc under the pointer. */
     .social a:hover,
     .social a:focus-visible {
-      background: var(--color-surface-muted);
+      background: color-mix(in srgb, var(--color-text-inverse) 14%, transparent);
     }
 
     /* A network with no mark in the icon set is still a link, by name. */
@@ -222,16 +242,19 @@ interface SocialLink {
       gap: var(--space-2) var(--space-4);
     }
 
+    /* Quieter than the links without dropping below 4.5:1: the inverse text mixed towards the ink
+       it sits on, rather than the muted-text role, which is a mid-tone picked to read on a light
+       ground and is close to invisible on this one. */
     .legal,
     .powered {
       margin: 0;
-      color: var(--color-text-muted);
+      color: color-mix(in srgb, var(--color-text-inverse) 75%, var(--color-surface-inverse));
       font-size: var(--text-xs);
     }
 
     .vendor {
       font-weight: var(--weight-medium);
-      color: var(--color-text);
+      color: var(--color-text-inverse);
     }
 
     /* 1024px is the 'lg' breakpoint, where the sticky bar stops being fixed. */

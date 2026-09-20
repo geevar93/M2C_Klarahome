@@ -28,12 +28,8 @@ import { Observable, map } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
+import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
 
-const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = [
-  { value: 'Staff', label: 'Store staff', hint: 'Works for the platform.' },
-  { value: 'Vendor', label: "A seller's user", hint: 'Needs the seller id they belong to.' },
-  { value: 'Customer', label: 'A customer', hint: 'Shops on the storefront; has no back office.' },
-];
 
 /**
  * Who may sign in.
@@ -91,6 +87,8 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
 
     <kh-data-table
       label="Users"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -115,9 +113,9 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
       <ng-template khCell="identity" let-row>
         <a class="link" [routerLink]="['/settings/users', row.id]">{{ row.email ?? row.mobile ?? row.id }}</a>
         <span class="note">
-          {{ row.userType }}
+          {{ userTypeLabel(row.userType) }}
           @if (row.vendorId) {
-            · seller {{ row.vendorId }}
+            · <a class="link" [routerLink]="['/vendors', row.vendorId]">seller {{ row.vendorId.slice(0, 8) }}</a>
           }
         </span>
       </ng-template>
@@ -146,6 +144,10 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
       @if (createError(); as message) {
         <kh-alert tone="danger" heading="It could not be created">{{ message }}</kh-alert>
       }
+
+      <!-- A real form, so Enter submits and a password manager sees the fields; the footer's
+           button belongs to it through the form attribute because it lives in another slot. -->
+      <form id="user-create-form" (submit)="submitCreate($event)" novalidate>
 
       <kh-field label="Email" for="user-email" [error]="form.fields.email.error()">
         <input
@@ -206,9 +208,11 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
         }
       </fieldset>
 
+      </form>
+
       <div slot="footer">
         <button khButton type="button" variant="tertiary" (click)="creating.set(false)">Cancel</button>
-        <button khButton type="button" variant="primary" [disabled]="saving()" (click)="create()">
+        <button khButton type="submit" form="user-create-form" variant="primary" [disabled]="saving()">
           {{ saving() ? 'Creating…' : 'Create and open' }}
         </button>
       </div>
@@ -255,6 +259,8 @@ const USER_TYPES: readonly { value: UserType; label: string; hint: string }[] = 
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UsersPage {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
+  protected readonly userTypeLabel = userTypeLabel;
   private readonly identity = inject(IdentityAdminService);
   private readonly vendors = inject(VendorsAdminService);
   private readonly router = inject(Router);
@@ -385,6 +391,11 @@ export class UsersPage {
     this.roleCodes.set([]);
     this.form.reset({ email: '', mobile: '', vendorId: '' });
     this.creating.set(true);
+  }
+
+  protected submitCreate(event: Event): void {
+    event.preventDefault();
+    this.create();
   }
 
   protected create(): void {

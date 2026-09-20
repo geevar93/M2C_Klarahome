@@ -1,14 +1,20 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
   PlatformSettingsService,
   SettingsFieldSchema,
   SettingsSchemaResponse,
   SettingsSectionResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
-import { PageHeader } from '@klarahome/ui-admin';
-import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
-import { ToastService } from '@klarahome/util';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
+import { HasUnsavedChanges, PageHeader, ThemePicker } from '@klarahome/ui-admin';
+import { Alert, Badge, Button, Checkbox, Control, Disclosure, Field, Skeleton } from '@klarahome/ui-primitives';
+import {
+  THEME_MARKER_TOKEN,
+  THEME_PRESETS,
+  ThemeService,
+  ToastService,
+  presetIdFromTokens,
+} from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 
@@ -16,7 +22,7 @@ import { describeError, fieldErrors } from '../../core/describe-error';
 interface SettingField {
   readonly path: string;
   readonly label: string;
-  readonly kind: 'text' | 'number' | 'boolean' | 'json';
+  readonly kind: 'text' | 'number' | 'boolean' | 'json' | 'color' | 'theme';
   value: string;
   checked: boolean;
   /** The rules the server holds for this leaf, where it declared any. */
@@ -49,7 +55,19 @@ interface SettingField {
  */
 @Component({
   selector: 'kh-store-settings-page',
-  imports: [Alert, Badge, Button, Checkbox, Control, Field, HasPermission, PageHeader, Skeleton],
+  imports: [
+    Alert,
+    Badge,
+    Button,
+    Checkbox,
+    Control,
+    Disclosure,
+    Field,
+    HasPermission,
+    PageHeader,
+    Skeleton,
+    ThemePicker,
+  ],
   template: `
     <kh-page-header
       heading="Store settings"
@@ -61,22 +79,18 @@ interface SettingField {
     } @else if (loading()) {
       <kh-skeleton height="20rem" />
     } @else {
-      <kh-alert tone="info" heading="These forms are built from the API's own schema">
-        The controls and their bounds come from the API. It has the last word regardless: a refusal comes back
-        against the section you saved, and some rules — a field that is only required when another is set —
-        cannot be shown here at all.
-      </kh-alert>
+      <p class="note">
+        Each section is saved on its own. The API validates every save and has the last word: a refusal
+        comes back against the section it concerns.
+      </p>
 
       @for (section of sections(); track section.key) {
         <section class="panel">
           <header>
             <h2>{{ humanise(section.key) }}</h2>
-            <div class="header-meta">
-              @if (section.isPublic) {
-                <kh-badge tone="info">Readable by the storefront</kh-badge>
-              }
-              <code>{{ section.key }}</code>
-            </div>
+            @if (section.isPublic) {
+              <kh-badge tone="info">Shown on the storefront</kh-badge>
+            }
           </header>
 
           @if (errorFor(section.key); as message) {
@@ -87,11 +101,58 @@ interface SettingField {
             <p class="note">This section is empty.</p>
           } @else {
             @for (field of fieldsFor(section.key); track field.path) {
-              @if (field.kind === 'boolean') {
+              @if (field.kind === 'theme') {
+                <kh-theme-picker
+                  [presets]="presets"
+                  [selected]="presetFor(field)"
+                  [disabled]="!canManage()"
+                  (chosen)="chooseTheme(section.key, field.path, $event)"
+                />
+                <kh-disclosure heading="Colour tokens" hint="Advanced">
+                  <kh-field
+                    label="Tokens the theme sets"
+                    [for]="section.key + '-' + field.path"
+                    hint="JSON — one CSS custom property per key. Choosing a theme above rewrites this."
+                  >
+                    <textarea
+                      khControl
+                      [id]="section.key + '-' + field.path"
+                      rows="8"
+                      [disabled]="!canManage()"
+                      [value]="field.value"
+                      (input)="setValue(section.key, field.path, $any($event.target).value)"
+                    ></textarea>
+                  </kh-field>
+                </kh-disclosure>
+              } @else if (field.kind === 'color') {
+                <kh-field [label]="field.label" [for]="section.key + '-' + field.path" [hint]="hintFor(field)">
+                  <span class="colour">
+                    <input
+                      class="colour-well"
+                      type="color"
+                      [attr.aria-label]="field.label + ' picker'"
+                      [disabled]="!canManage()"
+                      [value]="field.value"
+                      (input)="setValue(section.key, field.path, $any($event.target).value)"
+                    />
+                    <input
+                      khControl
+                      [id]="section.key + '-' + field.path"
+                      type="text"
+                      maxlength="7"
+                      [attr.pattern]="field.schema?.pattern ?? null"
+                      [disabled]="!canManage()"
+                      [value]="field.value"
+                      (input)="setValue(section.key, field.path, $any($event.target).value)"
+                    />
+                  </span>
+                </kh-field>
+              } @else if (field.kind === 'boolean') {
                 <kh-checkbox
                   [label]="field.label"
                   [inputId]="section.key + '-' + field.path"
                   [checked]="field.checked"
+                  [disabled]="!canManage()"
                   (checkedChange)="setBoolean(section.key, field.path, $event)"
                 />
               } @else {
@@ -106,6 +167,7 @@ interface SettingField {
                       khControl
                       [id]="section.key + '-' + field.path"
                       rows="4"
+                      [disabled]="!canManage()"
                       [value]="field.value"
                       (input)="setValue(section.key, field.path, $any($event.target).value)"
                     ></textarea>
@@ -113,6 +175,7 @@ interface SettingField {
                     <select
                       khControl
                       [id]="section.key + '-' + field.path"
+                      [disabled]="!canManage()"
                       [value]="field.value"
                       (change)="setValue(section.key, field.path, $any($event.target).value)"
                     >
@@ -130,6 +193,7 @@ interface SettingField {
                       [attr.maxlength]="field.schema?.maxLength ?? null"
                       [attr.pattern]="field.schema?.pattern ?? null"
                       [attr.required]="field.schema?.isRequired ? '' : null"
+                      [disabled]="!canManage()"
                       [value]="field.value"
                       (input)="setValue(section.key, field.path, $any($event.target).value)"
                     />
@@ -154,8 +218,27 @@ interface SettingField {
     }
   `,
   styles: `
-    kh-alert {
+    kh-alert,
+    kh-theme-picker,
+    kh-disclosure {
+      display: block;
       margin-block-end: var(--space-4);
+    }
+
+    .colour {
+      display: flex;
+      align-items: stretch;
+      gap: var(--space-2);
+    }
+
+    .colour-well {
+      inline-size: var(--touch-target-min);
+      block-size: auto;
+      padding: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-raised);
+      cursor: pointer;
     }
 
     .panel {
@@ -204,9 +287,18 @@ interface SettingField {
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class StoreSettingsPage {
+export class StoreSettingsPage implements HasUnsavedChanges {
   private readonly settings = inject(PlatformSettingsService);
   private readonly toasts = inject(ToastService);
+  private readonly theme = inject(ThemeService);
+  private readonly session = inject(SessionStore);
+
+  protected readonly presets = THEME_PRESETS;
+  /** Whether this user may save. Read-only users still see the values; they do not get live controls. */
+  protected readonly canManage = computed(() => this.session.hasPermission('platform.settings.manage'));
+
+  /** The sections edited since they were last loaded or saved — what the route guard asks about. */
+  private readonly dirty = signal<ReadonlySet<string>>(new Set());
 
   protected readonly sections = signal<readonly SettingsSectionResponse[]>([]);
   protected readonly loading = signal(false);
@@ -255,6 +347,38 @@ export class StoreSettingsPage {
     return parts.join(' · ');
   }
 
+  hasUnsavedChanges(): boolean {
+    return this.dirty().size > 0;
+  }
+
+  /** Which preset the branding section's tokens came from, or null for a custom set. */
+  protected presetFor(field: SettingField): string | null {
+    try {
+      return presetIdFromTokens(JSON.parse(field.value || '{}') as Record<string, string>);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A theme was picked: the section records *which* theme, and the admin wears it at once.
+   *
+   * Only the marker is stored. Writing the whole palette out froze it at the moment of the click —
+   * a later improvement to that preset, or a contrast fix, then never reached this store, because
+   * the settings document went on serving the copy taken today. `ThemeService` expands a
+   * marker-only set from the presets the app actually ships with (see `resolvePreset` there), so a
+   * palette change is a deploy rather than a visit to every tenant's settings page. A token set
+   * edited by hand still carries its own colours and is still applied verbatim.
+   */
+  protected chooseTheme(sectionKey: string, path: string, presetId: string): void {
+    const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId);
+    if (!preset) return;
+    this.setValue(sectionKey, path, JSON.stringify({ [THEME_MARKER_TOKEN]: preset.id }, null, 2));
+    // Previewed here, not only after saving — an operator choosing between six palettes needs to see
+    // the page in each one, and the saved value is what decides it for everyone else.
+    this.theme.apply(preset.tokens);
+  }
+
   protected fieldsFor(key: string): readonly SettingField[] {
     return this.fields()[key] ?? [];
   }
@@ -273,6 +397,7 @@ export class StoreSettingsPage {
   }
 
   protected setValue(sectionKey: string, path: string, value: string): void {
+    this.markDirty(sectionKey);
     this.fields.update((current) => ({
       ...current,
       [sectionKey]: (current[sectionKey] ?? []).map((field) =>
@@ -282,12 +407,25 @@ export class StoreSettingsPage {
   }
 
   protected setBoolean(sectionKey: string, path: string, checked: boolean): void {
+    this.markDirty(sectionKey);
     this.fields.update((current) => ({
       ...current,
       [sectionKey]: (current[sectionKey] ?? []).map((field) =>
         field.path === path ? { ...field, checked } : field,
       ),
     }));
+  }
+
+  private markDirty(sectionKey: string): void {
+    this.dirty.update((current) => new Set([...current, sectionKey]));
+  }
+
+  private markClean(sectionKey: string): void {
+    this.dirty.update((current) => {
+      const next = new Set(current);
+      next.delete(sectionKey);
+      return next;
+    });
   }
 
   protected save(sectionKey: string): void {
@@ -317,12 +455,17 @@ export class StoreSettingsPage {
     this.settings.updateSection(sectionKey, value).subscribe({
       next: (saved) => {
         this.savingKey.set(null);
+        this.markClean(sectionKey);
         this.toasts.success(`${this.humanise(sectionKey)} saved.`);
         // Refilled from what came back, so a value the API normalised is what is on screen.
         this.fields.update((current) => ({
           ...current,
           [sectionKey]: this.describe(sectionKey, flatten(saved.value, '')),
         }));
+        // The saved theme is the one this app wears from now on. The storefront reads the same
+        // section on its next load.
+        const tokens = (saved.value as { themeTokens?: Record<string, string> }).themeTokens;
+        if (sectionKey === 'branding') this.theme.apply(tokens);
       },
       error: (error: unknown) => {
         this.savingKey.set(null);
@@ -345,8 +488,9 @@ export class StoreSettingsPage {
         return field.value.trim() === '' ? null : Number.isFinite(parsed) ? parsed : field.value;
       }
       case 'json':
+      case 'theme':
         try {
-          return JSON.parse(field.value) as unknown;
+          return JSON.parse(field.value || '{}') as unknown;
         } catch {
           return MALFORMED;
         }
@@ -377,6 +521,7 @@ export class StoreSettingsPage {
     this.settings.settings().subscribe({
       next: (response) => {
         this.loading.set(false);
+        this.dirty.set(new Set());
         this.sections.set(response.sections);
         this.fields.set(
           Object.fromEntries(
@@ -398,7 +543,21 @@ export class StoreSettingsPage {
   private describe(sectionKey: string, fields: readonly SettingField[]): SettingField[] {
     const schema = this.schema();
 
-    return fields.map((field) => ({ ...field, schema: schema.get(`${sectionKey}.${field.path}`) }));
+    // A branding row saved before the theme existed carries no `themeTokens` key, and the API's
+    // contract defaults it to empty rather than requiring it - so the picker has to be offered
+    // whether or not the stored JSON mentions it, or a store can never choose a theme at all.
+    const hasTheme = fields.some((field) => field.kind === 'theme');
+    const withTheme =
+      sectionKey === 'branding' && !hasTheme
+        ? [...fields, { path: 'themeTokens', label: 'Theme', kind: 'theme' as const, value: '{}', checked: false }]
+        : fields;
+
+    return withTheme.map((field) => {
+      const rules = schema.get(`${sectionKey}.${field.path}`);
+      // A text field the server validates as a hex colour gets a colour well beside its text box.
+      const isColour = field.kind === 'text' && !!rules?.pattern && /#/.test(rules.pattern);
+      return { ...field, kind: isColour ? ('color' as const) : field.kind, schema: rules };
+    });
   }
 }
 
@@ -418,6 +577,14 @@ function flatten(value: unknown, prefix: string): SettingField[] {
   return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
     const path = prefix ? `${prefix}.${key}` : key;
     const label = humaniseLeaf(key);
+
+    // The theme is one value, not twenty-four text boxes with names like "-color-primary": it is
+    // chosen from the presets, and the raw tokens sit behind an "Advanced" disclosure.
+    if (key === 'themeTokens' && typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
+      return [
+        { path, label: 'Theme', kind: 'theme' as const, value: JSON.stringify(entry, null, 2), checked: false },
+      ];
+    }
 
     if (typeof entry === 'boolean') {
       return [{ path, label, kind: 'boolean' as const, value: '', checked: entry }];

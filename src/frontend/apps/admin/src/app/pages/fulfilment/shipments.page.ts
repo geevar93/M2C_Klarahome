@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import {
   DocumentPrintService,
   FulfilmentService,
@@ -63,6 +64,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
     Icon,
     PageHeader,
     StatusBadge,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -80,6 +82,8 @@ import { tableDateTime, tableMoney } from '../../core/format';
 
     <kh-data-table
       label="Shipments"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -105,8 +109,8 @@ import { tableDateTime, tableMoney } from '../../core/format';
       />
 
       <ng-template khCell="orderNumber" let-row>
-        <button type="button" class="link" (click)="open(row)">{{ row.orderNumber }}</button>
-        <span class="note">{{ row.subOrderNumber }}</span>
+        <a class="link" [routerLink]="['/orders', row.orderId]">{{ row.orderNumber }}</a>
+        <button type="button" class="link note" (click)="open(row)">{{ row.subOrderNumber }} · parcel</button>
       </ng-template>
 
       <ng-template khCell="awb" let-row>
@@ -132,7 +136,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
         lost in the meantime.
       </p>
 
-      <table>
+      @if (events.error(); as message) {
+        <kh-alert tone="danger" heading="The failed messages could not be loaded">{{ message }}</kh-alert>
+      }
+
+      <table [attr.aria-busy]="events.loading()">
         <thead>
           <tr>
             <th scope="col">Received</th>
@@ -144,6 +152,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
           </tr>
         </thead>
         <tbody>
+          @if (events.loading() && events.rows().length === 0) {
+            <tr>
+              <td colspan="6" class="hint">Loading…</td>
+            </tr>
+          }
           @for (event of events.rows(); track event.id) {
             <tr>
               <td>{{ when(event.receivedAt) }}</td>
@@ -319,7 +332,14 @@ import { tableDateTime, tableMoney } from '../../core/format';
           <button khButton type="button" size="sm" [disabled]="busy()" (click)="printLabel(parcel)">
             Print the label
           </button>
-          <button khButton type="button" size="sm" [disabled]="busy()" (click)="sync(parcel)">
+          <button
+            khButton
+            type="button"
+            size="sm"
+            *khHasPermission="'shipping.shipment.manage'"
+            [disabled]="busy()"
+            (click)="sync(parcel)"
+          >
             Ask the courier
           </button>
           <button
@@ -502,6 +522,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShipmentsPage {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   private readonly fulfilment = inject(FulfilmentService);
   private readonly documents = inject(DocumentPrintService);
   private readonly media = inject(MediaLibraryService);

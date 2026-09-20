@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { NotificationCentreService } from '@klarahome/data-access-admin';
 import { AuthService, SessionStore } from '@klarahome/data-access-auth';
@@ -48,6 +48,31 @@ export class SignInFlow {
   }
 
   /**
+   * True from the moment the user asks to sign out until the sign-in page is up.
+   *
+   * The shell watches the session and treats it going away as an expiry; this is how it tells a
+   * chosen sign-out from one the server forced, so it does not say "your session has ended" to
+   * somebody who just ended it.
+   */
+  readonly signingOut = signal(false);
+
+  /**
+   * When the session went away without the user asking.
+   *
+   * The refresh cookie has been tried and refused (`AuthService.refresh`), the store has been
+   * cleared, and the user is on a page every request from which will now fail. Left there, the
+   * top bar reads "Signed out" and every panel shows its own load error, which looks like an
+   * outage. The honest move is to the sign-in page, with the reason and the way back both in the
+   * URL so the sign-in page can say why they are there and return them afterwards.
+   */
+  async sessionEnded(currentUrl: string): Promise<void> {
+    this.notifications.clear();
+    await this.router.navigate(['/login'], {
+      queryParams: { returnUrl: this.safeReturnUrl(currentUrl), reason: 'expired' },
+    });
+  }
+
+  /**
    * Ends the session, clears what belonged to it, and returns to sign-in.
    *
    * The order matters: the server first, so the refresh cookie is really gone, then the local
@@ -55,9 +80,14 @@ export class SignInFlow {
    * screen while still holding a live session.
    */
   async signOut(): Promise<void> {
-    await firstValueFrom(this.auth.signOut());
-    this.notifications.clear();
-    this.session.signOut();
-    await this.router.navigate(['/login']);
+    this.signingOut.set(true);
+    try {
+      await firstValueFrom(this.auth.signOut());
+      this.notifications.clear();
+      this.session.signOut();
+      await this.router.navigate(['/login']);
+    } finally {
+      this.signingOut.set(false);
+    }
   }
 }

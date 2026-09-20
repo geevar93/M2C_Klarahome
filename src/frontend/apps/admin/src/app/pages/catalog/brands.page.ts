@@ -6,6 +6,7 @@ import {
   CatalogAdminService,
   MediaFileResponse,
 } from '@klarahome/data-access-admin';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   ConfirmDialog,
@@ -39,6 +40,7 @@ import { MediaPicker } from './media-picker';
 @Component({
   selector: 'kh-brands-page',
   imports: [
+    HasPermission,
     Alert,
     Badge,
     Button,
@@ -58,7 +60,7 @@ import { MediaPicker } from './media-picker';
   ],
   template: `
     <kh-page-header heading="Brands" description="Who makes the things in the catalogue.">
-      <button khButton type="button" variant="primary" (click)="startCreate()">
+      <button khButton type="button" variant="primary" *khHasPermission="'catalog.taxonomy.manage'" (click)="startCreate()">
         <kh-icon name="plus" size="sm" />
         New brand
       </button>
@@ -90,7 +92,11 @@ import { MediaPicker } from './media-picker';
       />
 
       <ng-template khCell="name" let-row>
-        <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+        @if (canManage()) {
+          <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
+        } @else {
+          {{ row.name }}
+        }
         <span class="slug">/{{ row.slug }}</span>
       </ng-template>
 
@@ -105,13 +111,14 @@ import { MediaPicker } from './media-picker';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit brand' : 'New brand'"
         [subtitle]="editing()?.slug ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Brand"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"
@@ -245,6 +252,10 @@ import { MediaPicker } from './media-picker';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BrandsPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('catalog.taxonomy.manage'));
+
   private readonly catalog = inject(CatalogAdminService);
   private readonly images = inject(ImageUrls);
   private readonly toasts = inject(ToastService);

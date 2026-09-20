@@ -22,9 +22,9 @@ import { MiniCartLine } from './navigation.model';
   selector: 'kh-mini-cart',
   imports: [Button, Drawer, EmptyState, Icon, MoneyPipe, RouterLink, Skeleton],
   template: `
-    <kh-drawer [open]="open()" side="end" label="Your cart" (closed)="closed.emit()">
+    <kh-drawer [open]="open()" side="end" [labelledBy]="'kh-mini-cart-title'" label="Your cart" (closed)="closed.emit()">
       <div class="head">
-        <h2 class="title">Your cart</h2>
+        <h2 class="title" id="kh-mini-cart-title">Your cart</h2>
         <button
           khButton
           variant="tertiary"
@@ -56,6 +56,18 @@ import { MiniCartLine } from './navigation.model';
                 <span class="name">{{ line.name }}</span>
                 <span class="meta">Qty {{ line.quantity }} · {{ line.lineTotal | khMoney }}</span>
               </span>
+              <button
+                khButton
+                variant="tertiary"
+                size="sm"
+                [iconOnly]="true"
+                type="button"
+                class="remove"
+                [attr.aria-label]="'Remove ' + line.name + ' from your cart'"
+                (click)="removed.emit(line.id)"
+              >
+                <kh-icon name="close" size="sm" />
+              </button>
             </li>
           }
         </ul>
@@ -67,7 +79,10 @@ import { MiniCartLine } from './navigation.model';
             </p>
             <p class="note">Delivery and taxes are calculated at checkout.</p>
           }
-          <a khButton variant="primary" [block]="true" routerLink="/cart" (click)="closed.emit()"
+          <a khButton variant="primary" [block]="true" routerLink="/checkout" (click)="closed.emit()"
+            >Checkout</a
+          >
+          <a khButton variant="secondary" [block]="true" routerLink="/cart" (click)="closed.emit()"
             >View cart</a
           >
         </div>
@@ -104,6 +119,11 @@ import { MiniCartLine } from './navigation.model';
       align-items: center;
     }
 
+    .remove {
+      flex: none;
+      margin-inline-start: auto;
+    }
+
     .thumb {
       width: var(--space-16);
       height: var(--space-16);
@@ -114,6 +134,7 @@ import { MiniCartLine } from './navigation.model';
 
     .detail {
       display: flex;
+      flex: 1;
       flex-direction: column;
       gap: var(--space-1);
       min-width: 0;
@@ -130,6 +151,9 @@ import { MiniCartLine } from './navigation.model';
     }
 
     .foot {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
       margin-block-start: auto;
       padding: var(--space-4);
       border-block-start: 1px solid var(--color-border);
@@ -157,4 +181,6 @@ export class MiniCart {
   /** The subtotal the API computed. Absent while unknown; never derived here. */
   readonly total = input<Money | null>(null);
   readonly closed = output<void>();
+  /** A line's remove button was pressed. The caller owns the mutation — see `ShellStore.removeCartLine`. */
+  readonly removed = output<string>();
 }

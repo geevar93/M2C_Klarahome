@@ -1,9 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ReturnSummaryResponse, ReturnsService } from '@klarahome/data-access-orders';
-import { INR, Money, money } from '@klarahome/domain';
 import { KhDatePipe, MoneyPipe } from '@klarahome/i18n';
-import { Badge, Button, EmptyState, Skeleton } from '@klarahome/ui-primitives';
+import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { StatusTone } from '@klarahome/ui-patterns';
 
 import { CommerceMapper } from '../../core/commerce.mapper';
@@ -21,16 +20,21 @@ import { CommerceMapper } from '../../core/commerce.mapper';
  */
 @Component({
   selector: 'kh-account-returns-page',
-  imports: [Badge, Button, EmptyState, KhDatePipe, MoneyPipe, RouterLink, Skeleton],
+  imports: [Badge, Button, EmptyState, ErrorState, KhDatePipe, MoneyPipe, PageHeader, RouterLink, Skeleton],
   template: `
-    <h1>Your returns</h1>
+    <kh-page-header title="Returns" />
 
     @if (loading() && rows().length === 0) {
-      <kh-skeleton height="8rem" />
+      <div class="list">
+        <kh-skeleton height="8rem" />
+        <kh-skeleton height="8rem" />
+      </div>
+    } @else if (error() && rows().length === 0) {
+      <kh-error-state (retry)="load(true)" />
     } @else if (rows().length === 0) {
       <kh-empty-state
-        heading="You have not sent anything back"
-        message="You can raise a return from any delivered order, while its return window is open."
+        heading="You have not requested any returns yet"
+        message="You can request a return from any delivered order, while its return window is open."
       >
         <a khButton variant="primary" routerLink="/account/orders">Your orders</a>
       </kh-empty-state>
@@ -48,7 +52,7 @@ import { CommerceMapper } from '../../core/commerce.mapper';
                 raised {{ row.requestedAt | khDate: 'd MMM y' }}
               </span>
               <span class="amount">
-                {{ amount(row.refundAmount || row.estimatedRefund, row.currencyCode) | khMoney }}
+                {{ mapper.money(row.refundAmount || row.estimatedRefund, row.currencyCode) | khMoney }}
                 <span class="qualifier">{{ row.refundAmount ? 'refunded' : 'estimated refund' }}</span>
               </span>
             </a>
@@ -56,9 +60,11 @@ import { CommerceMapper } from '../../core/commerce.mapper';
         }
       </ul>
 
-      @if (cursor()) {
-        <button khButton variant="secondary" type="button" [disabled]="loading()" (click)="loadMore()">
-          {{ loading() ? 'Loading…' : 'Load more' }}
+      @if (error()) {
+        <kh-error-state (retry)="loadMore()" />
+      } @else if (cursor()) {
+        <button khButton variant="secondary" type="button" [disabled]="loadingMore()" (click)="loadMore()">
+          {{ loadingMore() ? 'Loading…' : 'Load more' }}
         </button>
       }
     }
@@ -66,10 +72,6 @@ import { CommerceMapper } from '../../core/commerce.mapper';
   styles: `
     :host {
       display: block;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
     }
 
     .list {
@@ -129,10 +131,12 @@ import { CommerceMapper } from '../../core/commerce.mapper';
 })
 export class AccountReturnsPage {
   private readonly api = inject(ReturnsService);
-  private readonly mapper = inject(CommerceMapper);
+  protected readonly mapper = inject(CommerceMapper);
 
   protected readonly rows = signal<readonly ReturnSummaryResponse[]>([]);
   protected readonly loading = signal(true);
+  protected readonly loadingMore = signal(false);
+  protected readonly error = signal(false);
   protected readonly cursor = signal<string | null>(null);
 
   constructor() {
@@ -140,38 +144,38 @@ export class AccountReturnsPage {
   }
 
   protected label(status: string): string {
-    return this.mapper.status(status).label;
+    return this.mapper.returnStatus(status).label;
   }
 
   protected tone(status: string): StatusTone {
-    return this.mapper.status(status).tone;
+    return this.mapper.returnStatus(status).tone;
   }
 
   protected loadMore(): void {
-    if (!this.cursor() || this.loading()) return;
+    if (!this.cursor() || this.loadingMore()) return;
     this.load(false);
   }
 
-  private load(reset: boolean): void {
-    this.loading.set(true);
+  protected load(reset: boolean): void {
+    this.error.set(false);
+    if (reset) {
+      this.loading.set(true);
+    } else {
+      this.loadingMore.set(true);
+    }
 
     this.api.list({ cursor: reset ? null : this.cursor() }).subscribe({
       next: (page) => {
         this.rows.update((current) => (reset ? page.items : [...current, ...page.items]));
         this.cursor.set(page.page.nextCursor);
         this.loading.set(false);
+        this.loadingMore.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        this.loadingMore.set(false);
+        this.error.set(true);
+      },
     });
-  }
-
-  /**
-   * A raw amount with its currency attached.
-   *
-   * `khMoney` takes a `Money` so a price can never be rendered without its currency, and these
-   * responses carry the two apart. Pairing them here is the boundary doing its job, not arithmetic.
-   */
-  protected amount(value: number, currency: string): Money {
-    return money(value, currency || INR);
   }
 }

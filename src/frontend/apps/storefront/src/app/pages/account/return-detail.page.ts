@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { isApiError } from '@klarahome/data-access-auth';
 import { ReturnResponse, ReturnsService } from '@klarahome/data-access-orders';
-import { INR, Money, money } from '@klarahome/domain';
 import { KhDatePipe, MoneyPipe } from '@klarahome/i18n';
-import { Alert, Badge, Button, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Badge, Button, Drawer, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { StatusTone } from '@klarahome/ui-patterns';
 import { BreadcrumbTrail, ToastService } from '@klarahome/util';
 
@@ -26,22 +26,26 @@ import { describeError } from '../../core/describe-error';
  */
 @Component({
   selector: 'kh-return-detail-page',
-  imports: [Alert, Badge, Button, KhDatePipe, MoneyPipe, RouterLink, Skeleton],
+  imports: [Alert, Badge, Button, Drawer, ErrorState, KhDatePipe, MoneyPipe, PageHeader, RouterLink, Skeleton],
   template: `
+    <kh-page-header [title]="headerTitle()" backHref="/account/returns" backLabel="All returns">
+      @if (rma(); as request) {
+        <span khPageHeaderStatus>
+          <kh-badge [tone]="tone(request.status)">{{ label(request.status) }}</kh-badge>
+        </span>
+      }
+    </kh-page-header>
+
     @if (loading()) {
       <kh-skeleton height="16rem" />
+    } @else if (error()) {
+      <kh-error-state (retry)="load(rmaNumber)" />
     } @else if (rma(); as request) {
-      <header class="head">
-        <div>
-          <h1>Return {{ request.returnNumber }}</h1>
-          <p class="meta">
-            From order
-            <a [routerLink]="['/account/orders', request.orderNumber]">{{ request.orderNumber }}</a>
-            · raised {{ request.requestedAt | khDate }}
-          </p>
-        </div>
-        <kh-badge [tone]="tone(request.status)">{{ label(request.status) }}</kh-badge>
-      </header>
+      <p class="meta">
+        From order
+        <a [routerLink]="['/account/orders', request.orderNumber]">{{ request.orderNumber }}</a>
+        · raised {{ request.requestedAt | khDate: 'd MMM y' }}
+      </p>
 
       @if (request.rejectedReason) {
         <kh-alert tone="danger" heading="This return was not accepted">{{ request.rejectedReason }}</kh-alert>
@@ -63,7 +67,7 @@ import { describeError } from '../../core/describe-error';
           @for (line of request.lines; track line.id) {
             <li>
               <span>{{ line.quantity }} × {{ line.name }}</span>
-              <span class="amount">{{ amount(line.refundAmount, request.currencyCode) | khMoney }}</span>
+              <span class="amount">{{ mapper.money(line.refundAmount, request.currencyCode) | khMoney }}</span>
               @if (line.qcNote) {
                 <span class="note">{{ line.qcNote }}</span>
               }
@@ -79,7 +83,7 @@ import { describeError } from '../../core/describe-error';
             <dt>{{ request.refundAmount > 0 ? 'Refunded' : 'Estimated refund' }}</dt>
             <dd>
               {{
-                amount(
+                mapper.money(
                   request.refundAmount || request.approvedAmount || request.estimatedRefund,
                   request.currencyCode
                 ) | khMoney
@@ -95,7 +99,7 @@ import { describeError } from '../../core/describe-error';
           @if (request.returnShippingFee > 0) {
             <div>
               <dt>Return shipping</dt>
-              <dd>−{{ amount(request.returnShippingFee, request.currencyCode) | khMoney }}</dd>
+              <dd>−{{ mapper.money(request.returnShippingFee, request.currencyCode) | khMoney }}</dd>
             </div>
           }
         </dl>
@@ -108,8 +112,8 @@ import { describeError } from '../../core/describe-error';
       </section>
 
       @if (canWithdraw()) {
-        <button khButton variant="tertiary" type="button" [disabled]="busy()" (click)="withdraw()">
-          {{ busy() ? 'Withdrawing…' : 'Withdraw this return' }}
+        <button khButton variant="tertiary" type="button" (click)="withdrawing.set(true)">
+          Withdraw this return
         </button>
       }
     } @else {
@@ -118,27 +122,36 @@ import { describeError } from '../../core/describe-error';
       </kh-alert>
       <a khButton variant="primary" routerLink="/account/returns">Your returns</a>
     }
+
+    <kh-drawer
+      [open]="withdrawing()"
+      side="bottom"
+      label="Withdraw this return"
+      labelledBy="withdraw-heading"
+      (closed)="withdrawing.set(false)"
+    >
+      <div class="sheet">
+        <h2 id="withdraw-heading">Withdraw this return?</h2>
+        <p>
+          We will stop processing this request. If a pickup was scheduled it will be cancelled, and you
+          keep the items.
+        </p>
+        <div class="actions">
+          <button khButton variant="danger" type="button" [disabled]="busy()" (click)="withdraw()">
+            {{ busy() ? 'Withdrawing…' : 'Withdraw it' }}
+          </button>
+          <button khButton variant="tertiary" type="button" (click)="withdrawing.set(false)">Keep it</button>
+        </div>
+      </div>
+    </kh-drawer>
   `,
   styles: `
     :host {
       display: block;
     }
 
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: var(--space-3);
-    }
-
-    h1 {
-      margin: 0;
-      font-size: var(--text-xl);
-    }
-
     .meta {
-      margin: var(--space-1) 0 0;
+      margin: 0 0 var(--space-4);
       font-size: var(--text-sm);
       color: var(--color-text-muted);
     }
@@ -198,35 +211,53 @@ import { describeError } from '../../core/describe-error';
       font-size: var(--text-xs);
       color: var(--color-text-muted);
     }
+
+    .sheet {
+      padding: var(--space-4);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-block-start: var(--space-4);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReturnDetailPage {
   private readonly api = inject(ReturnsService);
-  private readonly mapper = inject(CommerceMapper);
+  protected readonly mapper = inject(CommerceMapper);
   private readonly toasts = inject(ToastService);
   private readonly trail = inject(BreadcrumbTrail);
   private readonly route = inject(ActivatedRoute);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  protected readonly rmaNumber = this.route.snapshot.paramMap.get('rmaNumber') ?? '';
 
   protected readonly rma = signal<ReturnResponse | null>(null);
   protected readonly loading = signal(true);
+  /** True only for a failure that is not "no such return" — a 404 falls through to the not-found panel. */
+  protected readonly error = signal(false);
   protected readonly busy = signal(false);
+  protected readonly withdrawing = signal(false);
+
+  protected readonly headerTitle = computed(() => `Return ${this.rma()?.returnNumber ?? this.rmaNumber}`);
 
   /** Offered only when the return's own transition table still allows it. */
   protected readonly canWithdraw = computed(() => this.rma()?.nextStatuses.includes('Cancelled') ?? false);
 
   constructor() {
-    const rmaNumber = this.route.snapshot.paramMap.get('rmaNumber');
-    if (rmaNumber) this.load(rmaNumber);
+    if (this.rmaNumber) this.load(this.rmaNumber);
     else this.loading.set(false);
   }
 
   protected label(status: string): string {
-    return this.mapper.status(status).label;
+    return this.mapper.returnStatus(status).label;
   }
 
   protected tone(status: string): StatusTone {
-    return this.mapper.status(status).tone;
+    return this.mapper.returnStatus(status).tone;
   }
 
   protected withdraw(): void {
@@ -235,10 +266,12 @@ export class ReturnDetailPage {
 
     this.busy.set(true);
     this.api.cancel(request.returnNumber, null).subscribe({
-      next: (updated) => {
+      next: () => {
         this.busy.set(false);
-        this.rma.set(updated);
+        this.withdrawing.set(false);
         this.toasts.success('That return is withdrawn.');
+        this.load(request.returnNumber);
+        this.focusHeading();
       },
       error: (error: unknown) => {
         this.busy.set(false);
@@ -247,28 +280,34 @@ export class ReturnDetailPage {
     });
   }
 
-  private load(rmaNumber: string): void {
+  protected load(rmaNumber: string): void {
     this.loading.set(true);
+    this.error.set(false);
     this.api.get(rmaNumber).subscribe({
       next: (request) => {
         this.rma.set(request);
         this.loading.set(false);
         this.trail.setLeafLabel(request.returnNumber);
       },
-      error: () => {
+      error: (error: unknown) => {
         this.rma.set(null);
         this.loading.set(false);
+        if (!isApiError(error) || error.status !== 404) this.error.set(true);
       },
     });
   }
 
   /**
-   * A raw amount with its currency attached.
+   * Moves focus to the page's own heading after a sheet closes on success.
    *
-   * `khMoney` takes a `Money` so a price can never be rendered without its currency, and these
-   * responses carry the two apart. Pairing them here is the boundary doing its job, not arithmetic.
+   * A drawer restores focus to whatever opened it, which is correct while cancelling — but a
+   * completed withdrawal has removed that trigger's context, so focus is sent to the page's own
+   * name instead of being left to fall back to the document body.
    */
-  protected amount(value: number, currency: string): Money {
-    return money(value, currency || INR);
+  private focusHeading(): void {
+    const heading = this.host.nativeElement.querySelector<HTMLElement>('h1');
+    if (!heading) return;
+    heading.setAttribute('tabindex', '-1');
+    heading.focus();
   }
 }

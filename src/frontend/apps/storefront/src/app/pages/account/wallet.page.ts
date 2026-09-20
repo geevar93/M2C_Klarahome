@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RouterLink } from '@angular/router';
 import { WalletResponse, WalletService } from '@klarahome/data-access-account';
 import { KhDatePipe, MoneyPipe } from '@klarahome/i18n';
-import { Button, EmptyState, Skeleton } from '@klarahome/ui-primitives';
+import { Button, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { WalletEntryView } from '@klarahome/ui-patterns';
 import { INR, money } from '@klarahome/domain';
 
@@ -25,12 +25,17 @@ import { CommerceMapper } from '../../core/commerce.mapper';
  */
 @Component({
   selector: 'kh-account-wallet-page',
-  imports: [Button, EmptyState, KhDatePipe, MoneyPipe, RouterLink, Skeleton],
+  imports: [Button, EmptyState, ErrorState, KhDatePipe, MoneyPipe, PageHeader, RouterLink, Skeleton],
   template: `
-    <h1>Store credit</h1>
+    <kh-page-header title="Store credit" />
 
     @if (loading()) {
-      <kh-skeleton height="6rem" />
+      <div class="list">
+        <kh-skeleton height="8rem" />
+        <kh-skeleton height="8rem" />
+      </div>
+    } @else if (error() && entries().length === 0) {
+      <kh-error-state (retry)="load()" />
     } @else {
       <section class="balance">
         <p class="label">Available balance</p>
@@ -43,7 +48,7 @@ import { CommerceMapper } from '../../core/commerce.mapper';
           heading="Nothing here yet"
           message="Store credit appears when a refund is issued to it, or when we give you some."
         >
-          <a khButton variant="primary" routerLink="/">Go shopping</a>
+          <a khButton variant="primary" routerLink="/">Start shopping</a>
         </kh-empty-state>
       } @else {
         <h2>What has happened</h2>
@@ -71,7 +76,9 @@ import { CommerceMapper } from '../../core/commerce.mapper';
           }
         </ul>
 
-        @if (cursor()) {
+        @if (error()) {
+          <kh-error-state (retry)="loadMore()" />
+        } @else if (cursor()) {
           <button khButton variant="secondary" type="button" [disabled]="loadingMore()" (click)="loadMore()">
             {{ loadingMore() ? 'Loading…' : 'Load more' }}
           </button>
@@ -84,12 +91,14 @@ import { CommerceMapper } from '../../core/commerce.mapper';
       display: block;
     }
 
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
     h2 {
       font-size: var(--text-lg);
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
     }
 
     .balance {
@@ -171,6 +180,7 @@ export class AccountWalletPage {
 
   protected readonly loading = signal(true);
   protected readonly loadingMore = signal(false);
+  protected readonly error = signal(false);
   protected readonly cursor = signal<string | null>(null);
   protected readonly entries = signal<readonly WalletEntryView[]>([]);
 
@@ -185,9 +195,22 @@ export class AccountWalletPage {
   private readonly currency = computed(() => this.wallet()?.currencyCode || INR);
 
   constructor() {
-    this.api.balance().subscribe((wallet) => {
-      this.wallet.set(wallet);
-      this.loadTransactions(true);
+    this.load();
+  }
+
+  protected load(): void {
+    this.loading.set(true);
+    this.error.set(false);
+
+    this.api.balance().subscribe({
+      next: (wallet) => {
+        this.wallet.set(wallet);
+        this.loadTransactions(true);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.error.set(true);
+      },
     });
   }
 
@@ -197,6 +220,7 @@ export class AccountWalletPage {
   }
 
   private loadTransactions(first: boolean): void {
+    this.error.set(false);
     if (!first) this.loadingMore.set(true);
 
     this.api.transactions(first ? null : this.cursor()).subscribe({
@@ -210,6 +234,7 @@ export class AccountWalletPage {
       error: () => {
         this.loading.set(false);
         this.loadingMore.set(false);
+        this.error.set(true);
       },
     });
   }

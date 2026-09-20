@@ -8,6 +8,7 @@ import {
   PricingAdminService,
   UpdatePriceListBody,
 } from '@klarahome/data-access-admin';
+import { HasPermission } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   ConfirmDialog,
@@ -48,6 +49,7 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
 @Component({
   selector: 'kh-price-lists-page',
   imports: [
+    HasPermission,
     Alert,
     Badge,
     Button,
@@ -68,7 +70,7 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
       heading="Price lists"
       description="What a listing sells for, and which list wins when several claim it."
     >
-      <button khButton type="button" variant="primary" (click)="startCreate()">
+      <button khButton type="button" variant="primary" *khHasPermission="'pricing.price-list.manage'" (click)="startCreate()">
         <kh-icon name="plus" size="sm" />
         New price list
       </button>
@@ -120,12 +122,22 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
       </ng-template>
 
       <ng-template khCell="actions" let-row>
-        <button khButton type="button" size="sm" variant="tertiary" (click)="startEdit(row)">Edit</button>
         <button
           khButton
           type="button"
           size="sm"
           variant="tertiary"
+          *khHasPermission="'pricing.price-list.manage'"
+          (click)="startEdit(row)"
+        >
+          Edit
+        </button>
+        <button
+          khButton
+          type="button"
+          size="sm"
+          variant="tertiary"
+          *khHasPermission="'pricing.price-list.manage'"
           [disabled]="busyId() === row.id"
           (click)="toggle(row)"
         >
@@ -138,13 +150,14 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit price list' : 'New price list'"
         [subtitle]="editing()?.code ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
           heading="Price list"
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"
@@ -466,6 +479,7 @@ export class PriceListsPage {
     request.subscribe({
       next: () => {
         this.busyId.set(null);
+        this.toasts.success(row.isActive ? 'Price list switched off.' : 'Price list switched on.');
         this.list.refresh();
       },
       error: (error: unknown) => {

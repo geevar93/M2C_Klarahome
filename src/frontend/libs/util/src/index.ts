@@ -13,3 +13,4 @@ export * from './lib/seo';
 export * from './lib/storage';
 export * from './lib/theme.service';
 export * from './lib/toasts';
+export * from './lib/theme-presets';

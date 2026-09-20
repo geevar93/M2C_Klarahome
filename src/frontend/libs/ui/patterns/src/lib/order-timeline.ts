@@ -34,7 +34,7 @@ import { TimelineEntryView } from './commerce.model';
             @if (entry.detail) {
               <span class="detail">{{ entry.detail }}</span>
             }
-            <time class="when" [attr.datetime]="entry.occurredAt">{{ entry.occurredAt | khDate }}</time>
+            <time class="when" [attr.datetime]="entry.occurredAt">{{ entry.occurredAt | khDate: 'd MMM y' }}</time>
           </span>
         </li>
       } @empty {

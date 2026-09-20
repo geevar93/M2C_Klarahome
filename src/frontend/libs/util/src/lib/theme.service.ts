@@ -1,6 +1,8 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, inject } from '@angular/core';
 
+import { THEME_MARKER_TOKEN, THEME_PRESETS, presetIdFromTokens } from './theme-presets';
+
 /** A CSS custom property name: two leading hyphens, then lower-kebab-case. */
 const THEME_TOKEN_KEY_PATTERN = /^--[a-z][a-z0-9-]*$/;
 
@@ -33,15 +35,52 @@ export class ThemeService {
    */
   apply(tokens: Readonly<Record<string, string>> | undefined): void {
     const root = this.document.documentElement;
+    const resolved = resolvePreset(tokens);
 
     for (const key of this.applied) root.style.removeProperty(key);
 
     const next = new Set<string>();
-    for (const [key, value] of Object.entries(tokens ?? {})) {
+    for (const [key, value] of Object.entries(resolved ?? {})) {
       if (!THEME_TOKEN_KEY_PATTERN.test(key)) continue;
       root.style.setProperty(key, value);
       next.add(key);
     }
     this.applied = next;
+
+    // The browser chrome follows the primary: on a phone the address bar is tinted with
+    // `theme-color`, and a store in indigo with a coffee-coloured toolbar looks like two sites.
+    // The markup's own value is kept as the fallback for a theme that names no primary.
+    const meta = this.document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (meta) {
+      const fallback = meta.getAttribute('data-default') ?? meta.getAttribute('content') ?? '';
+      if (!meta.getAttribute('data-default')) meta.setAttribute('data-default', fallback);
+      meta.setAttribute('content', resolved?.['--color-primary'] ?? fallback);
+    }
   }
+}
+
+/**
+ * Expands a stored token set that is really a *pointer* to one of the built-in presets.
+ *
+ * A preset is code — nine palettes in `theme-presets.ts`, each checked against the contrast floor.
+ * The settings document records which one a store picked, in `--kh-theme`. It used to record a
+ * *copy* of the preset's two dozen colours as well, and that copy was frozen at the moment an
+ * operator clicked the card: improving a palette, adding a token role, or fixing a contrast
+ * failure then reached no store that had already chosen it, and every tenant needed somebody to
+ * open the admin and re-pick the same theme before a fix shipped. The storefront looked
+ * monotonous long after the palettes were not.
+ *
+ * So a set that is *only* the marker is expanded here, from whatever that preset is today. A set
+ * with colours of its own in it is a hand-edited theme and is applied exactly as stored — that is
+ * the difference the admin's picker already draws between a selected card and "Custom", and the
+ * reason the marker alone is what the picker now saves.
+ */
+function resolvePreset(
+  tokens: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> | undefined {
+  const keys = Object.keys(tokens ?? {});
+  if (keys.length !== 1 || keys[0] !== THEME_MARKER_TOKEN) return tokens;
+
+  const id = presetIdFromTokens(tokens);
+  return THEME_PRESETS.find((preset) => preset.id === id)?.tokens ?? tokens;
 }

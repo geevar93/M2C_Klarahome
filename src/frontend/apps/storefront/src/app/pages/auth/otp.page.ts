@@ -1,11 +1,22 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
 import { formField, formGroup, numeric, required } from '@klarahome/util';
+import { map } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
 import { SignInFlow } from '../../core/sign-in.flow';
+import { AuthLayout } from './auth.layout';
 
 /** How many digits an authenticator app produces. TOTP is six, and it is not deployment-specific. */
 const CODE_LENGTH = 6;
@@ -22,21 +33,21 @@ const CODE_LENGTH = 6;
  * What is left is the TOTP challenge. A password sign-in that answers with a `challenge` instead of
  * a session sends the caller here with that token in the query string, because it has to survive a
  * refresh and it is not a secret — the code is what proves anything, and the challenge alone buys
- * an attacker nothing.
+ * an attacker nothing. Reached directly — a bookmark, a stale tab, a refresh after the challenge has
+ * already been spent — it sends the shopper back to sign in with `reason=expired`, which `LoginPage`
+ * could show as a banner of its own; today it is shown here, immediately before the redirect, as the
+ * one plain sentence a screen this short has room for.
  *
  * `autocomplete="one-time-code"` stays, and still earns its place: on both iOS and Android it makes
  * the keyboard offer the code straight from the authenticator app, turning six taps into one.
  */
 @Component({
   selector: 'kh-otp-page',
-  imports: [Alert, Button, Control, Field],
+  imports: [Alert, AuthLayout, Button, Control, Field, RouterLink],
   template: `
-    <div class="panel">
-      <h1>Two-step verification</h1>
-      <p class="lead">Enter the {{ codeLength }}-digit code from your authenticator app.</p>
-
+    <kh-auth-layout title="Two-step verification" [lead]="'Enter the ' + codeLength + '-digit code from your authenticator app.'">
       @if (failure(); as message) {
-        <kh-alert tone="danger">{{ message }}</kh-alert>
+        <kh-alert tone="danger" #errorAlert tabindex="-1">{{ message }}</kh-alert>
       }
 
       <form (submit)="verify($event)" novalidate>
@@ -61,32 +72,26 @@ const CODE_LENGTH = 6;
           {{ busy() ? 'Checking…' : 'Verify and continue' }}
         </button>
       </form>
-    </div>
+
+      <p class="foot">
+        <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Back to sign in</a>
+      </p>
+      <p class="support">
+        Lost access to your authenticator?
+        <a routerLink="/pages/contact">Contact support</a>.
+      </p>
+    </kh-auth-layout>
   `,
   styles: `
-    :host {
-      display: block;
-      padding-block: var(--space-8) var(--space-10);
+    .foot {
+      margin-block-start: var(--space-6);
+      font-size: var(--text-sm);
     }
 
-    .panel {
-      max-inline-size: 26rem;
-      margin-inline: auto;
-    }
-
-    h1 {
-      font-size: var(--text-display-sm);
-    }
-
-    .lead {
+    .support {
+      margin-block-start: var(--space-2);
       color: var(--color-text-muted);
       font-size: var(--text-sm);
-      margin-block-end: var(--space-6);
-    }
-
-    form {
-      display: grid;
-      gap: var(--space-4);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -101,10 +106,14 @@ export class OtpPage {
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  private readonly params = this.route.snapshot.queryParamMap;
+  protected readonly challenge = signal(this.route.snapshot.queryParamMap.get('challenge'));
 
-  protected readonly challenge = signal(this.params.get('challenge'));
-  protected readonly returnUrl = computed(() => this.params.get('returnUrl') ?? undefined);
+  /** Live, not a snapshot: `returnUrl` can change under this component without a full reload — a
+   *  "Back to sign in" round trip that lands here again with a fresh challenge, for instance. */
+  protected readonly returnUrl = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('returnUrl') ?? undefined)),
+    { initialValue: this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined },
+  );
 
   private readonly submitted = signal(false);
 
@@ -112,12 +121,22 @@ export class OtpPage {
     code: formField('', [required('Code'), numeric(CODE_LENGTH)], this.submitted),
   });
 
+  private readonly errorAlert = viewChild('errorAlert', { read: ElementRef<HTMLElement> });
+
   constructor() {
-    // No challenge means the screen was reached directly. There is nothing to verify, so it sends
-    // the customer to the start rather than showing a box that cannot work.
+    // No challenge means the screen was reached directly — a bookmark, a stale tab, a refresh
+    // after the token was already spent. There is nothing to verify, so it sends the customer back
+    // to sign in with a reason the login screen can show, rather than a code box that cannot work.
     if (!this.challenge()) {
-      void this.router.navigate(['/auth/login'], { queryParams: { returnUrl: this.returnUrl() } });
+      void this.router.navigate(['/auth/login'], {
+        queryParams: { returnUrl: this.returnUrl(), reason: 'expired' },
+      });
+      return;
     }
+
+    effect(() => {
+      if (this.failure()) this.errorAlert()?.nativeElement.focus();
+    });
   }
 
   protected onCode(raw: string): void {
@@ -141,7 +160,7 @@ export class OtpPage {
     this.auth.verifyTwoFactor(this.challenge() ?? '', code).subscribe({
       next: (response) => {
         this.busy.set(false);
-        if (!this.flow.complete(response, this.returnUrl() ?? null)) {
+        if (!this.flow.complete(response, this.returnUrl() ?? null, 'password')) {
           this.failure.set('That code was accepted but the sign-in did not complete. Please try again.');
         }
       },

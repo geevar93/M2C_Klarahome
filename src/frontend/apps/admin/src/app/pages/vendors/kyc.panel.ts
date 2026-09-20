@@ -103,7 +103,7 @@ import { KYC_DOCUMENT_TYPES } from './vendor-vocabulary';
                     </a>
                   }
                   @if (canVerify() && document.status === 'Pending') {
-                    <button khButton type="button" size="sm" [disabled]="busy()" (click)="approve(document)">
+                    <button khButton type="button" size="sm" [disabled]="busy()" (click)="approving.set(document)">
                       Approve
                     </button>
                     <button
@@ -181,6 +181,17 @@ import { KYC_DOCUMENT_TYPES } from './vendor-vocabulary';
       visibility="Private"
       (picked)="chooseFile($event)"
       (closed)="pickerOpen.set(false)"
+    />
+
+    <kh-confirm-dialog
+      [open]="approving() !== null"
+      heading="Approve this document"
+      message="Approval is part of what lets this seller trade, and there is no un-approve: a document accepted by mistake has to be rejected and sent again by the seller."
+      confirmLabel="Approve"
+      tone="warning"
+      [busy]="busy()"
+      (confirmed)="approve()"
+      (cancelled)="approving.set(null)"
     />
 
     <kh-confirm-dialog
@@ -295,6 +306,7 @@ export class KycPanel {
   protected readonly fileName = signal('');
   protected readonly pickerOpen = signal(false);
   protected readonly rejecting = signal<KycDocumentResponse | null>(null);
+  protected readonly approving = signal<KycDocumentResponse | null>(null);
 
   protected readonly missingLabels = computed(() =>
     (this.summary()?.missing ?? []).map((type) => this.typeLabel(type)).join(', '),
@@ -363,7 +375,11 @@ export class KycPanel {
       });
   }
 
-  protected approve(document: KycDocumentResponse): void {
+  protected approve(): void {
+    const document = this.approving();
+    this.approving.set(null);
+    if (!document) return;
+
     const id = this.vendorId();
     this.busy.set(true);
 
@@ -392,6 +408,7 @@ export class KycPanel {
       next: () => {
         this.busy.set(false);
         this.rejecting.set(null);
+        this.toasts.success('Document rejected. The seller has been told why.');
         this.load(id);
         this.changed.emit();
       },

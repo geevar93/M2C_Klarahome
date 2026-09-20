@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FulfilmentService, NdrAction, NdrFilters, NdrResponse } from '@klarahome/data-access-admin';
+import { HasPermission } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   DataTable,
@@ -67,7 +68,7 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
  */
 @Component({
   selector: 'kh-ndr-page',
-  imports: [Alert, Badge, Button, CellTemplate, Control, DataTable, Field, FilterBar, Modal, PageHeader],
+  imports: [HasPermission, Alert, Badge, Button, CellTemplate, Control, DataTable, Field, FilterBar, Modal, PageHeader],
   template: `
     <kh-page-header
       heading="Failed deliveries"
@@ -112,7 +113,16 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
         @if (row.resolvedAt) {
           <kh-badge tone="success">Settled</kh-badge>
         } @else {
-          <button khButton type="button" size="sm" [disabled]="busy()" (click)="start(row)">Decide</button>
+          <button
+            khButton
+            type="button"
+            size="sm"
+            *khHasPermission="'shipping.ndr.manage'"
+            [disabled]="busy()"
+            (click)="start(row)"
+          >
+            Decide
+          </button>
         }
       </ng-template>
     </kh-data-table>

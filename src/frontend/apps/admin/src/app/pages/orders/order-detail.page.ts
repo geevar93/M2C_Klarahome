@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CancelLineBody,
   DocumentPrintService,
@@ -9,7 +9,7 @@ import {
   OrdersAdminService,
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import { ConfirmDialog, Modal, PageHeader, StatusBadge, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -66,6 +66,7 @@ interface CancelDraft {
     PageHeader,
     Skeleton,
     StatusBadge,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -98,7 +99,12 @@ interface CancelDraft {
                 <div>
                   <h2>{{ part.subOrderNumber }}</h2>
                   <p class="hint">
-                    {{ part.vendorName ?? 'Seller' }} ·
+                    @if (isPlatform()) {
+                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{ part.vendorName ?? 'Seller' }}</a>
+                    } @else {
+                      {{ part.vendorName ?? 'Seller' }}
+                    }
+                    ·
                     {{ money(part.netTotal, part.currencyCode) }}
                     @if (part.dispatchDueAt; as due) {
                       · dispatch due {{ when(due) }}
@@ -215,7 +221,7 @@ interface CancelDraft {
                       <kh-badge tone="info">Shown to the customer</kh-badge>
                     }
                   </span>
-                  <span class="note">{{ event.actorType }}</span>
+                  <span class="note">{{ actorLabel(event.actorType) }}</span>
                 </li>
               } @empty {
                 <li class="hint">Nothing has happened yet.</li>
@@ -385,20 +391,6 @@ interface CancelDraft {
           </tbody>
         </table>
 
-        <kh-field
-          label="Reason"
-          for="cancel-reason"
-          hint="Recorded on the timeline and shown to the customer."
-        >
-          <input
-            khControl
-            id="cancel-reason"
-            type="text"
-            maxlength="200"
-            [value]="cancelReason()"
-            (input)="cancelReason.set($any($event.target).value)"
-          />
-        </kh-field>
       }
 
       <div slot="footer">
@@ -416,9 +408,10 @@ interface CancelDraft {
       heading="Cancel these items"
       message="Stock goes back, any payment is refunded, and the customer is told. This cannot be undone."
       confirmLabel="Cancel them"
-      [requireReason]="false"
+      [confirmPhrase]="cancelling()?.subOrderNumber ?? null"
+      [requireReason]="true"
       [busy]="busy()"
-      (confirmed)="cancel()"
+      (confirmed)="cancel($event.reason)"
       (cancelled)="confirmCancel.set(false)"
     />
   `,
@@ -550,6 +543,25 @@ interface CancelDraft {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrderDetailPage {
+  private readonly session = inject(SessionStore);
+  /** A seller has no seller directory to link into; platform staff do. */
+  protected readonly isPlatform = computed(() => !this.session.session()?.vendorId);
+  /** `OrderActor` on the server, said in words. */
+  protected actorLabel(actor: string): string {
+    switch (actor) {
+      case 'Customer':
+        return 'By the customer';
+      case 'Vendor':
+        return 'By the seller';
+      case 'Platform':
+        return 'By store staff';
+      case 'System':
+        return 'Automatically';
+      default:
+        return actor;
+    }
+  }
+
   private readonly orders = inject(OrdersAdminService);
   private readonly documents = inject(DocumentPrintService);
   private readonly route = inject(ActivatedRoute);
@@ -569,7 +581,6 @@ export class OrderDetailPage {
   protected readonly cancelling = signal<SubOrderResponse | null>(null);
   protected readonly confirmCancel = signal(false);
   protected readonly cancelDraft = signal<readonly CancelDraft[]>([]);
-  protected readonly cancelReason = signal('');
 
   protected readonly subtitle = computed(() => {
     const current = this.order();
@@ -613,7 +624,6 @@ export class OrderDetailPage {
 
   protected startCancel(part: SubOrderResponse): void {
     this.cancelling.set(part);
-    this.cancelReason.set('');
     this.cancelDraft.set(
       part.lines
         .map((line) => {
@@ -636,7 +646,7 @@ export class OrderDetailPage {
     );
   }
 
-  protected cancel(): void {
+  protected cancel(reason: string): void {
     const part = this.cancelling();
     if (!part || this.busy()) return;
 
@@ -660,7 +670,7 @@ export class OrderDetailPage {
 
     this.act(
       this.orders.cancelSubOrder(part.id, {
-        reason: this.cancelReason() || null,
+        reason: reason.trim() || null,
         lines: isWhole ? null : lines,
       }),
       `${part.subOrderNumber} cancelled.`,

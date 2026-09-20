@@ -74,6 +74,8 @@ import { describeError } from '../../core/describe-error';
               </button>
             </div>
           </li>
+        } @empty {
+          <li class="hint">No feature flag is declared for this deployment.</li>
         }
       </ul>
 
@@ -128,7 +130,7 @@ import { describeError } from '../../core/describe-error';
               [disabled]="busyKey() !== null"
               (click)="saveRollout()"
             >
-              Save the rollout
+              {{ busyKey() !== null ? 'Saving…' : 'Save the rollout' }}
             </button>
           </div>
         </section>

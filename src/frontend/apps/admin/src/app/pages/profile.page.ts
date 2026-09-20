@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { AdminSessionService, SessionResponse, TwoFactorSetupResponse } from '@klarahome/data-access-admin';
 import { AuthService, SessionStore } from '@klarahome/data-access-auth';
-import { KhDatePipe } from '@klarahome/i18n';
 import { ConfirmDialog, FormShell, Modal, PageHeader } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field } from '@klarahome/ui-primitives';
 import { formField, formGroup, matches, minLength, numeric, required } from '@klarahome/util';
 import { ToastService } from '@klarahome/util';
 import { firstValueFrom } from 'rxjs';
 
+import { tableDateTime } from '../core/format';
 import { describeError, fieldErrors } from '../core/describe-error';
 
 /**
@@ -29,7 +29,7 @@ import { describeError, fieldErrors } from '../core/describe-error';
  */
 @Component({
   selector: 'kh-profile-page',
-  imports: [Alert, Badge, Button, ConfirmDialog, Control, Field, FormShell, KhDatePipe, Modal, PageHeader],
+  imports: [Alert, Badge, Button, ConfirmDialog, Control, Field, FormShell, Modal, PageHeader],
   template: `
     <kh-page-header heading="Your profile and security" [description]="identityLine()" />
 
@@ -147,13 +147,13 @@ import { describeError, fieldErrors } from '../core/describe-error';
                 }
               </p>
               <p class="muted">
-                {{ item.ipAddress ?? 'Address unknown' }} · started {{ item.startedAt | khDate }} · last seen
-                {{ item.lastSeenAt | khDate }}
+                {{ item.ipAddress ?? 'Address unknown' }} · started {{ dateTime(item.startedAt) }} · last seen
+                {{ dateTime(item.lastSeenAt) }}
               </p>
             </div>
 
             @if (!item.isCurrent) {
-              <button khButton type="button" size="sm" variant="danger" (click)="revoke(item)">End</button>
+              <button khButton type="button" size="sm" variant="danger" (click)="revoking.set(item)">End</button>
             }
           </li>
         } @empty {
@@ -165,7 +165,7 @@ import { describeError, fieldErrors } from '../core/describe-error';
 
       @if (otherSessionCount() > 0) {
         <button khButton type="button" variant="danger" (click)="revokeAllOpen.set(true)">
-          End the other {{ otherSessionCount() }} session(s)
+          End the other {{ otherSessionCount() === 1 ? 'session' : otherSessionCount() + ' sessions' }}
         </button>
       }
     </section>
@@ -260,6 +260,16 @@ import { describeError, fieldErrors } from '../core/describe-error';
         </button>
       </div>
     </kh-modal>
+
+    <kh-confirm-dialog
+      [open]="revoking() !== null"
+      heading="End this session?"
+      message="Whoever is signed in there is signed out immediately and has to sign in again."
+      confirmLabel="End it"
+      [busy]="revokingOne()"
+      (confirmed)="revoke()"
+      (cancelled)="revoking.set(null)"
+    />
 
     <kh-confirm-dialog
       [open]="revokeAllOpen()"
@@ -534,13 +544,27 @@ export class ProfilePage {
     });
   }
 
-  protected revoke(item: SessionResponse): void {
+  protected readonly revoking = signal<SessionResponse | null>(null);
+  protected readonly revokingOne = signal(false);
+  protected readonly dateTime = tableDateTime;
+
+  protected revoke(): void {
+    const item = this.revoking();
+    if (!item || this.revokingOne()) return;
+
+    this.revokingOne.set(true);
     this.accounts.revokeSession(item.id).subscribe({
       next: () => {
+        this.revokingOne.set(false);
+        this.revoking.set(null);
         this.toasts.success('That session has been ended.');
         this.loadSessions();
       },
-      error: (error: unknown) => this.toasts.danger(describeError(error, 'That session could not be ended.')),
+      error: (error: unknown) => {
+        this.revokingOne.set(false);
+        this.revoking.set(null);
+        this.toasts.danger(describeError(error, 'That session could not be ended.'));
+      },
     });
   }
 
@@ -550,7 +574,7 @@ export class ProfilePage {
       next: (result) => {
         this.revokingAll.set(false);
         this.revokeAllOpen.set(false);
-        this.toasts.success(`${result.revoked} session(s) ended.`);
+        this.toasts.success(result.revoked === 1 ? 'One session ended.' : `${result.revoked} sessions ended.`);
         this.loadSessions();
       },
       error: (error: unknown) => {

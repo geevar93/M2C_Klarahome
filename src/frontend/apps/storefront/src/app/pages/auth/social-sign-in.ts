@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
+import { Alert } from '@klarahome/ui-primitives';
+import { map } from 'rxjs';
 
 /**
  * "Continue with Google" — the provider buttons, above the email form.
@@ -21,10 +24,28 @@ import { AuthService } from '@klarahome/data-access-auth';
  * own text. Google's own brand guidance requires its four-colour mark be drawn in its own colours,
  * so these two paths are the one deliberate exception to the theme's "everything is a token" rule —
  * and they are marked as such rather than left for somebody to "fix" later.
+ *
+ * **The button's own text names the provider, not the parent brand.** Facebook's own name is what
+ * this button says — "Meta" is the parent company, not something a shopper is looking for on a
+ * sign-in screen, and the API answers `displayName: "Facebook"` for the same reason.
+ *
+ * A failed round trip — the provider refused consent, the callback's state cookie had already
+ * expired, the API rejected the exchange — lands the browser back on whichever auth page this
+ * component sits on, carrying an `error` query parameter (`GET …/{provider}/callback`'s failure
+ * path). This is where that is read and shown, because the buttons that started the trip are the
+ * ones whose failure it is; a login form is not otherwise involved in a sign-in that never reached
+ * a password.
  */
 @Component({
   selector: 'kh-social-sign-in',
+  imports: [Alert],
   template: `
+    @if (callbackFailed()) {
+      <kh-alert tone="danger" class="callback-error">
+        We could not complete that sign-in. Please try again, or use your email and password below.
+      </kh-alert>
+    }
+
     @if (providers().length > 0) {
       <div class="providers">
         @for (provider of providers(); track provider.provider) {
@@ -64,7 +85,7 @@ import { AuthService } from '@klarahome/data-access-auth';
                 </svg>
               }
             }
-            <span>Continue with {{ label(provider) }}</span>
+            <span>{{ starting() === provider.provider ? 'Opening…' : 'Continue with ' + label(provider) }}</span>
           </a>
         }
       </div>
@@ -81,6 +102,10 @@ import { AuthService } from '@klarahome/data-access-auth';
   styles: `
     :host {
       display: block;
+    }
+
+    .callback-error {
+      margin-block-end: var(--space-4);
     }
 
     .providers {
@@ -138,9 +163,16 @@ import { AuthService } from '@klarahome/data-access-auth';
 })
 export class SocialSignIn {
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   /** Carried through the whole redirect round trip, so a shopper lands back where they started. */
   readonly returnUrl = input<string | undefined>(undefined);
+
+  /** True when the browser just came back from a provider that refused or failed. */
+  protected readonly callbackFailed = toSignal(
+    this.route.queryParamMap.pipe(map((params) => !!params.get('error'))),
+    { initialValue: !!this.route.snapshot.queryParamMap.get('error') },
+  );
 
   /**
    * Which provider the browser is currently leaving for, if any. Marks the anchor `aria-busy` — the
@@ -161,10 +193,10 @@ export class SocialSignIn {
   }
 
   /**
-   * What the button says. The API sends the provider enum's own name — "Facebook" — and the brand
-   * it belongs to is now Meta, which is what a shopper is looking for on the button.
+   * What the button says: the API's own `displayName` for the provider, unchanged. Facebook, not
+   * Meta — see the class doc comment for why the parent brand does not belong on this button.
    */
   protected label(provider: { provider: string; displayName: string }): string {
-    return provider.provider === 'facebook' ? 'Meta' : provider.displayName;
+    return provider.displayName;
   }
 }

@@ -96,7 +96,7 @@ export interface AdminIdentityView {
       <div class="menu-panel">
         <p class="roles">{{ roleLine() }}</p>
         <a routerLink="/profile" (click)="closeAccount()">Your profile and security</a>
-        <button type="button" class="sign-out" (click)="signedOut.emit()">Sign out</button>
+        <button type="button" class="sign-out" (click)="closeAccount(); signedOut.emit()">Sign out</button>
       </div>
     </details>
   `,
@@ -259,6 +259,10 @@ export interface AdminIdentityView {
       }
     }
   `,
+  host: {
+    '(document:click)': 'onDocumentClick($event)',
+    '(document:keydown.escape)': 'closeAccount()',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminTopBar {
@@ -288,5 +292,11 @@ export class AdminTopBar {
   /** Closes the account disclosure after a link inside it is followed. */
   protected closeAccount(): void {
     this.host.nativeElement.querySelector('details.account')?.removeAttribute('open');
+  }
+
+  /** A click outside the account menu, or Escape anywhere, closes it — a `<details>` does neither. */
+  protected onDocumentClick(event: Event): void {
+    const account = this.host.nativeElement.querySelector('details.account');
+    if (account?.hasAttribute('open') && !account.contains(event.target as Node)) this.closeAccount();
   }
 }

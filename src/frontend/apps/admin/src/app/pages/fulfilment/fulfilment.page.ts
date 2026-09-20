@@ -8,6 +8,7 @@ import {
   ShipmentResponse,
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
+import { HasPermission } from '@klarahome/data-access-auth';
 import { Modal, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -51,7 +52,7 @@ interface PackLine {
  */
 @Component({
   selector: 'kh-fulfilment-page',
-  imports: [Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
+  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
   template: `
     <kh-page-header
       heading="Fulfilment"
@@ -164,7 +165,14 @@ interface PackLine {
                   }
                 </td>
                 <td>
-                  <button khButton type="button" size="sm" [disabled]="busy()" (click)="startPack(part)">
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    *khHasPermission="'shipping.shipment.manage'"
+                    [disabled]="busy()"
+                    (click)="startPack(part)"
+                  >
                     Pack
                   </button>
                 </td>
@@ -383,7 +391,14 @@ interface PackLine {
           </button>
         } @else {
           <button khButton type="button" [disabled]="busy()" (click)="printLabel()">Print the label</button>
-          <button khButton type="button" variant="primary" [disabled]="busy()" (click)="dispatch()">
+          <button
+            khButton
+            type="button"
+            variant="primary"
+            *khHasPermission="'orders.order.transition'"
+            [disabled]="busy()"
+            (click)="dispatch()"
+          >
             Hand over to the courier
           </button>
         }

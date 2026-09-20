@@ -225,7 +225,7 @@ export class ContentPagesPage {
 
   protected readonly columns: readonly DataTableColumn<PageSummaryResponse>[] = [
     { key: 'title', label: 'Page', kind: 'custom' },
-    { key: 'type', label: 'Kind', value: (row) => row.type, width: '8rem' },
+    { key: 'type', label: 'Kind', value: (row) => PAGE_TYPES.find((entry) => entry.value === row.type)?.label ?? row.type, width: '8rem' },
     { key: 'status', label: 'State', kind: 'custom', width: '14rem' },
     { key: 'version', label: 'Version', kind: 'number', value: (row) => row.version, width: '6rem' },
     {

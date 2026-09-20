@@ -8,6 +8,7 @@ import {
   ProductListItem,
   ProductStatus,
 } from '@klarahome/data-access-admin';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   BulkAction,
   CellTemplate,
@@ -19,6 +20,7 @@ import {
   Modal,
   PageHeader,
   toneFor,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Button, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -50,14 +52,14 @@ import { tableDate, tableDateTime } from '../../core/format';
  */
 @Component({
   selector: 'kh-products-page',
-  imports: [Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink],
+  imports: [HasPermission, Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink, ConfirmDialog],
   template: `
     <kh-page-header heading="Products" description="Everything the catalogue holds, whoever created it.">
-      <a khButton variant="primary" routerLink="/catalog/products/new">
+      <a khButton variant="primary" routerLink="/catalog/products/new" *khHasPermission="'catalog.product.manage'">
         <kh-icon name="plus" size="sm" />
         New product
       </a>
-      <button khButton type="button" (click)="importOpen.set(true)">
+      <button khButton type="button" *khHasPermission="'catalog.import.run'" (click)="openImport()">
         <kh-icon name="download" size="sm" />
         Import CSV
       </button>
@@ -73,6 +75,8 @@ import { tableDate, tableDateTime } from '../../core/format';
 
     <kh-data-table
       label="Products"
+      [filtered]="hasFilters()"
+      (filtersCleared)="applyFilters({})"
       [columns]="columns"
       [rows]="list.rows()"
       [rowKey]="rowKey"
@@ -106,24 +110,31 @@ import { tableDate, tableDateTime } from '../../core/format';
 
     <kh-modal
       [open]="importOpen()"
-      heading="Import products"
+      [heading]="jobKind() === 'export' ? 'Export products' : 'Import products'"
       width="44rem"
       [dismissible]="!importing()"
       (closed)="closeImport()"
     >
-      <p class="hint">
-        A CSV in the platform's own column order. Download the template if you have not imported before — a
-        file with the wrong headings fails every row.
-      </p>
+      @if (jobKind() === 'export') {
+        <p class="hint">
+          The whole catalogue is being written to a CSV. The link appears below when it is ready; it is the same
+          column order the import accepts.
+        </p>
+      } @else {
+        <p class="hint">
+          A CSV in the platform's own column order. Download the template if you have not imported before — a
+          file with the wrong headings fails every row.
+        </p>
 
-      <div class="import-actions">
-        <label class="upload">
-          <input type="file" accept=".csv,text/csv" [disabled]="importing()" (change)="startImport($event)" />
-          <kh-icon name="plus" size="sm" />
-          {{ importing() ? 'Importing…' : 'Choose a CSV' }}
-        </label>
-        <button khButton type="button" size="sm" (click)="downloadTemplate()">Download the template</button>
-      </div>
+        <div class="import-actions">
+          <label class="upload">
+            <input type="file" accept=".csv,text/csv" [disabled]="importing()" (change)="startImport($event)" />
+            <kh-icon name="plus" size="sm" />
+            {{ importing() ? 'Importing…' : 'Choose a CSV' }}
+          </label>
+          <button khButton type="button" size="sm" (click)="downloadTemplate()">Download the template</button>
+        </div>
+      }
 
       @if (importError(); as message) {
         <kh-alert tone="danger" heading="The import could not start">{{ message }}</kh-alert>
@@ -185,6 +196,15 @@ import { tableDate, tableDateTime } from '../../core/format';
         </button>
       </div>
     </kh-modal>
+    <kh-confirm-dialog
+      [open]="archiving() !== null"
+      heading="Archive these products"
+      [message]="archiveMessage()"
+      confirmLabel="Archive them"
+      [busy]="busy()"
+      (confirmed)="confirmArchive()"
+      (cancelled)="archiving.set(null)"
+    />
   `,
   styles: `
     kh-alert {
@@ -272,6 +292,8 @@ import { tableDate, tableDateTime } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductsPage implements OnDestroy {
+  protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
+  private readonly session = inject(SessionStore);
   private readonly catalog = inject(CatalogAdminService);
   private readonly documents = inject(DocumentPrintService);
   private readonly toasts = inject(ToastService);
@@ -282,6 +304,8 @@ export class ProductsPage implements OnDestroy {
   protected readonly busy = signal(false);
 
   protected readonly importOpen = signal(false);
+  /** The one modal serves both jobs; this is which of them it is showing. */
+  protected readonly jobKind = signal<'import' | 'export'>('import');
   protected readonly importing = signal(false);
   protected readonly importError = signal<string | null>(null);
   protected readonly job = signal<CatalogJobResponse | null>(null);
@@ -349,6 +373,8 @@ export class ProductsPage implements OnDestroy {
    * reason string is what the table shows on hover.
    */
   protected readonly bulkActions = computed<readonly BulkAction[]>(() => {
+    // Nothing to offer a reader: the route admits `catalog.product.read`, the actions need more.
+    if (!this.session.hasPermission('catalog.product.manage')) return [];
     const reason = this.busy() ? 'Another bulk action is still running.' : null;
     return [
       { key: 'publish', label: 'Publish', disabledReason: reason },
@@ -371,8 +397,32 @@ export class ProductsPage implements OnDestroy {
     this.list.setFilters(filters);
   }
 
+  /** Which products a bulk archive is waiting on the operator to confirm, or null. */
+  protected readonly archiving = signal<readonly string[] | null>(null);
+
+  protected readonly archiveMessage = computed(() => {
+    const count = this.archiving()?.length ?? 0;
+    return `${count} ${count === 1 ? 'product comes' : 'products come'} off the storefront and out of every seller's offers. Archiving is not undone by publishing again.`;
+  });
+
   protected runBulk(action: { key: string; ids: readonly string[] }): void {
     if (action.ids.length === 0 || this.busy()) return;
+
+    // Publish and unpublish are a click apart from their reverse; archive is not, so it asks.
+    if (action.key === 'archive') {
+      this.archiving.set(action.ids);
+      return;
+    }
+    this.execute(action);
+  }
+
+  protected confirmArchive(): void {
+    const ids = this.archiving();
+    this.archiving.set(null);
+    if (ids) this.execute({ key: 'archive', ids });
+  }
+
+  private execute(action: { key: string; ids: readonly string[] }): void {
 
     const status: ProductStatus =
       action.key === 'publish' ? 'Active' : action.key === 'unpublish' ? 'Inactive' : 'Archived';
@@ -424,9 +474,15 @@ export class ProductsPage implements OnDestroy {
     });
   }
 
+  protected openImport(): void {
+    this.jobKind.set('import');
+    this.importOpen.set(true);
+  }
+
   protected exportAll(): void {
     this.catalog.exportProducts().subscribe({
       next: (created) => {
+        this.jobKind.set('export');
         this.importOpen.set(true);
         this.watch(created);
       },

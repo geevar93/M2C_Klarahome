@@ -7,12 +7,23 @@ import {
   VendorShippingOptionsResponse,
 } from '@klarahome/data-access-api';
 import { newUuid } from '@klarahome/util';
-import { Observable, catchError, finalize, of, tap, throwError } from 'rxjs';
+import { Observable, catchError, finalize, of, switchMap, tap, throwError } from 'rxjs';
 
 /** The four screens of the checkout, in the order they are walked. */
 export type CheckoutStep = 'address' | 'delivery' | 'payment' | 'review';
 
 export const CHECKOUT_STEPS: readonly CheckoutStep[] = ['address', 'delivery', 'payment', 'review'];
+
+/**
+ * The session states in which nothing more can be written. A remembered id that answers with one
+ * of these is a checkout that already happened, or one the API gave up on — either way, resuming it
+ * would show a form the server will refuse, so a new session is started instead.
+ */
+const CLOSED_STATUSES: ReadonlySet<string> = new Set(['Placing', 'Placed', 'Abandoned', 'Expired']);
+
+export function isCheckoutOpen(session: Pick<CheckoutResponse, 'status'>): boolean {
+  return !CLOSED_STATUSES.has(session.status);
+}
 
 /**
  * The checkout session — one server-side object, walked in four steps.
@@ -62,6 +73,11 @@ export class CheckoutStore {
   readonly error: Signal<string | null> = this.failure.asReadonly();
 
   readonly quote = computed(() => this.session()?.cart?.quote ?? null);
+  /** Whether every seller in the basket has a delivery service chosen. */
+  readonly hasShipping = computed(() => {
+    const session = this.session();
+    return !!session?.shippingAddress && session.shipments.every((shipment) => !!shipment.selectedCode);
+  });
   readonly currencyCode = computed(() => this.session()?.currencyCode ?? 'INR');
   readonly shippingAddress = computed(() => this.session()?.shippingAddress ?? null);
   readonly paymentMethod = computed(() => this.session()?.paymentMethod ?? null);
@@ -93,11 +109,16 @@ export class CheckoutStore {
     this.starting.set(true);
     this.failure.set(null);
 
+    const fresh = () => this.api.storeStartCheckout({ silentErrors: true });
     const request = rememberedId
-      ? this.api
-          .storeGetCheckout(rememberedId, { silentErrors: true })
-          .pipe(catchError(() => this.api.storeStartCheckout({ silentErrors: true })))
-      : this.api.storeStartCheckout({ silentErrors: true });
+      ? this.api.storeGetCheckout(rememberedId, { silentErrors: true }).pipe(
+          // A session that is gone, or one that is no longer open, is not resumed: the API answers
+          // a placed or expired session to a read, and a checkout built on it would fail at the
+          // very last tap.
+          switchMap((session) => (isCheckoutOpen(session) ? of(session) : fresh())),
+          catchError(() => fresh()),
+        )
+      : fresh();
 
     return request.pipe(
       tap((session) => this.adopt(session)),
@@ -135,26 +156,31 @@ export class CheckoutStore {
     return this.mutate((id) => this.api.storeReviewCheckout(id, { silentErrors: true }));
   }
 
-  /** The courier services each seller offers to the chosen address. Read when the address is set. */
-  loadShippingOptions(): void {
+  /**
+   * The courier services each seller offers to the chosen address. Read when the address is set.
+   *
+   * Returned as well as stored, so a page can act on the answer — choose a default, say — without
+   * an effect that has to guess whether the list it sees is the new one.
+   */
+  loadShippingOptions(): Observable<readonly VendorShippingOptionsResponse[]> {
     const id = this.session()?.id;
-    if (!id) return;
+    if (!id) return of([]);
 
-    this.api
-      .storeCheckoutShippingOptions(id, { silentErrors: true })
-      .pipe(catchError(() => of<VendorShippingOptionsResponse[]>([])))
-      .subscribe((options) => this.shipping.set(options));
+    return this.api.storeCheckoutShippingOptions(id, { silentErrors: true }).pipe(
+      catchError(() => of<VendorShippingOptionsResponse[]>([])),
+      tap((options) => this.shipping.set(options)),
+    );
   }
 
   /** What may be paid with, and why not. Read after the courier is chosen: the fee depends on it. */
-  loadPaymentMethods(): void {
+  loadPaymentMethods(): Observable<readonly PaymentMethodResponse[]> {
     const id = this.session()?.id;
-    if (!id) return;
+    if (!id) return of([]);
 
-    this.api
-      .storeCheckoutPaymentMethods(id, { silentErrors: true })
-      .pipe(catchError(() => of<PaymentMethodResponse[]>([])))
-      .subscribe((methods) => this.methods.set(methods));
+    return this.api.storeCheckoutPaymentMethods(id, { silentErrors: true }).pipe(
+      catchError(() => of<PaymentMethodResponse[]>([])),
+      tap((methods) => this.methods.set(methods)),
+    );
   }
 
   /**

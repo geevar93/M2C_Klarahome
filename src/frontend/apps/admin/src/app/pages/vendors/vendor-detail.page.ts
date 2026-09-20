@@ -11,7 +11,7 @@ import {
   VendorsAdminService,
   VendorStaffResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import { ConfirmDialog, EntityOption, EntityPicker, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Rating, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map } from 'rxjs';
@@ -24,7 +24,7 @@ import { BankAccountsPanel } from './bank-accounts.panel';
 import { KycPanel } from './kyc.panel';
 import { PickupLocationsPanel } from './pickup-locations.panel';
 import { ServiceableRegionsPanel } from './serviceable-regions.panel';
-import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
+import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
 
 /**
  * One seller, as the platform sees them.
@@ -120,18 +120,18 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
 
       <div class="layout">
         <div class="column">
-          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="true" (changed)="loadReadiness()" />
+          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="canVerify()" (changed)="loadReadiness()" />
 
           <kh-bank-accounts-panel
             [vendorId]="id"
-            [canManage]="true"
-            [canVerify]="true"
+            [canManage]="canManage()"
+            [canVerify]="canVerify()"
             (changed)="loadReadiness()"
           />
 
-          <kh-pickup-locations-panel [vendorId]="id" [canManage]="true" (changed)="loadReadiness()" />
+          <kh-pickup-locations-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
 
-          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="true" (changed)="loadReadiness()" />
+          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
         </div>
 
         <div class="column">
@@ -161,8 +161,8 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
                 [value]="businessType()"
                 (change)="businessType.set($any($event.target).value)"
               >
-                @for (type of businessTypes; track type) {
-                  <option [value]="type">{{ type }}</option>
+                @for (choice of businessTypes; track choice.value) {
+                  <option [value]="choice.value">{{ choice.label }}</option>
                 }
               </select>
             </kh-field>
@@ -253,7 +253,7 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
               [disabled]="busy()"
               (click)="saveLegal()"
             >
-              Save the legal record
+              {{ busy() ? 'Saving…' : 'Save the legal record' }}
             </button>
 
             @if (current.statusReason) {
@@ -315,7 +315,7 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
               [disabled]="busy()"
               (click)="assignPlan()"
             >
-              Save the plan
+              {{ busy() ? 'Saving…' : 'Save the plan' }}
             </button>
           </section>
 
@@ -524,6 +524,11 @@ import { VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VendorDetailPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('vendors.vendor.manage'));
+  protected readonly canVerify = computed(() => this.session.hasPermission('vendors.kyc.verify'));
+
   private readonly vendors = inject(VendorsAdminService);
   private readonly identity = inject(IdentityAdminService);
 
@@ -549,16 +554,7 @@ export class VendorDetailPage {
   /** The platform's states, so nobody types an identifier (Step 28B, deliverable 3). */
   protected readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
 
-  protected readonly businessTypes: readonly VendorBusinessType[] = [
-    'Individual',
-    'SoleProprietorship',
-    'Partnership',
-    'LimitedLiabilityPartnership',
-    'PrivateLimited',
-    'PublicLimited',
-    'HinduUndividedFamily',
-    'Trust',
-  ];
+  protected readonly businessTypes = BUSINESS_TYPES;
 
   protected readonly dateTime = tableDateTime;
   protected readonly id = this.route.snapshot.paramMap.get('id') ?? '';

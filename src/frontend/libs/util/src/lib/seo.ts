@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, inject } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
+import { NavigationStart, Router } from '@angular/router';
 
 /**
  * Title, meta, canonical and JSON-LD — the whole indexable surface of a page, in one place.
@@ -98,6 +99,12 @@ export class SeoService {
   private readonly document = inject(DOCUMENT);
   private readonly title = inject(Title);
   private readonly meta = inject(Meta);
+  private readonly router = inject(Router, { optional: true });
+
+  /** Whether a page has set its own title since the current navigation began. */
+  private pageTitled = false;
+  /** The route's static title for the current page, kept so a late store config can re-format it. */
+  private routeTitle: string | null = null;
 
   private site: SeoSiteConfig = DEFAULT_SITE_CONFIG;
 
@@ -123,9 +130,15 @@ export class SeoService {
     if (this.applied) {
       this.apply(this.applied);
     }
+    if (!this.pageTitled) this.setRouteTitle(this.routeTitle);
   }
 
   /** The configured origin, for a caller that needs to build an absolute URL of its own. */
+  /** The store's name, for a title that has nothing else to say. */
+  get storeName(): string {
+    return this.site.storeName || 'Klara Home';
+  }
+
   get canonicalBaseUrl(): string {
     return this.site.canonicalBaseUrl.replace(/\/+$/, '');
   }
@@ -136,11 +149,49 @@ export class SeoService {
    * `noindex` is decided here rather than by the caller: a page that asks to be indexed on a
    * deployment that may not be indexed does not get its way.
    */
+  constructor() {
+    this.router?.events.subscribe((event) => {
+      if (event instanceof NavigationStart) this.pageTitled = false;
+    });
+  }
+
+  /**
+   * Whether a page has named itself since the current navigation began.
+   *
+   * A page with resolvers is constructed *during* activation, and the router runs its
+   * `TitleStrategy` only after `NavigationEnd` — so a product that set its own name as the title
+   * would have it overwritten by the route's static "Product" a moment later. The strategy asks
+   * this first and stands down; a route whose page never named itself keeps the static title.
+   */
+  pageOwnsCurrentTitle(): boolean {
+    return this.pageTitled;
+  }
+
+  /**
+   * The route's own title, as the router's `TitleStrategy` hands it over.
+   *
+   * Written through here rather than straight to `Title` so it is formatted with the store's
+   * template and, like a page's own metadata, re-formatted when the store configuration arrives
+   * after the first navigation — otherwise the first page of a visit reads "Cart" while every
+   * page after it reads "Cart | Klara Home".
+   */
+  setRouteTitle(title: string | null): void {
+    this.routeTitle = title;
+    this.title.setTitle(title ? this.format(title) : this.storeName);
+  }
+
   apply(metadata: SeoMetadata): void {
     this.applied = metadata;
 
     const pageTitle = metadata.title?.trim() ?? '';
-    this.title.setTitle(pageTitle ? this.format(pageTitle) : pageTitle);
+    // A blank title is not written: the document's title is `AppTitleStrategy`'s to set as the
+    // router activates a route, and a page that calls `apply()` for its description or canonical
+    // without a `title` of its own — most of them, now that the route itself supplies the fallback
+    // — must not blank out what the strategy just set.
+    if (pageTitle) {
+      this.title.setTitle(this.format(pageTitle));
+      this.pageTitled = true;
+    }
 
     const description =
       metadata.description?.trim() || this.site.defaultMetaDescription || this.site.storeTagline;
@@ -206,7 +257,13 @@ export class SeoService {
   }
 
   /** Applies the title template, substituting both tokens the contract defines. */
-  private format(pageTitle: string): string {
+  /**
+   * The page title in the store's own template — `{title} | {store}` by default. Public so the
+   * router's title strategy formats its fallback the same way a page formats its own; two
+   * templates for one tab is how "Cushions | Klara Home" and "Cart · Klara Home" end up side by
+   * side in a customer's history.
+   */
+  format(pageTitle: string): string {
     const applied = this.site.titleTemplate
       .replace('{title}', pageTitle)
       .replace('{store}', this.site.storeName);

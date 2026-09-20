@@ -118,7 +118,13 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
           <button type="button" class="linkish" (click)="backToPassword()">Start again</button>
         </p>
       } @else if (step() === 'password') {
-        <p class="lead">Sign in with the account your administrator created for you.</p>
+        @if (sessionEnded()) {
+          <p class="lead">Your session has ended. Sign in again to carry on where you were.</p>
+        } @else if (returnUrl()) {
+          <p class="lead">Sign in to continue to the screen you were sent a link to.</p>
+        } @else {
+          <p class="lead">Sign in with the account your administrator created for you.</p>
+        }
 
         <form (submit)="submitPassword($event)" novalidate>
           @if (failure(); as message) {
@@ -317,7 +323,7 @@ export class LoginPage {
     currentPassword: formField('', [required('Your temporary password')], this.passwordChangeSubmitted),
     newPassword: formField(
       '',
-      [required('A new password'), minLength(8, 'The new password')],
+      [required('A new password'), minLength(12, 'The new password')],
       this.passwordChangeSubmitted,
     ),
   });
@@ -344,6 +350,11 @@ export class LoginPage {
   /** Read off the URL rather than injected as an input, so a guard's redirect is honoured. */
   protected readonly returnUrl = computed(() =>
     new URLSearchParams(globalThis.location?.search ?? '').get('returnUrl'),
+  );
+
+  /** Sent here by the shell because the session expired, not by choice (`SignInFlow.sessionEnded`). */
+  protected readonly sessionEnded = computed(
+    () => new URLSearchParams(globalThis.location?.search ?? '').get('reason') === 'expired',
   );
 
   protected async submitPassword(event: Event): Promise<void> {

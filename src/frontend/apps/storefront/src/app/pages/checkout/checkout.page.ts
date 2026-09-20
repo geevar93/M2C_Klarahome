@@ -1,11 +1,28 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AddressBookStore, ProfileStore } from '@klarahome/data-access-account';
 import { CartStore } from '@klarahome/data-access-cart';
-import { CHECKOUT_STEPS, CheckoutStep, CheckoutStore, PaymentHandoff } from '@klarahome/data-access-checkout';
+import { CheckoutStore, PaymentHandoff } from '@klarahome/data-access-checkout';
 import { ReferenceDataService } from '@klarahome/data-access-content';
-import { Alert, Button, Drawer, EmptyState, Skeleton, Stepper } from '@klarahome/ui-primitives';
+import {
+  Alert,
+  Button,
+  Disclosure,
+  Drawer,
+  ErrorState,
+  PageHeader,
+  Skeleton,
+} from '@klarahome/ui-primitives';
 import {
   AddressCard,
   AddressForm,
@@ -26,7 +43,7 @@ import {
   LiveAnnouncer,
   ToastService,
 } from '@klarahome/util';
-import { map } from 'rxjs';
+import { switchMap } from 'rxjs';
 
 import { CommerceMapper } from '../../core/commerce.mapper';
 
@@ -36,29 +53,33 @@ const SESSION_KEY = 'kh.checkout.session';
 /**
  * Checkout — `/checkout`.
  *
- * Four steps over **one server-side session**: address, delivery, payment, review. Each step is a
- * write to that session, and the session answers with itself and a fresh quote every time — which
- * is why the total on the review step is a figure the server produced and not one this page
- * assembled from a subtotal and a courier charge.
+ * **One page, not four steps.** Address, delivery, payment and the order summary are sections of
+ * one scrolling page with "Place order" at the bottom. Each section is still a write to the same
+ * **server-side session**, which answers with itself and a fresh quote every time — nothing about
+ * the price is decided here. What changed is only that the shopper no longer taps "Continue" three
+ * times to reach the button that matters: a returning customer with a saved address and one courier
+ * per seller goes from the cart to an order in a single tap.
  *
- * **The step is in the URL** (`?step=payment`). A four-screen flow whose position lives in a
- * component field is a flow where the browser's back button leaves the shop, and on a phone the
- * back gesture is how people correct a mistake. It also means a reload lands where the shopper was.
+ * **Defaults are chosen for the shopper, and shown, never hidden.** The default address is
+ * preselected; the cheapest delivery service per seller is preselected as soon as the address is
+ * known; the first available payment method is preselected once delivery is priced. Every one of
+ * those is a visible control the shopper can change, so a default is a saved tap and not a decision
+ * made behind their back.
+ *
+ * **Sections reveal in order.** Delivery appears once an address is set, payment once every seller
+ * has a service — because the API cannot price either without the step before it, and an empty
+ * "no delivery options" panel above an address form is a page that looks broken.
  *
  * **The session outlives the page.** Its id is kept in `sessionStorage`, so being bounced to the
  * payment gateway and back — or reloading on a stalled network — resumes the same checkout rather
- * than starting a new one. `sessionStorage` and not `localStorage`: an abandoned checkout should not
- * be waiting a week later.
- *
- * **The furthest reachable step is derived from the session, never from history.** A session with no
- * address cannot show a payment form, whatever the URL says — a shopper who bookmarked
- * `?step=payment` is put back on the address step rather than shown a form the server would refuse.
+ * than starting a new one. A remembered session that is no longer open is not resumed
+ * (`CheckoutStore.start`).
  *
  * **Sign-in is required, and that is the API's rule** (`RequireAuthorization` on the whole
- * `/store/checkout` group: a checkout session is opened against a customer id and the address step
- * chooses from that customer's address book). The route's `authenticatedGuard` carries the shopper
- * to sign-in and back with their basket merged, which is the closest this storefront can get until
- * guest checkout exists as a feature rather than a setting.
+ * `/store/checkout` group). The route's `authenticatedGuard` carries the shopper to sign-in and
+ * back with their basket merged. Guest checkout is on the roadmap; when the API opens a session
+ * against an anonymous cart, this page gains a "Contact" section above the address and nothing
+ * else about it changes.
  */
 @Component({
   selector: 'kh-checkout-page',
@@ -68,155 +89,172 @@ const SESSION_KEY = 'kh.checkout.session';
     Alert,
     Button,
     CartLine,
+    Disclosure,
     Drawer,
-    EmptyState,
+    ErrorState,
     MoneyPipe,
     OrderSummary,
+    PageHeader,
     PaymentMethodSelector,
     RouterLink,
     ShippingOptionSelector,
     Skeleton,
-    Stepper,
     StickyAction,
   ],
   template: `
-    <h1>Checkout</h1>
+    <kh-page-header title="Checkout" backHref="/cart" backLabel="Back to cart" />
 
     @if (store.isStarting()) {
       <kh-skeleton height="20rem" />
     } @else if (!store.current()) {
-      <kh-empty-state
+      <kh-error-state
         heading="We could not open a checkout"
-        message="Your basket may have changed since you last looked. Open your cart and try again."
-      >
-        <a khButton variant="primary" routerLink="/cart">Back to cart</a>
-      </kh-empty-state>
+        message="Your cart may have changed since you last looked. Try again, or go back to your cart."
+        (retry)="start()"
+      />
+      <p class="after-error">
+        <a khButton variant="secondary" routerLink="/cart">Back to cart</a>
+      </p>
     } @else {
-      <kh-stepper [steps]="stepLabels" [active]="step()" (stepSelected)="goTo($any($event))" />
-
-      @if (store.error(); as message) {
-        <kh-alert tone="danger" heading="That did not work">{{ message }}</kh-alert>
-      }
-
       <div class="layout">
-        <div class="step">
-          @switch (step()) {
-            @case ('address') {
-              <h2>Where should we deliver?</h2>
+        <div class="sections">
+          <!-- 1. Address -->
+          <section class="block" aria-labelledby="checkout-address">
+            <h2 id="checkout-address">Delivery address</h2>
 
-              @if (addresses().length > 0) {
-                <div class="addresses">
-                  @for (address of addresses(); track address.id) {
-                    <kh-address-card
-                      [address]="address"
-                      [selectable]="true"
-                      group="checkout-address"
-                      [selected]="address.id === selectedAddressId()"
-                      (chosen)="selectedAddressId.set($event)"
-                    />
-                  }
-                </div>
-
-                <button khButton variant="secondary" type="button" (click)="openAddressForm()">
-                  Add a new address
-                </button>
-              } @else if (addressBook.hasLoaded()) {
-                <kh-alert tone="info">
-                  You have no saved addresses yet. Add the one this order should go to.
-                </kh-alert>
-                <button khButton variant="primary" type="button" (click)="openAddressForm()">
-                  Add an address
-                </button>
-              } @else {
-                <kh-skeleton height="8rem" />
-              }
-            }
-
-            @case ('delivery') {
-              <h2>How should it get to you?</h2>
-              <p class="lead">Each seller ships separately, so each one has its own delivery choice.</p>
-
-              <kh-shipping-option-selector [groups]="shippingGroups()" (chosen)="chooseShipping($event)" />
-            }
-
-            @case ('payment') {
-              <h2>How would you like to pay?</h2>
-
-              <kh-payment-method-selector
-                [methods]="paymentMethods()"
-                [selected]="store.paymentMethod()"
-                legend="Payment method"
-                (chosen)="choosePayment($event)"
-              />
-
-              @if (codRefusal(); as reason) {
-                <kh-alert tone="warning" heading="Cash on delivery is not available">{{ reason }}</kh-alert>
-              }
-            }
-
-            @case ('review') {
-              <h2>Check everything over</h2>
-
-              @if (deliverTo(); as address) {
-                <section class="review-block">
-                  <h3>Delivering to</h3>
-                  <kh-address-card [address]="address" />
-                  <button khButton variant="tertiary" size="sm" type="button" (click)="goTo('address')">
-                    Change
-                  </button>
-                </section>
-              }
-
-              <section class="review-block">
-                <h3>Paying by</h3>
-                <p>{{ paymentLabel() }}</p>
-                <button khButton variant="tertiary" size="sm" type="button" (click)="goTo('payment')">
-                  Change
-                </button>
-              </section>
-
-              <section class="review-block">
-                <h3>Your items</h3>
-                @for (line of reviewLines(); track line.id) {
-                  <kh-cart-line [line]="line" [readOnly]="true" />
+            @if (addresses().length > 0) {
+              <div class="addresses">
+                @for (address of addresses(); track address.id) {
+                  <kh-address-card
+                    [address]="address"
+                    [selectable]="true"
+                    group="checkout-address"
+                    [selected]="address.id === selectedAddressId()"
+                    (chosen)="chooseAddress($event)"
+                  />
                 }
-              </section>
+              </div>
+              <button khButton variant="tertiary" size="sm" type="button" (click)="openAddressForm()">
+                Add a new address
+              </button>
+            } @else if (addressBook.hasLoaded()) {
+              <p class="muted">You have no saved addresses yet. Add the one this order should go to.</p>
+              <button khButton variant="primary" type="button" (click)="openAddressForm()">
+                Add an address
+              </button>
+            } @else {
+              <kh-skeleton height="8rem" />
             }
+          </section>
+
+          <!-- 2. Delivery: only once the address is known, because the couriers depend on it. -->
+          @if (store.shippingAddress()) {
+            <section class="block" aria-labelledby="checkout-delivery">
+              <h2 id="checkout-delivery">Delivery</h2>
+
+              @if (shippingGroups().length === 0) {
+                <kh-skeleton height="6rem" />
+              } @else {
+                @if (shippingGroups().length > 1) {
+                  <p class="muted">Each seller ships separately, so each one has its own delivery service.</p>
+                }
+                <kh-shipping-option-selector [groups]="shippingGroups()" (chosen)="chooseShipping($event)" />
+              }
+            </section>
           }
+
+          <!-- 3. Payment: only once delivery is priced, because the fee and the COD ceiling depend on it. -->
+          @if (store.hasShipping()) {
+            <section class="block" aria-labelledby="checkout-payment">
+              <h2 id="checkout-payment">Payment</h2>
+
+              @if (paymentMethods().length === 0 && !paymentMethodsLoaded()) {
+                <kh-skeleton height="6rem" />
+              } @else {
+                <kh-payment-method-selector
+                  [methods]="paymentMethods()"
+                  [selected]="store.paymentMethod()"
+                  legend="Payment method"
+                  (chosen)="choosePayment($event)"
+                />
+                @if (codRefusal(); as reason) {
+                  <kh-alert tone="info">{{ reason }}</kh-alert>
+                }
+              }
+            </section>
+          }
+
+          <!-- 4. Items: collapsed, because the shopper has just seen them on the cart. -->
+          <section class="block" aria-labelledby="checkout-items">
+            <h2 id="checkout-items" class="items-head">
+              <span>Your items</span>
+              <a class="edit" routerLink="/cart">Edit cart</a>
+            </h2>
+            <kh-disclosure [heading]="itemsSummary()">
+              @for (line of reviewLines(); track line.id) {
+                <kh-cart-line [line]="line" [readOnly]="true" />
+              }
+            </kh-disclosure>
+          </section>
         </div>
 
         <aside class="summary">
           @if (summary(); as details) {
-            <kh-order-summary [summary]="details" heading="Order summary" />
+            <kh-order-summary [summary]="details" heading="Order summary">
+              @if (!store.hasShipping()) {
+                <p class="note">Delivery is added once you choose an address and service.</p>
+              }
+              <div class="place">
+                @if (store.error(); as message) {
+                  <kh-alert #failure tone="danger" heading="That did not work" tabindex="-1">
+                    {{ message }}
+                  </kh-alert>
+                }
+                <button
+                  khButton
+                  variant="primary"
+                  [block]="true"
+                  class="place-desktop"
+                  type="button"
+                  [disabled]="!canPlace() || placing()"
+                  (click)="placeOrder()"
+                >
+                  {{ placeLabel() }}
+                </button>
+                <p class="note">{{ placeHint() }}</p>
+              </div>
+            </kh-order-summary>
           } @else {
             <kh-skeleton height="12rem" />
           }
         </aside>
       </div>
 
-      <ng-template khStickyAction>
+      <!-- On a phone the action stays in the thumb zone while the sections scroll; from 'lg' the
+           summary panel is beside the form and carries the same button, so the bar steps aside. -->
+      <ng-template khStickyAction mobileOnly>
         <div class="bar">
           <span class="bar-total">
             @if (summary(); as details) {
               <strong>{{ details.total | khMoney }}</strong>
-              <span>{{ stepHint() }}</span>
+              <span>{{ store.hasShipping() ? 'Order total' : 'Excludes delivery' }}</span>
             }
           </span>
           <button
             khButton
             variant="primary"
             type="button"
-            [disabled]="!canAdvance() || store.isBusy() || placing()"
-            (click)="advance()"
+            [disabled]="!canPlace() || placing()"
+            (click)="placeOrder()"
           >
-            {{ advanceLabel() }}
+            {{ placeLabel() }}
           </button>
         </div>
       </ng-template>
     }
 
-    <!-- The address form is a bottom sheet rather than a route: it is a detour inside one step, and
-         a shopper who adds an address must come straight back to the checkout they were in. -->
+    <!-- The address form is a bottom sheet rather than a route: it is a detour inside one section,
+         and a shopper who adds an address must come straight back to the checkout they were in. -->
     <kh-drawer
       [open]="addressFormOpen()"
       side="bottom"
@@ -242,24 +280,20 @@ const SESSION_KEY = 'kh.checkout.session';
       padding-block: var(--space-4) var(--space-10);
     }
 
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
     h2 {
+      margin: 0 0 var(--space-3);
       font-size: var(--text-lg);
     }
 
-    h3 {
-      margin: 0 0 var(--space-2);
+    .muted,
+    .note {
+      margin: 0 0 var(--space-3);
       font-size: var(--text-sm);
       color: var(--color-text-muted);
     }
 
-    .lead {
-      margin-block-start: calc(var(--space-2) * -1);
-      font-size: var(--text-sm);
-      color: var(--color-text-muted);
+    .after-error {
+      margin-block-start: var(--space-4);
     }
 
     .layout {
@@ -274,21 +308,71 @@ const SESSION_KEY = 'kh.checkout.session';
       }
     }
 
+    .block {
+      padding-block-end: var(--space-6);
+      margin-block-end: var(--space-6);
+      border-block-end: 1px solid var(--color-border);
+    }
+
+    .block:last-child {
+      border-block-end: 0;
+    }
+
     .addresses {
       display: flex;
       flex-direction: column;
       gap: var(--space-2);
-      margin-block-end: var(--space-4);
+      margin-block-end: var(--space-3);
     }
 
-    .step kh-alert {
+    .block kh-alert {
       display: block;
-      margin-block-end: var(--space-4);
+      margin-block-start: var(--space-3);
     }
 
-    .review-block {
-      padding-block: var(--space-4);
-      border-block-end: 1px solid var(--color-border);
+    .items-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .edit {
+      font-size: var(--text-sm);
+      font-weight: var(--weight-regular);
+    }
+
+    @media (min-width: 1024px) {
+      .summary {
+        position: sticky;
+        top: var(--space-4);
+      }
+    }
+
+    .place {
+      margin-block-start: var(--space-4);
+    }
+
+    .place kh-alert {
+      display: block;
+      margin-block-end: var(--space-3);
+    }
+
+    .place .note {
+      margin: var(--space-2) 0 0;
+      text-align: center;
+    }
+
+    /* Mobile-first: below 'lg' the sticky bar carries the action; the panel's own button is
+       restored from 'lg' up, exactly as the cart does it. */
+    .place-desktop {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .place-desktop {
+        display: flex;
+      }
     }
 
     .sheet {
@@ -330,20 +414,15 @@ export class CheckoutPage {
   private readonly toasts = inject(ToastService);
   private readonly announcer = inject(LiveAnnouncer);
   private readonly analytics = inject(AnalyticsService);
-  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected readonly stepLabels = [
-    { id: 'address', label: 'Address' },
-    { id: 'delivery', label: 'Delivery' },
-    { id: 'payment', label: 'Payment' },
-    { id: 'review', label: 'Review' },
-  ];
+  private readonly failure = viewChild<ElementRef<HTMLElement>>('failure');
 
   protected readonly selectedAddressId = signal<string | null>(null);
   protected readonly addressFormOpen = signal(false);
   protected readonly place = signal<PincodePlaceView | null>(null);
   protected readonly placing = signal(false);
+  protected readonly paymentMethodsLoaded = signal(false);
 
   private readonly stateRows = toSignal(this.reference.states(), { initialValue: [] });
 
@@ -354,24 +433,6 @@ export class CheckoutPage {
   private readonly stateNames = computed(
     () => new Map(this.stateRows().map((state) => [state.id, state.name])),
   );
-
-  /**
-   * The step the URL asks for, clamped to what the session actually supports.
-   *
-   * Clamped rather than redirected, so the address bar and the rendered step never disagree — and a
-   * shopper who typed `?step=review` into a fresh session sees the address form, not an error.
-   */
-  private readonly requestedStep = toSignal(
-    this.route.queryParamMap.pipe(map((params) => params.get('step') as CheckoutStep | null)),
-    { initialValue: null },
-  );
-
-  protected readonly step = computed<CheckoutStep>(() => {
-    const requested = this.requestedStep();
-    const furthest = this.store.furthestStep();
-    if (!requested || !CHECKOUT_STEPS.includes(requested)) return furthest;
-    return CHECKOUT_STEPS.indexOf(requested) <= CHECKOUT_STEPS.indexOf(furthest) ? requested : furthest;
-  });
 
   protected readonly addresses = computed(() =>
     this.addressBook
@@ -398,90 +459,77 @@ export class CheckoutPage {
     return quote ? this.mapper.summaryFromQuote(quote, { totalLabel: 'Order total' }) : null;
   });
 
-  protected readonly deliverTo = computed(() => {
-    const address = this.store.shippingAddress();
-    return address ? this.mapper.checkoutAddress(address, this.stateNames().get(address.stateId)) : null;
-  });
-
   protected readonly reviewLines = computed(() => {
     const session = this.store.current();
     if (!session?.cart) return [];
     return session.cart.lines.map((line) => this.mapper.cartLine(line, session.currencyCode));
   });
 
-  protected readonly paymentLabel = computed(() => {
-    const chosen = this.store.paymentMethod();
-    return this.paymentMethods().find((method) => method.method === chosen)?.name ?? 'Not chosen yet';
+  /** "3 items from 2 sellers" — the disclosure's heading, so a closed list still says what is in it. */
+  protected readonly itemsSummary = computed(() => {
+    const lines = this.reviewLines();
+    const items = lines.reduce((sum, line) => sum + line.quantity, 0);
+    const sellers = new Set(lines.map((line) => line.sellerName)).size;
+    const itemWord = items === 1 ? 'item' : 'items';
+    const sellerWord = sellers === 1 ? 'seller' : 'sellers';
+    return `${items} ${itemWord} from ${sellers} ${sellerWord}`;
   });
 
-  protected readonly advanceLabel = computed(() => {
-    switch (this.step()) {
-      case 'review':
-        return this.placing() ? 'Placing…' : 'Place order';
-      case 'payment':
-        return 'Review order';
-      default:
-        return 'Continue';
-    }
+  /**
+   * Whether the session has everything the API needs. The server makes the final judgement on
+   * "Place order"; this only keeps the button quiet until there is something to judge.
+   */
+  protected readonly canPlace = computed(() => {
+    const method = this.store.paymentMethod();
+    return this.store.hasShipping() && method !== null && method !== '';
   });
 
-  protected readonly stepHint = computed(() => {
-    switch (this.step()) {
-      case 'address':
-        return 'Choose a delivery address';
-      case 'delivery':
-        return 'Choose a delivery service';
-      case 'payment':
-        return 'Choose how to pay';
-      default:
-        return 'You will not be charged until you confirm';
-    }
-  });
+  protected readonly placeLabel = computed(() => (this.placing() ? 'Placing…' : 'Place order'));
 
-  /** Whether the current step has what it needs. Never a judgement the server has already made. */
-  protected readonly canAdvance = computed(() => {
-    switch (this.step()) {
-      case 'address':
-        return this.selectedAddressId() !== null;
-      case 'delivery':
-        return this.shippingGroups().every((group) => group.selectedCode !== null);
-      case 'payment':
-        return this.store.paymentMethod() !== null && this.store.paymentMethod() !== '';
-      case 'review':
-        return true;
-    }
+  protected readonly placeHint = computed(() => {
+    if (!this.store.shippingAddress()) return 'Choose a delivery address to continue';
+    if (!this.store.hasShipping()) return 'Choose a delivery service for each seller';
+    if (!this.canPlace()) return 'Choose how to pay';
+    return 'You will not be charged until you confirm';
   });
 
   constructor() {
     this.addressBook.loadOnce();
     this.profile.loadOnce();
     this.analytics.track(AnalyticsEvents.beginCheckout);
+    this.start();
 
-    this.store.start(this.storage.get(SESSION_KEY, 'session')).subscribe({
-      next: (session) => {
-        this.storage.set(SESSION_KEY, session.id, 'session');
-        this.store.loadShippingOptions();
-        this.store.loadPaymentMethods();
-      },
-      error: () => this.storage.remove(SESSION_KEY, 'session'),
-    });
-
-    // Preselect the address the session already has, else the customer's default. An effect rather
+    // Preselect the address the session already has, else the customer's default — and write it to
+    // the session straight away, so the delivery section can appear without a tap. An effect rather
     // than a one-off because the address book and the session both arrive asynchronously, and
     // whichever lands second is the one that should decide.
     effect(() => {
-      if (this.selectedAddressId() !== null) return;
-      const chosen =
-        this.store.shippingAddress()?.sourceAddressId ?? this.addressBook.preferred()?.id ?? null;
-      if (chosen) this.selectedAddressId.set(chosen);
+      if (this.selectedAddressId() !== null || this.store.isStarting() || !this.store.current()) return;
+      const fromSession = this.store.shippingAddress()?.sourceAddressId ?? null;
+      const chosen = fromSession ?? this.addressBook.preferred()?.id ?? null;
+      if (!chosen) return;
+      this.selectedAddressId.set(chosen);
+      if (fromSession) {
+        // The session already knows the address. Only what follows from it needs reading.
+        this.loadDelivery();
+      } else {
+        this.chooseAddress(chosen);
+      }
+    });
+
+    // A refusal is read out and brought into view. The button that caused it is at the bottom of
+    // a scrolled page on a phone; a message that stays where the eye is not is no message.
+    effect(() => {
+      const element = this.failure()?.nativeElement;
+      if (!element) return;
+      element.focus({ preventScroll: false });
     });
   }
 
-  protected goTo(step: CheckoutStep): void {
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { step },
-      queryParamsHandling: 'merge',
+  protected start(): void {
+    this.store.start(this.storage.get(SESSION_KEY, 'session')).subscribe({
+      next: (session) => this.storage.set(SESSION_KEY, session.id, 'session'),
+      error: () => this.storage.remove(SESSION_KEY, 'session'),
     });
   }
 
@@ -508,11 +556,50 @@ export class CheckoutPage {
     this.addressBook.create(value).subscribe({
       next: (created) => {
         this.addressFormOpen.set(false);
-        this.selectedAddressId.set(created.id);
         this.announcer.announce('Address saved.');
+        this.chooseAddress(created.id);
       },
       error: () => this.toasts.danger('We could not save that address. Please check it and try again.'),
     });
+  }
+
+  /** An address was picked. Written to the session at once, so delivery can be priced. */
+  protected chooseAddress(addressId: string): void {
+    this.selectedAddressId.set(addressId);
+    const gstin = this.addresses().find((address) => address.id === addressId)?.gstin ?? null;
+
+    this.store.setAddress(addressId, gstin).subscribe({
+      next: () => this.loadDelivery(),
+      error: () => undefined,
+    });
+  }
+
+  /**
+   * Reads the couriers for the session's address and picks the cheapest for any seller without one.
+   *
+   * The default is written to the session like a choice the shopper made, because to the API it
+   * is one: the quote and the payment ceiling both depend on it. It stays visible as a checked
+   * radio the shopper can change.
+   */
+  private loadDelivery(): void {
+    this.store.loadShippingOptions().subscribe((groups) => {
+      const perVendor = groups.map((group) => ({
+        vendorId: group.vendorId,
+        optionCode: group.selectedCode ?? this.cheapestOption(group.options) ?? '',
+      }));
+
+      if (perVendor.some((entry) => !entry.optionCode)) return;
+      if (groups.every((group) => group.selectedCode)) {
+        this.loadPayment();
+        return;
+      }
+      this.submitShipping(perVendor);
+    });
+  }
+
+  private cheapestOption(options: readonly { code: string; amount: number }[]): string | null {
+    if (options.length === 0) return null;
+    return [...options].sort((a, b) => a.amount - b.amount)[0].code;
   }
 
   protected chooseShipping(choice: ShippingChoice): void {
@@ -524,15 +611,31 @@ export class CheckoutPage {
     // Only sent once every seller has a service. A partial choice would be refused, and being told
     // off for a decision still in progress is not useful.
     if (perVendor.some((entry) => !entry.optionCode)) return;
+    this.submitShipping(perVendor);
+  }
 
+  private submitShipping(perVendor: readonly { vendorId: string; optionCode: string }[]): void {
     this.store.setShipping(perVendor).subscribe({
       next: () => {
-        // The courier charge changes the tax and the COD ceiling, so what may be paid with is
-        // re-read rather than assumed to be what it was on the previous step.
-        this.store.loadPaymentMethods();
         this.analytics.track(AnalyticsEvents.addShippingInfo);
+        // The courier charge changes the tax and the COD ceiling, so what may be paid with is
+        // re-read rather than assumed to be what it was before.
+        this.loadPayment();
       },
       error: () => undefined,
+    });
+  }
+
+  /** Reads the payment methods and preselects the first available one when none is chosen. */
+  private loadPayment(): void {
+    this.store.loadPaymentMethods().subscribe((methods) => {
+      this.paymentMethodsLoaded.set(true);
+      const chosen = this.store.paymentMethod();
+      const stillAvailable = methods.some((method) => method.method === chosen && method.isAvailable);
+      if (chosen && stillAvailable) return;
+
+      const first = methods.find((method) => method.isAvailable);
+      if (first) this.choosePayment(first.method);
     });
   }
 
@@ -543,91 +646,62 @@ export class CheckoutPage {
     });
   }
 
-  protected advance(): void {
-    switch (this.step()) {
-      case 'address':
-        this.submitAddress();
-        return;
-      case 'delivery':
-        this.goTo('payment');
-        return;
-      case 'payment':
-        this.store.review().subscribe({ next: () => this.goTo('review'), error: () => undefined });
-        return;
-      case 'review':
-        this.placeOrder();
-    }
-  }
-
-  private submitAddress(): void {
-    const addressId = this.selectedAddressId();
-    if (!addressId) return;
-
-    const gstin = this.addresses().find((address) => address.id === addressId)?.gstin ?? null;
-
-    this.store.setAddress(addressId, gstin).subscribe({
-      next: () => {
-        // The address decides which couriers serve the order and at what price, so the options are
-        // read after it is set rather than before.
-        this.store.loadShippingOptions();
-        this.goTo('delivery');
-      },
-      error: () => undefined,
-    });
-  }
-
   /**
-   * Places the order, then pays for it.
+   * Re-validates the session, then places the order, then pays for it.
    *
-   * Two separate things, and in that order, which is what makes the flow survive a customer closing
-   * the gateway: the order exists before any money is asked for, so a dismissal leaves an unpaid
-   * order to retry rather than a purchase that never happened
-   * (docs/05-frontend-architecture.md §3.6).
+   * Three separate things, in that order. The re-validation is the API's last word before any
+   * gateway is involved — "something in your cart changed" belongs on this page, not after a
+   * payment. The order exists before any money is asked for, so a dismissed gateway leaves an unpaid
+   * order to retry rather than a purchase that never happened (docs/05-frontend-architecture.md
+   * §3.6).
    *
    * The confirmation page is reached in every outcome — paid, dismissed or failed — because in all
    * three there is an order to show. It is the page's job to say which happened.
    */
-  private placeOrder(): void {
-    if (this.placing()) return;
+  protected placeOrder(): void {
+    if (this.placing() || !this.canPlace()) return;
     this.placing.set(true);
 
-    this.store.placeOrder().subscribe({
-      next: (placed) => {
-        this.storage.remove(SESSION_KEY, 'session');
-        this.analytics.track(AnalyticsEvents.purchase, {
-          transaction_id: placed.orderNumber,
-          value: this.summary()?.total.amount,
-        });
-
-        if (!placed.payment) {
-          // Cash on delivery: there is nothing to hand off, and the order is already placed.
-          this.finish(placed.orderNumber);
-          return;
-        }
-
-        const user = this.profile.user();
-        this.payments
-          .pay(placed.orderId, placed.payment, {
-            name: this.profile.displayName(),
-            email: user?.email ?? null,
-            mobile: user?.mobile ?? null,
-          })
-          .subscribe({
-            next: (outcome) => {
-              if (outcome.kind === 'dismissed') {
-                this.toasts.info(
-                  'Your order is placed but not paid for yet. You can pay from the order page.',
-                );
-              } else if (outcome.kind === 'failed') {
-                this.toasts.warning(outcome.reason);
-              }
-              this.finish(placed.orderNumber);
-            },
-            error: () => this.finish(placed.orderNumber),
+    this.store
+      .review()
+      .pipe(switchMap(() => this.store.placeOrder()))
+      .subscribe({
+        next: (placed) => {
+          this.storage.remove(SESSION_KEY, 'session');
+          this.analytics.track(AnalyticsEvents.purchase, {
+            transaction_id: placed.orderNumber,
+            value: this.summary()?.total.amount,
           });
-      },
-      error: () => this.placing.set(false),
-    });
+
+          if (!placed.payment) {
+            // Cash on delivery: there is nothing to hand off, and the order is already placed.
+            this.finish(placed.orderNumber);
+            return;
+          }
+
+          const user = this.profile.user();
+          this.payments
+            .pay(placed.orderId, placed.payment, {
+              name: this.profile.displayName(),
+              email: user?.email ?? null,
+              mobile: user?.mobile ?? null,
+            })
+            .subscribe({
+              next: (outcome) => {
+                if (outcome.kind === 'dismissed') {
+                  this.toasts.info(
+                    'Your order is placed but not paid for yet. You can pay from the order page.',
+                  );
+                } else if (outcome.kind === 'failed') {
+                  this.toasts.warning(outcome.reason);
+                }
+                this.finish(placed.orderNumber);
+              },
+              error: () => this.finish(placed.orderNumber),
+            });
+        },
+        error: () => this.placing.set(false),
+      });
   }
 
   private finish(orderNumber: string): void {

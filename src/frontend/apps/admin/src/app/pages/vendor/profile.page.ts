@@ -5,6 +5,7 @@ import { Alert, Button, Checkbox, Control, Field, ProductImage, Skeleton } from 
 import { ImageUrls, ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
+import { businessTypeLabel } from '../vendors/vendor-vocabulary';
 import { MediaPicker } from '../catalog/media-picker';
 
 /**
@@ -57,11 +58,11 @@ import { MediaPicker } from '../catalog/media-picker';
           description="What a shopper sees on your seller page and beside your listings."
           [summary]="profileSummary()"
           [saving]="savingProfile()"
-          [dirty]="true"
+          [dirty]="profileDirty()"
           submitLabel="Save shopfront"
           [cancelLabel]="'Undo changes'"
           (submitted)="saveProfile()"
-          (cancelled)="fill(current)"
+          (cancelled)="fillProfile(current)"
         >
           <kh-field label="Trading name" for="profile-name" [error]="profileForm.fields.displayName.error()">
             <input
@@ -126,11 +127,11 @@ import { MediaPicker } from '../catalog/media-picker';
             description="The store holds you to these, and a shopper reads them before buying."
             [summary]="operationsSummary()"
             [saving]="savingOperations()"
-            [dirty]="true"
+            [dirty]="operationsDirty()"
             submitLabel="Save promises"
             [cancelLabel]="'Undo changes'"
             (submitted)="saveOperations()"
-            (cancelled)="fill(current)"
+            (cancelled)="fillOperations(current)"
           >
             <kh-field
               label="Dispatch within (hours)"
@@ -213,7 +214,7 @@ import { MediaPicker } from '../catalog/media-picker';
               <dt>Legal name</dt>
               <dd>{{ current.legalName }}</dd>
               <dt>Constitution</dt>
-              <dd>{{ current.businessType }}</dd>
+              <dd>{{ businessTypeLabel(current.businessType) }}</dd>
               <dt>PAN</dt>
               <dd>{{ current.pan ?? '—' }}</dd>
               <dt>GSTIN</dt>
@@ -328,6 +329,7 @@ import { MediaPicker } from '../catalog/media-picker';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VendorProfilePage {
+  protected readonly businessTypeLabel = businessTypeLabel;
   private readonly vendors = inject(VendorsAdminService);
   private readonly images = inject(ImageUrls);
   private readonly toasts = inject(ToastService);
@@ -409,6 +411,7 @@ export class VendorProfilePage {
         next: (saved) => {
           this.savingProfile.set(false);
           this.vendor.set(saved);
+          this.fillProfile(saved);
           this.toasts.success('Shopfront saved.');
         },
         error: (error: unknown) => {
@@ -446,6 +449,7 @@ export class VendorProfilePage {
         next: (saved) => {
           this.savingOperations.set(false);
           this.vendor.set(saved);
+          this.fillOperations(saved);
           this.toasts.success('Promises saved.');
         },
         error: (error: unknown) => {
@@ -455,7 +459,39 @@ export class VendorProfilePage {
       });
   }
 
-  protected fill(vendor: VendorResponse): void {
+  /**
+   * Whether each form differs from what is saved.
+   *
+   * Two answers rather than one because the two forms save separately (see the class comment):
+   * "Unsaved changes" on the promises form must not light up because the trading name was edited,
+   * and "Undo changes" on one must leave the other alone.
+   */
+  protected readonly profileDirty = computed(() => {
+    const current = this.vendor();
+    if (!current) return false;
+    return (
+      this.profileForm.dirty() ||
+      this.logoFileId() !== current.logoFileId ||
+      this.bannerFileId() !== current.bannerFileId
+    );
+  });
+
+  protected readonly operationsDirty = computed(() => {
+    const current = this.vendor();
+    if (!current) return false;
+    const policy = current.returnPolicy;
+    return (
+      this.dispatchSlaHours() !== String(current.dispatchSlaHours) ||
+      this.acceptsReturns() !== policy.acceptsReturns ||
+      this.returnWindowDays() !== String(policy.windowDays) ||
+      this.acceptsExchanges() !== policy.acceptsExchanges ||
+      this.customerPaysReturnShipping() !== policy.customerPaysReturnShipping ||
+      this.returnNotes() !== (policy.notes ?? '') ||
+      this.servesAllIndia() !== current.servesAllIndia
+    );
+  });
+
+  protected fillProfile(vendor: VendorResponse): void {
     this.profileForm.reset({
       displayName: vendor.displayName,
       about: vendor.about ?? '',
@@ -464,6 +500,9 @@ export class VendorProfilePage {
     });
     this.logoFileId.set(vendor.logoFileId);
     this.bannerFileId.set(vendor.bannerFileId);
+  }
+
+  protected fillOperations(vendor: VendorResponse): void {
     this.dispatchSlaHours.set(String(vendor.dispatchSlaHours));
     this.acceptsReturns.set(vendor.returnPolicy.acceptsReturns);
     this.returnWindowDays.set(String(vendor.returnPolicy.windowDays));
@@ -471,6 +510,11 @@ export class VendorProfilePage {
     this.customerPaysReturnShipping.set(vendor.returnPolicy.customerPaysReturnShipping);
     this.returnNotes.set(vendor.returnPolicy.notes ?? '');
     this.servesAllIndia.set(vendor.servesAllIndia);
+  }
+
+  private fill(vendor: VendorResponse): void {
+    this.fillProfile(vendor);
+    this.fillOperations(vendor);
   }
 
   private load(): void {

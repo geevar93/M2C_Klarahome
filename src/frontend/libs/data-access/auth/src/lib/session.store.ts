@@ -27,8 +27,18 @@ export class SessionStore {
   private readonly token = signal<string | null>(null);
   private readonly current = signal<Session | null>(null);
 
+  private readonly settled = signal(false);
+
   /** Null until the first refresh or sign-in completes. */
   readonly session: Signal<Session | null> = this.current.asReadonly();
+  /**
+   * Whether the question "is anybody signed in?" has been answered at all.
+   *
+   * `isAuthenticated()` is false both before the refresh cookie has been tried and after it has
+   * failed, and a page that must not tell a signed-in customer to sign in needs to tell those two
+   * apart. Set by the first sign-in, sign-out or refresh, whichever comes first.
+   */
+  readonly isResolved: Signal<boolean> = this.settled.asReadonly();
   readonly isAuthenticated = computed(() => this.current() !== null);
   readonly vendorId = computed(() => this.current()?.vendorId ?? null);
 
@@ -59,11 +69,13 @@ export class SessionStore {
   }
 
   signIn(accessToken: string, session: Session): void {
+    this.settled.set(true);
     this.token.set(accessToken);
     this.current.set(session);
   }
 
   signOut(): void {
+    this.settled.set(true);
     this.token.set(null);
     this.current.set(null);
   }

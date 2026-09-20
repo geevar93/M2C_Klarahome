@@ -630,7 +630,7 @@ interface BlockDraft {
       <div slot="footer">
         <button khButton type="button" variant="tertiary" (click)="transitioning.set(null)">Cancel</button>
         <button khButton type="button" variant="primary" [disabled]="busy()" (click)="transition()">
-          {{ transitionHeading() }}
+          {{ busy() ? 'Working…' : transitionHeading() }}
         </button>
       </div>
     </kh-modal>

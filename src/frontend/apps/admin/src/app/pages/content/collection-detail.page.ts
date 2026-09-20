@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   CatalogAdminService,
   CategoryNode,
@@ -21,6 +21,7 @@ import {
   EntityOption,
   EntityPicker,
   PageHeader,
+  HasUnsavedChanges,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -75,6 +76,7 @@ interface ConditionDraft {
     MediaPicker,
     PageHeader,
     Skeleton,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -146,7 +148,7 @@ interface ConditionDraft {
             (previousPage)="items.previous()"
           >
             <ng-template khCell="name" let-row>
-              <span class="name">{{ row.name }}</span>
+              <a class="link name" [routerLink]="['/catalog/products', row.productId]">{{ row.name }}</a>
               <span class="note">{{ row.brandName ?? '—' }} · /{{ row.slug }}</span>
             </ng-template>
 
@@ -309,7 +311,7 @@ interface ConditionDraft {
 
             <div class="actions">
               <button khButton type="button" variant="primary" [disabled]="busy()" (click)="saveRule()">
-                Save the rule
+                {{ busy() ? 'Saving…' : 'Save the rule' }}
               </button>
               @if (collection()?.kind === 'Rule') {
                 <button
@@ -326,7 +328,12 @@ interface ConditionDraft {
           </section>
 
           <section class="panel">
-            <h2>The collection</h2>
+            <h2>
+              The collection
+              @if (detailsDirty()) {
+                <span class="dirty" role="status">Unsaved changes</span>
+              }
+            </h2>
 
             <kh-field label="Name" for="collection-name">
               <input
@@ -565,7 +572,7 @@ interface ConditionDraft {
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CollectionDetailPage {
+export class CollectionDetailPage implements HasUnsavedChanges {
   private readonly content = inject(ContentAdminService);
   private readonly catalog = inject(CatalogAdminService);
   private readonly route = inject(ActivatedRoute);
@@ -599,6 +606,26 @@ export class CollectionDetailPage {
   protected readonly metaDescription = signal('');
   protected readonly isActive = signal(true);
   protected readonly isListed = signal(true);
+
+  /** Whether "The collection" panel differs from what is saved. */
+  protected readonly detailsDirty = computed(() => {
+    const saved = this.collection();
+    if (!saved) return false;
+    return (
+      this.name() !== saved.name ||
+      this.slug() !== saved.slug ||
+      this.description() !== (saved.description ?? '') ||
+      this.heroFileId() !== (saved.heroImage?.fileId ?? null) ||
+      this.metaTitle() !== (saved.seo.metaTitle ?? '') ||
+      this.metaDescription() !== (saved.seo.metaDescription ?? '') ||
+      this.isActive() !== saved.isActive ||
+      this.isListed() !== saved.isListed
+    );
+  });
+
+  hasUnsavedChanges(): boolean {
+    return this.detailsDirty() && !this.busy();
+  }
 
   protected readonly matchAll = signal(true);
   protected readonly conditions = signal<readonly ConditionDraft[]>([]);
@@ -802,6 +829,7 @@ export class CollectionDetailPage {
         this.busy.set(false);
         this.pinProductId.set('');
         this.fill(saved);
+        this.toasts.success('Collection updated.');
         this.items.refresh();
       },
       error: (error: unknown) => this.fail(error, 'The products could not be changed.'),

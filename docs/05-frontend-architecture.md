@@ -81,7 +81,7 @@ Nx module boundary tags prevent, at lint time: `apps` importing another app, `ui
 /search?q=                          Search results
 /p/:productSlug                     PDP
 /cart                               Cart
-/checkout                           Checkout (stepper)
+/checkout                           Checkout (one page: address, delivery, payment, items, place order)
 /checkout/confirmation/:orderNumber Order confirmation
 /account                            Dashboard
   /account/orders  /orders/:number  Orders + detail & tracking

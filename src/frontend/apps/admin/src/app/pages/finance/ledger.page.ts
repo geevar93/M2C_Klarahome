@@ -9,6 +9,7 @@ import {
   SettlementsAdminService,
   StatutoryExtractResponse,
   VendorBalanceResponse,
+  LedgerEntryType,
   VendorsAdminService,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
@@ -24,6 +25,7 @@ import {
   KpiCard,
   Modal,
   PageHeader,
+  ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -32,21 +34,24 @@ import { Observable, map } from 'rxjs';
 import { describeError } from '../../core/describe-error';
 import { tableDate, tableDateTime, tableMoney } from '../../core/format';
 
-/** The entry types the ledger records, from `LedgerEntryTypes`. */
-const ENTRY_TYPES = [
-  { value: 'sale', label: 'Sale' },
-  { value: 'commission', label: 'Commission' },
-  { value: 'platform_tax', label: 'Tax on platform charges' },
-  { value: 'platform_fee', label: 'Marketplace fee' },
-  { value: 'payment_fee', label: 'Gateway fee' },
-  { value: 'shipping_fee', label: 'Freight' },
-  { value: 'refund', label: 'Refund' },
-  { value: 'refund_commission_reversal', label: 'Commission reversed' },
-  { value: 'tcs', label: 'TCS' },
-  { value: 'tds', label: 'TDS' },
-  { value: 'adjustment', label: 'Adjustment' },
-  { value: 'payout', label: 'Payout' },
-] as const;
+/**
+ * The entry types the ledger records, typed against the generated enum so the compiler catches
+ * a casing drift — the first version of this list was snake_case and matched nothing.
+ */
+const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
+  { value: 'Sale', label: 'Sale' },
+  { value: 'Commission', label: 'Commission' },
+  { value: 'PlatformTax', label: 'Tax on platform charges' },
+  { value: 'PlatformFee', label: 'Marketplace fee' },
+  { value: 'PaymentFee', label: 'Gateway fee' },
+  { value: 'ShippingFee', label: 'Freight' },
+  { value: 'Refund', label: 'Refund' },
+  { value: 'RefundCommissionReversal', label: 'Commission reversed' },
+  { value: 'Tcs', label: 'TCS' },
+  { value: 'Tds', label: 'TDS' },
+  { value: 'Adjustment', label: 'Adjustment' },
+  { value: 'Payout', label: 'Payout' },
+];
 
 /**
  * The vendor ledger, and what can be read off it.
@@ -85,6 +90,7 @@ const ENTRY_TYPES = [
     KpiCard,
     Modal,
     PageHeader,
+    ConfirmDialog,
   ],
   template: `
     <kh-page-header heading="Ledger" description="Every movement of money between the store and its sellers.">
@@ -119,7 +125,7 @@ const ENTRY_TYPES = [
             inputId="ledger-vendor"
             hint="Search by name or code, or paste a seller id."
             [search]="vendorSearch"
-            (chose)="vendorId.set($event?.id ?? '')"
+            (chose)="chooseVendor($event?.id ?? '')"
           />
         }
         <kh-field label="From" for="ledger-from" [optional]="true">
@@ -362,11 +368,22 @@ const ENTRY_TYPES = [
 
       <div slot="footer">
         <button khButton type="button" variant="tertiary" (click)="adjusting.set(false)">Cancel</button>
-        <button khButton type="button" variant="primary" [disabled]="busy()" (click)="postAdjustment()">
+        <button khButton type="button" variant="primary" [disabled]="busy()" (click)="reviewAdjustment()">
           {{ busy() ? 'Posting…' : 'Post it' }}
         </button>
       </div>
     </kh-modal>
+
+    <kh-confirm-dialog
+      [open]="confirmingAdjustment()"
+      heading="Post this adjustment?"
+      [message]="adjustmentSummary()"
+      confirmLabel="Post it"
+      tone="warning"
+      [busy]="busy()"
+      (confirmed)="postAdjustment()"
+      (cancelled)="confirmingAdjustment.set(false)"
+    />
   `,
   styles: `
     kh-alert {
@@ -597,6 +614,12 @@ export class LedgerPage {
     return ENTRY_TYPES.find((entry) => entry.value === type)?.label ?? type;
   }
 
+  /** The statement's seller is also the entries table's; choosing one refilters both. */
+  protected chooseVendor(id: string): void {
+    this.vendorId.set(id);
+    this.applyFilters(this.values());
+  }
+
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: LedgerFilters = {
@@ -722,19 +745,44 @@ export class LedgerPage {
 
   // ---- The one write ------------------------------------------------------------------------------
 
-  protected postAdjustment(): void {
+  protected readonly confirmingAdjustment = signal(false);
+
+  protected readonly adjustmentSummary = computed(() => {
+    const amount = Number(this.adjustAmount()) || 0;
+    const what = this.adjustDirection() === 'Credit' ? 'A credit' : 'A debit';
+    return `${what} of ${amount.toFixed(2)} goes on the ledger as a row of its own. A ledger row is never edited or deleted, only offset by another adjustment.`;
+  });
+
+  /** Checks the form and, if it holds together, asks once more before it is written. */
+  protected reviewAdjustment(): void {
     const vendorId = this.adjustVendorId().trim();
     const reason = this.adjustReason().trim();
+    const amount = Number(this.adjustAmount());
 
     if (!vendorId || !reason) {
       this.adjustError.set('An adjustment needs a seller and a reason.');
       return;
     }
+    if (!(amount > 0)) {
+      this.adjustError.set('The amount has to be more than zero.');
+      return;
+    }
+
+    this.adjustError.set(null);
+    this.confirmingAdjustment.set(true);
+  }
+
+  protected postAdjustment(): void {
+    this.confirmingAdjustment.set(false);
+    const vendorId = this.adjustVendorId().trim();
+    const reason = this.adjustReason().trim();
+    const amount = Number(this.adjustAmount());
+    if (!vendorId || !reason || !(amount > 0)) return;
 
     const body: AdjustmentBody = {
       vendorId,
       direction: this.adjustDirection(),
-      amount: Number(this.adjustAmount()) || 0,
+      amount,
       reason,
     };
 

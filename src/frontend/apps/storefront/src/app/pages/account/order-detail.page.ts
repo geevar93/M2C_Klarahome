@@ -1,7 +1,8 @@
 import { DOCUMENT } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ProfileStore } from '@klarahome/data-access-account';
+import { isApiError } from '@klarahome/data-access-auth';
 import { PaymentHandoff } from '@klarahome/data-access-checkout';
 import {
   OrderResponse,
@@ -11,9 +12,8 @@ import {
   ReturnsService,
   SubOrderResponse,
 } from '@klarahome/data-access-orders';
-import { INR, Money, money } from '@klarahome/domain';
 import { KhDatePipe, MoneyPipe } from '@klarahome/i18n';
-import { Alert, Badge, Button, Drawer, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Badge, Button, Drawer, ErrorState, Icon, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import {
   AddressCard,
   OrderSummary,
@@ -56,29 +56,35 @@ import { describeError } from '../../core/describe-error';
     Badge,
     Button,
     Drawer,
+    ErrorState,
     Icon,
     KhDatePipe,
     MoneyPipe,
     OrderSummary,
     OrderTimeline,
+    PageHeader,
     ReturnRequestForm,
     RouterLink,
     Skeleton,
   ],
   template: `
+    <kh-page-header [title]="headerTitle()" backHref="/account/orders" backLabel="All orders">
+      @if (order(); as placed) {
+        <span khPageHeaderStatus>
+          <kh-badge [tone]="tone(placed.status)">{{ label(placed.status) }}</kh-badge>
+        </span>
+      }
+    </kh-page-header>
+
     @if (loading()) {
-      <kh-skeleton height="20rem" />
+      <kh-skeleton height="16rem" />
+    } @else if (error()) {
+      <kh-error-state (retry)="load(orderNumber)" />
     } @else if (order(); as placed) {
-      <header class="head">
-        <div>
-          <h1>Order {{ placed.orderNumber }}</h1>
-          <p class="meta">
-            Placed {{ placed.placedAt | khDate }} · {{ paymentLabel() }} ·
-            {{ amount(placed.grandTotal, placed.currencyCode) | khMoney }}
-          </p>
-        </div>
-        <kh-badge [tone]="tone(placed.status)">{{ label(placed.status) }}</kh-badge>
-      </header>
+      <p class="meta">
+        Placed {{ placed.placedAt | khDate: 'd MMM y' }} · {{ paymentLabel() }} ·
+        {{ mapper.money(placed.grandTotal, placed.currencyCode) | khMoney }}
+      </p>
 
       @if (needsPayment()) {
         <kh-alert tone="warning" heading="This order has not been paid for">
@@ -115,7 +121,7 @@ import { describeError } from '../../core/describe-error';
                 @for (line of subOrder.lines; track line.id) {
                   <li>
                     <span>{{ line.quantity }} × {{ line.name }}</span>
-                    <span class="amount">{{ amount(line.lineTotal, placed.currencyCode) | khMoney }}</span>
+                    <span class="amount">{{ mapper.money(line.lineTotal, placed.currencyCode) | khMoney }}</span>
                     @if (line.quantityCancelled > 0) {
                       <span class="note">{{ line.quantityCancelled }} cancelled</span>
                     }
@@ -148,7 +154,7 @@ import { describeError } from '../../core/describe-error';
 
                 @if (subOrder.status === 'Delivered') {
                   <button khButton variant="tertiary" size="sm" type="button" (click)="openReturn(subOrder)">
-                    Return or replace
+                    Request a return
                   </button>
                 }
               </div>
@@ -190,10 +196,11 @@ import { describeError } from '../../core/describe-error';
       [open]="cancelling() !== null"
       side="bottom"
       label="Cancel this parcel"
+      labelledBy="cancel-heading"
       (closed)="cancelling.set(null)"
     >
       <div class="sheet">
-        <h2>Cancel this parcel?</h2>
+        <h2 id="cancel-heading">Cancel this parcel?</h2>
         <p>
           The whole of {{ cancelling()?.vendorName || 'this seller' }}'s part of the order will be cancelled.
           Anything you have paid for it is refunded to how you paid.
@@ -211,10 +218,11 @@ import { describeError } from '../../core/describe-error';
       [open]="eligibility() !== null"
       side="bottom"
       label="Return or replace"
+      labelledBy="return-heading"
       (closed)="eligibility.set(null)"
     >
       <div class="sheet">
-        <h2>Return or replace</h2>
+        <h2 id="return-heading">Return or replace</h2>
 
         @if (eligibility(); as check) {
           @if (check.isEligible) {
@@ -239,21 +247,8 @@ import { describeError } from '../../core/describe-error';
       display: block;
     }
 
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: var(--space-3);
-    }
-
-    h1 {
-      margin: 0;
-      font-size: var(--text-xl);
-    }
-
     .meta {
-      margin: var(--space-1) 0 0;
+      margin: 0 0 var(--space-4);
       font-size: var(--text-sm);
       color: var(--color-text-muted);
     }
@@ -336,18 +331,25 @@ export class OrderDetailPage {
   private readonly returns = inject(ReturnsService);
   private readonly payments = inject(PaymentHandoff);
   private readonly profile = inject(ProfileStore);
-  private readonly mapper = inject(CommerceMapper);
+  protected readonly mapper = inject(CommerceMapper);
   private readonly toasts = inject(ToastService);
   private readonly trail = inject(BreadcrumbTrail);
   private readonly document = inject(DOCUMENT);
   private readonly route = inject(ActivatedRoute);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  protected readonly orderNumber = this.route.snapshot.paramMap.get('orderNumber') ?? '';
 
   protected readonly order = signal<OrderResponse | null>(null);
   protected readonly loading = signal(true);
+  /** True only for a failure that is not "no such order" — a 404 falls through to the not-found panel. */
+  protected readonly error = signal(false);
   protected readonly busy = signal(false);
   protected readonly paying = signal(false);
   protected readonly cancelling = signal<SubOrderResponse | null>(null);
   protected readonly eligibility = signal<ReturnEligibilityResponse | null>(null);
+
+  protected readonly headerTitle = computed(() => `Order ${this.order()?.orderNumber ?? this.orderNumber}`);
 
   protected readonly summary = computed(() => {
     const order = this.order();
@@ -410,8 +412,7 @@ export class OrderDetailPage {
 
   constructor() {
     this.profile.loadOnce();
-    const orderNumber = this.route.snapshot.paramMap.get('orderNumber');
-    if (orderNumber) this.load(orderNumber);
+    if (this.orderNumber) this.load(this.orderNumber);
     else this.loading.set(false);
   }
 
@@ -458,6 +459,7 @@ export class OrderDetailPage {
         this.cancelling.set(null);
         this.order.set(updated);
         this.toasts.success('That parcel is cancelled. Any payment for it will be refunded.');
+        this.focusHeading();
       },
       error: (error: unknown) => {
         this.busy.set(false);
@@ -495,7 +497,8 @@ export class OrderDetailPage {
       next: (raised) => {
         this.busy.set(false);
         this.eligibility.set(null);
-        this.toasts.success(`Return ${raised.returnNumber} raised. We will email you what happens next.`);
+        this.toasts.success(`Return ${raised.returnNumber} requested. We will email you what happens next.`);
+        this.focusHeading();
       },
       error: (error: unknown) => {
         this.busy.set(false);
@@ -534,28 +537,36 @@ export class OrderDetailPage {
       });
   }
 
-  private load(orderNumber: string): void {
+  protected load(orderNumber: string): void {
     this.loading.set(true);
+    this.error.set(false);
     this.orders.get(orderNumber).subscribe({
       next: (order) => {
         this.order.set(order);
         this.loading.set(false);
         this.trail.setLeafLabel(order.orderNumber);
       },
-      error: () => {
+      error: (error: unknown) => {
         this.order.set(null);
         this.loading.set(false);
+        // A 404 is "no such order", handled by the not-found panel; anything else is a failure the
+        // customer can retry.
+        if (!isApiError(error) || error.status !== 404) this.error.set(true);
       },
     });
   }
 
   /**
-   * A raw amount with its currency attached.
+   * Moves focus to the page's own heading after a sheet closes on success.
    *
-   * `khMoney` takes a `Money` so a price can never be rendered without its currency, and these
-   * responses carry the two apart. Pairing them here is the boundary doing its job, not arithmetic.
+   * A drawer restores focus to whatever opened it, which is correct while cancelling — but a
+   * completed cancel or return request has removed that trigger's context, so focus is sent to the
+   * page's own name instead of being left to fall back to the document body.
    */
-  protected amount(value: number, currency: string): Money {
-    return money(value, currency || INR);
+  private focusHeading(): void {
+    const heading = this.host.nativeElement.querySelector<HTMLElement>('h1');
+    if (!heading) return;
+    heading.setAttribute('tabindex', '-1');
+    heading.focus();
   }
 }

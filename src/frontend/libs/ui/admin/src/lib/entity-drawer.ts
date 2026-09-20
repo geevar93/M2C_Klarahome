@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
+
+import { ConfirmDialog } from './confirm-dialog';
 
 /**
  * An entity edited beside the list it came from, rather than on a page of its own.
@@ -17,12 +19,17 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
  * The drawer opens from the **end** edge, not the start: the start edge is the navigation's, and
  * a panel that flew in over the sidebar would read as a change of place rather than a detail of
  * what is on screen.
+ *
+ * **A dirty drawer does not close on a stray Escape.** The panel's whole reason to exist is a
+ * form, and a form half-typed is exactly what a backdrop click or an Escape pressed for some other
+ * reason would throw away. When `dirty` is true the close is challenged first, here rather than in
+ * each of the fifteen screens that would otherwise each have to remember to.
  */
 @Component({
   selector: 'kh-entity-drawer',
-  imports: [Button, Drawer, Icon],
+  imports: [Button, ConfirmDialog, Drawer, Icon],
   template: `
-    <kh-drawer [open]="true" side="end" [label]="heading()" (closed)="closed.emit()">
+    <kh-drawer [open]="true" side="end" [label]="heading()" (closed)="requestClose()">
       <header>
         <div class="titles">
           <h2>{{ heading() }}</h2>
@@ -38,7 +45,7 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
           size="sm"
           [iconOnly]="true"
           aria-label="Close"
-          (click)="closed.emit()"
+          (click)="requestClose()"
         >
           <kh-icon name="close" size="sm" />
         </button>
@@ -52,6 +59,16 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
         <ng-content select="[slot=footer]" />
       </footer>
     </kh-drawer>
+
+    <kh-confirm-dialog
+      [open]="confirmingDiscard()"
+      heading="Discard unsaved changes?"
+      message="What has been typed in this panel has not been saved and will be lost."
+      confirmLabel="Discard"
+      tone="warning"
+      (confirmed)="discard()"
+      (cancelled)="confirmingDiscard.set(false)"
+    />
   `,
   styles: `
     header {
@@ -102,5 +119,22 @@ import { Button, Drawer, Icon } from '@klarahome/ui-primitives';
 export class EntityDrawer {
   readonly heading = input.required<string>();
   readonly subtitle = input<string | null>(null);
+  /** Whether the panel holds unsaved work. True makes Escape, the backdrop and × ask first. */
+  readonly dirty = input(false);
   readonly closed = output<void>();
+
+  protected readonly confirmingDiscard = signal(false);
+
+  protected requestClose(): void {
+    if (this.dirty()) {
+      this.confirmingDiscard.set(true);
+      return;
+    }
+    this.closed.emit();
+  }
+
+  protected discard(): void {
+    this.confirmingDiscard.set(false);
+    this.closed.emit();
+  }
 }

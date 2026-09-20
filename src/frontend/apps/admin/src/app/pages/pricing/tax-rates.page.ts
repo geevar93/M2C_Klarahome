@@ -5,7 +5,7 @@ import {
   TaxRateResolutionResponse,
   TaxRateResponse,
 } from '@klarahome/data-access-admin';
-import { HasPermission } from '@klarahome/data-access-auth';
+import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
   ConfirmDialog,
@@ -97,12 +97,16 @@ import { tableDate } from '../../core/format';
           slot="filters"
           [filters]="filters"
           [values]="values()"
-          [searchable]="false"
+          searchLabel="Search by HSN code"
           (changed)="applyFilters($event)"
         />
 
         <ng-template khCell="hsnCode" let-row>
-          <button type="button" class="link" (click)="startEdit(row)">{{ row.hsnCode }}</button>
+          @if (canManage()) {
+            <button type="button" class="link" (click)="startEdit(row)">{{ row.hsnCode }}</button>
+          } @else {
+            {{ row.hsnCode }}
+          }
           @if (row.description) {
             <span class="note">{{ row.description }}</span>
           }
@@ -177,6 +181,7 @@ import { tableDate } from '../../core/format';
       <kh-entity-drawer
         [heading]="editing() ? 'Edit tax rate' : 'New tax rate'"
         [subtitle]="editing()?.hsnCode ?? null"
+        [dirty]="form.dirty()"
         (closed)="drawerOpen.set(false)"
       >
         <kh-form-shell
@@ -184,7 +189,7 @@ import { tableDate } from '../../core/format';
           description="Changing a live row changes what past invoices would recompute to. To change a rate, end this row's window and add another."
           [summary]="summary()"
           [saving]="saving()"
-          [dirty]="true"
+          [dirty]="form.dirty()"
           [submitLabel]="editing() ? 'Save' : 'Create'"
           (submitted)="save()"
           (cancelled)="drawerOpen.set(false)"
@@ -376,6 +381,10 @@ import { tableDate } from '../../core/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TaxRatesPage {
+  private readonly session = inject(SessionStore);
+  /** Whether this user may change what the page shows; without it, rows are read-only. */
+  protected readonly canManage = computed(() => this.session.hasPermission('pricing.tax-rate.manage'));
+
   private readonly pricing = inject(PricingAdminService);
   private readonly toasts = inject(ToastService);
 
@@ -443,7 +452,7 @@ export class TaxRatesPage {
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: TaxRateFilters = {
-      hsnCode: values['hsnCode'],
+      hsnCode: values['q'],
       activeOnly: values['activeOnly'] === 'true' ? true : undefined,
     };
     this.list.setFilters(filters);

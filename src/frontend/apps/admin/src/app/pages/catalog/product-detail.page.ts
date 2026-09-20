@@ -766,7 +766,11 @@ interface CategoryOption {
             </div>
           }
 
-          @if (listings.rows().length === 0) {
+          @if (listings.error(); as message) {
+            <kh-alert tone="danger" heading="The offers could not be loaded">{{ message }}</kh-alert>
+          } @else if (listings.loading() && listings.rows().length === 0) {
+            <kh-skeleton height="6rem" />
+          } @else if (listings.rows().length === 0) {
             <p class="hint">No seller has listed this product yet.</p>
           } @else {
             <table>

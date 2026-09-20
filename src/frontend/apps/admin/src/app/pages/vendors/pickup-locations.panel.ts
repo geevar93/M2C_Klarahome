@@ -503,6 +503,7 @@ export class PickupLocationsPanel {
       next: () => {
         this.busy.set(false);
         this.removing.set(null);
+        this.toasts.success('Pickup address removed.');
         this.load(id);
         this.changed.emit();
       },
