@@ -1,7 +1,16 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { OrdersService } from '@klarahome/data-access-orders';
-import { Button, Chip, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
+import {
+  Button,
+  Chip,
+  Control,
+  EmptyState,
+  ErrorState,
+  Field,
+  PageHeader,
+  Skeleton,
+} from '@klarahome/ui-primitives';
 import { OrderCard, OrderCardView } from '@klarahome/ui-patterns';
 
 import { CommerceMapper } from '../../core/commerce.mapper';
@@ -29,11 +38,41 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
  */
 @Component({
   selector: 'kh-account-orders-page',
-  imports: [Button, Chip, EmptyState, ErrorState, OrderCard, PageHeader, RouterLink, Skeleton],
+  imports: [
+    Button,
+    Chip,
+    Control,
+    EmptyState,
+    ErrorState,
+    Field,
+    OrderCard,
+    PageHeader,
+    RouterLink,
+    Skeleton,
+  ],
   template: `
     <kh-page-header title="Orders" />
 
-    <div class="filters" role="group" aria-label="Filter orders">
+    <!-- Below 1024px: a native select, so the choice is a picker rather than four chips fighting
+         for a 390px row. From 1024px: the chip group, which is the platform's usual filter and has
+         room to lay out in one line there. CSS-only swap so the selection (status(), below) is
+         never duplicated into two pieces of state. -->
+    <div class="filters-select">
+      <kh-field label="Show" for="orders-filter">
+        <select
+          khControl
+          id="orders-filter"
+          [value]="status() ?? ''"
+          (change)="filterBy($any($event.target).value || null)"
+        >
+          @for (filter of filters; track filter.label) {
+            <option [value]="filter.status ?? ''">{{ filter.label }}</option>
+          }
+        </select>
+      </kh-field>
+    </div>
+
+    <div class="filters filters-chips" role="group" aria-label="Filter orders">
       @for (filter of filters; track filter.label) {
         <kh-chip
           [label]="filter.label"
@@ -82,12 +121,33 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
       display: block;
     }
 
+    /* Native select on a phone, chips from 1024px — the breakpoint this page family already uses
+       (account.layout.ts). Four kh-chips in a row with overflow-x: auto did not fit a 390px screen;
+       they scrolled sideways and hid the last option, which is not a filter a customer can see all
+       of. The design system keeps a platform picker for a single choice from a known list
+       (_control.scss), so below the breakpoint the choice is a labelled <select> instead. */
+    .filters-select {
+      display: block;
+    }
+
+    .filters-chips {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .filters-select {
+        display: none;
+      }
+
+      .filters-chips {
+        display: flex;
+      }
+    }
+
     .filters {
-      display: flex;
       gap: var(--space-2);
       margin-block-end: var(--space-4);
-      overflow-x: auto;
-      padding-block-end: var(--space-1);
+      flex-wrap: wrap;
     }
 
     .list {

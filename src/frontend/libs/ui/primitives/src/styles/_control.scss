@@ -74,6 +74,12 @@ select.kh-control {
 // 16px box. Used for payment methods, delivery options, addresses and consent.
 
 .kh-choice {
+  // The box itself, and the first line of the label it belongs to. Every consumer sets that first
+  // line in `--text-sm`, so the line box is a known height and the tick can be centred on it
+  // rather than hung from the top of it.
+  --choice-box-size: var(--text-sm);
+  --choice-line-height: calc(var(--text-sm) * var(--leading-normal));
+
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
@@ -84,11 +90,28 @@ select.kh-control {
   background: var(--color-surface-raised);
   cursor: pointer;
 
+  // `--text-sm`, the label's own size, not a fixed 1rem or 1.25rem. The row is the target — that is
+  // the whole point of `.kh-choice` — so the box does not have to be finger-sized on its own, and it
+  // reads as part of the label's line rather than as a block sitting beside it. A box drawn larger
+  // than the type next to it is the loudest thing on a page whose content is the labels, especially
+  // once checked and filled solid with `accent-color`.
+  //
+  // `align-items: flex-start` alone puts the box's top on the label's *line box* top, which leaves
+  // it sitting high: the line box is taller than the glyphs in it. The margin makes up the
+  // difference, so the box is centred on the first line whether the label wraps to two lines or not
+  // — `center` would have drifted down the taller rows, and the four channel ticks on the
+  // notifications page have to line up with each other as well as with their own labels.
   input {
     flex: none;
     margin: 0;
-    inline-size: var(--space-5);
-    block-size: var(--space-5);
+    margin-block-start: calc((var(--choice-line-height) - var(--choice-box-size)) / 2);
+    inline-size: var(--choice-box-size);
+    block-size: var(--choice-box-size);
+    // The row is the 44px target (min-block-size above), so the coarse-pointer floor in
+    // `_base.scss` must not also inflate the box itself: it made every tick 44px tall on a phone
+    // while desktop looked right.
+    min-inline-size: 0;
+    min-block-size: 0;
     accent-color: var(--color-primary);
   }
 

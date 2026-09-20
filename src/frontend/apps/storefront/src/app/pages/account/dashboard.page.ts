@@ -68,6 +68,13 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
       display: block;
     }
 
+    section {
+      /* Separates the section from whatever sits above it — the warning alert, or the page header
+         when there is nothing to warn about. Neither renders its own bottom margin, so without this
+         the alert's border and "Recent orders" touched directly. */
+      margin-block-start: var(--space-6);
+    }
+
     .head {
       display: flex;
       align-items: baseline;
@@ -75,9 +82,19 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
       gap: var(--space-3);
     }
 
+    /* The heading yields, the link does not. A flex item's min-width is auto, so on a narrow phone
+       the two of them fought over the row and the link — the shorter, later item — was the one
+       that lost its last characters off the right edge. 'See a' is not a link anybody can read,
+       and the heading is the half of the row that can be shortened without becoming meaningless. */
     h2 {
       margin: 0;
+      min-inline-size: 0;
       font-size: var(--text-lg);
+    }
+
+    .head a {
+      flex: none;
+      white-space: nowrap;
     }
 
     .skeletons {

@@ -103,7 +103,8 @@ hr {
 // ---- Touch targets -----------------------------------------------------------------------------
 // 44 × 44 is the floor from docs/10-design-system.md §4, applied to the controls that
 // most often fall below it. A component that needs a visually smaller control pads it out rather
-// than shrinking the hit area.
+// than shrinking the hit area. `.kh-choice` opts its input out of this floor because the row
+// around it is already the target.
 @media (pointer: coarse) {
   :where(button, [role='button'], a.kh-action, input[type='checkbox'], input[type='radio']) {
     min-height: var(--touch-target-min);

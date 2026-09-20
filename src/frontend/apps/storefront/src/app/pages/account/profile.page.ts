@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   effect,
   inject,
   signal,
@@ -10,7 +11,7 @@ import {
 import { ProfileStore } from '@klarahome/data-access-account';
 import { isApiError } from '@klarahome/data-access-auth';
 import { Alert, Badge, Button, Checkbox, Control, ErrorState, Field, PageHeader, Skeleton } from '@klarahome/ui-primitives';
-import { formField, formGroup, gstin, maxLength } from '@klarahome/util';
+import { FeatureFlags, formField, formGroup, gstin, maxLength } from '@klarahome/util';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -55,10 +56,12 @@ import { describeError } from '../../core/describe-error';
                 @if (user.mobile) {
                   @if (user.mobileVerified) {
                     <kh-badge tone="success">Verified</kh-badge>
-                  } @else {
+                  } @else if (smsVerifyAvailable()) {
                     <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Sms')">
                       Verify
                     </button>
+                  } @else {
+                    <span class="note">Verification by SMS is coming soon.</span>
                   }
                 }
               </dd>
@@ -71,10 +74,12 @@ import { describeError } from '../../core/describe-error';
                 @if (user.email) {
                   @if (user.emailVerified) {
                     <kh-badge tone="success">Verified</kh-badge>
-                  } @else {
+                  } @else if (emailVerifyAvailable()) {
                     <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Email')">
                       Verify
                     </button>
+                  } @else {
+                    <span class="note">Verification by email is coming soon.</span>
                   }
                 }
               </dd>
@@ -244,6 +249,13 @@ import { describeError } from '../../core/describe-error';
       font-size: var(--text-sm);
     }
 
+    /* In place of the "Verify" button when the channel that OTP would go out on is not switched on
+       yet — muted, not an error state: nothing here is wrong, the capability just is not live. */
+    .note {
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
     .verify {
       margin-block-start: var(--space-4);
       max-inline-size: 20rem;
@@ -269,10 +281,23 @@ import { describeError } from '../../core/describe-error';
 })
 export class AccountProfilePage {
   protected readonly store = inject(ProfileStore);
+  private readonly flags = inject(FeatureFlags);
   private readonly toasts = inject(ToastService);
 
   /** Used by the template to strip anything but digits out of the code box. */
   protected readonly nonDigits = /\D/g;
+
+  // The "Verify" action sends an OTP over a channel this deployment may not have switched on yet
+  // (Step 7A's flags, which `availableChannels` ignores — see notifications.page.ts). Mobile needs
+  // only SMS; email verification needs both the SMS-equivalent email flag and the separate
+  // identity.email-verification flag, because a deployment can run email notifications without
+  // having turned on email as a proof of identity.
+  protected readonly smsVerifyAvailable = this.flags.flag('notifications.sms');
+  private readonly emailNotificationsOn = this.flags.flag('notifications.email');
+  private readonly emailVerificationOn = this.flags.flag('identity.email-verification');
+  protected readonly emailVerifyAvailable = computed(
+    () => this.emailNotificationsOn() && this.emailVerificationOn(),
+  );
 
   protected readonly consent = signal(false);
   protected readonly verifying = signal<'Sms' | 'Email' | null>(null);
