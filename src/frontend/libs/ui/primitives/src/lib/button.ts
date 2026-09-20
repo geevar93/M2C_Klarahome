@@ -15,11 +15,18 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
  * them would force the wrong element somewhere — usually a `<div role="button">`, which is a
  * keyboard trap with a hand cursor.
  *
+ * `<summary>` is the third element that legitimately looks like a button: it is the control of a
+ * `<details>` disclosure, and the browser already gives it the keyboard behaviour a hand-rolled
+ * popup would have to reimplement. It is in the selector because the alternative — a component
+ * copying these classes onto its own element — is how a control ends up *nearly* matching the
+ * ones beside it, which is worse than not matching at all. The only thing a summary needs of its
+ * own is `list-style: none`, to drop the disclosure triangle.
+ *
  * The classes live in `styles/_button.scss` rather than here so they are declared once for the
  * whole document instead of once per component that uses a button.
  */
 @Directive({
-  selector: 'button[khButton], a[khButton]',
+  selector: 'button[khButton], a[khButton], summary[khButton]',
   host: {
     class: 'kh-button',
     '[class]': 'classes()',

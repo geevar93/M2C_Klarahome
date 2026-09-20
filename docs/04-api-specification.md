@@ -117,6 +117,10 @@ PUT    /store/me/addresses/{id}
 DELETE /store/me/addresses/{id}
 GET    /store/me/notification-preferences
 PUT    /store/me/notification-preferences
+GET    /store/me/notifications           ?unreadOnly= &cursor= &size=   in-app inbox, newest first
+GET    /store/me/notifications/unread-count
+POST   /store/me/notifications/{id}/read
+POST   /store/me/notifications/read-all
 GET    /store/me/wallet                  → store-credit balance      [flag: pricing.store-credit]
 GET    /store/me/wallet/transactions     ?cursor= &size=             [flag: pricing.store-credit]
 POST   /store/me/data-export            (DPDP)

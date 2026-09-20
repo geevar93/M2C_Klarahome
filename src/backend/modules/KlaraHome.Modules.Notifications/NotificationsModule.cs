@@ -1,12 +1,16 @@
 using KlaraHome.Contracts.Notifications;
+using KlaraHome.Contracts.Orders;
+using KlaraHome.Contracts.Payments;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
+using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Infrastructure.Persistence.Seeding;
 using KlaraHome.Modules.Notifications.Endpoints;
 using KlaraHome.Modules.Notifications.Infrastructure;
 using KlaraHome.Modules.Notifications.Infrastructure.Channels;
+using KlaraHome.Modules.Notifications.Infrastructure.Events;
 using KlaraHome.Modules.Notifications.Infrastructure.Persistence;
 using KlaraHome.Modules.Notifications.Infrastructure.Seeding;
 using Microsoft.AspNetCore.Routing;
@@ -68,6 +72,7 @@ public sealed class NotificationsModule : IModule
         services.AddScoped<INotifier, Notifier>();
 
         AddChannelSenders(services, configuration);
+        AddEventHandlers(services);
 
         services.AddDataSeeder<NotificationTemplateSeeder>();
         services.AddHostedService<NotificationDispatcher>();
@@ -107,6 +112,39 @@ public sealed class NotificationsModule : IModule
         {
             services.AddScoped<IChannelSender, DevelopmentSmsSender>();
         }
+    }
+
+    /// <summary>
+    /// Subscribes to the order and payment events a shopper is told about.
+    /// </summary>
+    /// <remarks>
+    /// One instance per pair of modules rather than one per event, so the inbox-guard shape is
+    /// written once and every event of a family is claimed the same way. Registering the concrete
+    /// class as well as each interface is what lets the two share an instance within a scope
+    /// instead of opening three contexts for three events that arrive together.
+    /// </remarks>
+    private static void AddEventHandlers(IServiceCollection services)
+    {
+        services.AddScoped<OrderNotificationHandlers>();
+        services.AddScoped<PaymentNotificationHandlers>();
+
+        services.AddScoped<IIntegrationEventHandler<OrderPlaced>>(
+            provider => provider.GetRequiredService<OrderNotificationHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<SubOrderCancelled>>(
+            provider => provider.GetRequiredService<OrderNotificationHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<SubOrderStatusChanged>>(
+            provider => provider.GetRequiredService<OrderNotificationHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<PaymentCaptured>>(
+            provider => provider.GetRequiredService<PaymentNotificationHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<PaymentFailed>>(
+            provider => provider.GetRequiredService<PaymentNotificationHandlers>());
+
+        services.AddScoped<IIntegrationEventHandler<RefundProcessed>>(
+            provider => provider.GetRequiredService<PaymentNotificationHandlers>());
     }
 
     /// <inheritdoc />

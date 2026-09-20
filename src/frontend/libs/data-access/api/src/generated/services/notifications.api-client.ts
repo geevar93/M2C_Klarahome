@@ -29,6 +29,13 @@ export interface AdminNotificationTemplatesListQuery {
   eventKey?: string;
 }
 
+/** Query string for `storeNotificationsList`. */
+export interface StoreNotificationsListQuery {
+  unreadOnly?: boolean;
+  cursor?: string;
+  size?: number;
+}
+
 /** `Notifications` endpoints, generated from the API's OpenAPI document. */
 @Injectable({ providedIn: 'root' })
 export class NotificationsApiClient {
@@ -92,6 +99,14 @@ export class NotificationsApiClient {
   }
 
   /**
+   * Marks one in-app message as read.
+   * `POST /api/v1/store/me/notifications/{id}/read`
+   */
+  storeNotificationMarkRead(id: string, options?: ApiRequestOptions): Observable<Models.InboxMessageResponse> {
+    return this.http.request<Models.InboxMessageResponse>('POST', `${this.baseUrl}/api/v1/store/me/notifications/${encodeURIComponent(String(id))}/read`, undefined, undefined, options);
+  }
+
+  /**
    * Returns what this account has chosen to receive, per category and channel.
    * `GET /api/v1/store/me/notification-preferences`
    */
@@ -105,5 +120,29 @@ export class NotificationsApiClient {
    */
   storeNotificationPreferencesPut(body: Models.UpdatePreferenceRequest, options?: ApiRequestOptions): Observable<Models.PreferencesResponse> {
     return this.http.request<Models.PreferencesResponse>('PUT', `${this.baseUrl}/api/v1/store/me/notification-preferences`, body, undefined, options);
+  }
+
+  /**
+   * Returns this account's in-app messages, newest first, with the unread count.
+   * `GET /api/v1/store/me/notifications`
+   */
+  storeNotificationsList(query?: StoreNotificationsListQuery, options?: ApiRequestOptions): Observable<Models.InboxResponse> {
+    return this.http.request<Models.InboxResponse>('GET', `${this.baseUrl}/api/v1/store/me/notifications`, undefined, query, options);
+  }
+
+  /**
+   * Marks every unread in-app message as read, and says how many that was.
+   * `POST /api/v1/store/me/notifications/read-all`
+   */
+  storeNotificationsMarkAllRead(options?: ApiRequestOptions): Observable<Models.MarkAllReadResponse> {
+    return this.http.request<Models.MarkAllReadResponse>('POST', `${this.baseUrl}/api/v1/store/me/notifications/read-all`, undefined, undefined, options);
+  }
+
+  /**
+   * Returns how many in-app messages this account has not read.
+   * `GET /api/v1/store/me/notifications/unread-count`
+   */
+  storeNotificationsUnreadCount(options?: ApiRequestOptions): Observable<Models.UnreadCountResponse> {
+    return this.http.request<Models.UnreadCountResponse>('GET', `${this.baseUrl}/api/v1/store/me/notifications/unread-count`, undefined, undefined, options);
   }
 }

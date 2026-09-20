@@ -19,6 +19,14 @@ export class WebhooksApiClient {
   private readonly baseUrl = this.http.baseUrl;
 
   /**
+   * Receives a signed webhook from the configured courier, at a path naming no aggregator.
+   * `POST /api/v1/webhooks/courier`
+   */
+  courierWebhook(options?: ApiRequestOptions): Observable<void> {
+    return this.http.request<void>('POST', `${this.baseUrl}/api/v1/webhooks/courier`, undefined, undefined, options);
+  }
+
+  /**
    * Receives a signed Razorpay webhook, stores it, and answers immediately.
    * `POST /api/v1/webhooks/razorpay`
    */

@@ -62,6 +62,38 @@ public static class NotificationEvents
     /// <summary>A scheduled report has been produced and is ready to download (Step 21).</summary>
     public const string ReportReady = "reporting.export.ready";
 
+    /// <summary>An order was placed and is on the books.</summary>
+    /// <remarks>
+    /// Raised once per order rather than per sub-order: the shopper placed one order and is told
+    /// about one order, whatever it split into. The per-seller parts announce themselves later, as
+    /// they move.
+    /// </remarks>
+    public const string OrderPlaced = "orders.order.placed";
+
+    /// <summary>A seller's part of an order was cancelled, in whole or in part.</summary>
+    public const string OrderCancelled = "orders.suborder.cancelled";
+
+    /// <summary>A seller handed a parcel to the courier.</summary>
+    public const string OrderShipped = "orders.suborder.shipped";
+
+    /// <summary>A parcel is out with the delivery agent.</summary>
+    public const string OrderOutForDelivery = "orders.suborder.out-for-delivery";
+
+    /// <summary>A parcel arrived.</summary>
+    public const string OrderDelivered = "orders.suborder.delivered";
+
+    /// <summary>A delivery attempt failed — nobody home, refused, address unreachable.</summary>
+    public const string OrderDeliveryFailed = "orders.suborder.delivery-failed";
+
+    /// <summary>The gateway captured the money for an order.</summary>
+    public const string PaymentCaptured = "payments.payment.captured";
+
+    /// <summary>A collection was refused, or never completed.</summary>
+    public const string PaymentFailed = "payments.payment.failed";
+
+    /// <summary>The gateway confirmed money going back to where it came from.</summary>
+    public const string RefundProcessed = "payments.refund.processed";
+
     /// <summary>Every declared event key.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -77,6 +109,15 @@ public static class NotificationEvents
         PriceDrop,
         QuestionAnswered,
         ReportReady,
+        OrderPlaced,
+        OrderCancelled,
+        OrderShipped,
+        OrderOutForDelivery,
+        OrderDelivered,
+        OrderDeliveryFailed,
+        PaymentCaptured,
+        PaymentFailed,
+        RefundProcessed,
     ];
 
     /// <summary>Whether a key is one this platform declares.</summary>

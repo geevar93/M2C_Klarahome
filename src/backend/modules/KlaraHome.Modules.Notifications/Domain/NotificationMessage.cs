@@ -110,11 +110,35 @@ internal sealed class NotificationMessage : AggregateRoot<Guid>, ITenantScoped, 
     /// <summary>The correlation id of the request that caused it.</summary>
     public string? CorrelationId { get; private set; }
 
+    /// <summary>
+    /// When the recipient read it in the application, for the in-app channel.
+    /// </summary>
+    /// <remarks>
+    /// Null on every other channel and never set on one: nothing can know whether an email was
+    /// read, and a column that meant "read" on one channel and "we have no idea" on the rest would
+    /// make "how many unread" unanswerable. For the in-app channel the row <em>is</em> the message,
+    /// so this is the only place the fact can live.
+    /// </remarks>
+    public DateTimeOffset? ReadAt { get; private set; }
+
     /// <inheritdoc />
     public Guid TenantId { get; private set; }
 
     /// <summary>Whether the dispatcher still has work to do on this message.</summary>
     public bool IsPending => Status is NotificationStatus.Queued or NotificationStatus.Sending;
+
+    /// <summary>Marks an in-app message as read, if it was not already.</summary>
+    /// <remarks>
+    /// The first read wins. Re-reading a message does not move the timestamp, so "when did they
+    /// first see this" survives the shopper opening their inbox again — and marking a whole page
+    /// read stays idempotent, which is what lets the bulk endpoint be called on every page view
+    /// without rewriting history.
+    /// </remarks>
+    /// <param name="at">When it was read.</param>
+    public void MarkRead(DateTimeOffset at)
+    {
+        ReadAt ??= at;
+    }
 
     /// <summary>Creates a message in the queued state.</summary>
     /// <param name="createdAt">Now, from the sanctioned clock.</param>

@@ -1228,6 +1228,22 @@ export interface ImportSettlementsBody {
   to: string | null;
 }
 
+export interface InboxMessageResponse {
+  id: string;
+  eventKey: string;
+  category: string | null;
+  subject: string | null;
+  body: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface InboxResponse {
+  items: InboxMessageResponse[];
+  page: PageInfo;
+  unreadCount: number;
+}
+
 export interface InvoiceDownloadResponse {
   invoiceId: string;
   invoiceNumber: string;
@@ -1382,6 +1398,10 @@ export interface ManifestResponse {
   totalWeightGrams: number;
   fileId: string | null;
   generatedAt: string;
+}
+
+export interface MarkAllReadResponse {
+  markedCount: number;
 }
 
 export interface MeResponse {
@@ -4774,6 +4794,10 @@ export interface TwoFactorSetupResponse {
 export interface TwoFactorVerifyBody {
   challengeToken: string;
   code: string;
+}
+
+export interface UnreadCountResponse {
+  unreadCount: number;
 }
 
 export interface UpdateCartItemBody {

@@ -1,9 +1,10 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { NotificationInboxStore, INBOX_PREVIEW_SIZE } from '@klarahome/data-access-account';
 import { CartStore, CartSummaryStore } from '@klarahome/data-access-cart';
 import { ProductSearchService } from '@klarahome/data-access-catalog';
 import { StoreConfigService, StoreContentService } from '@klarahome/data-access-content';
 import { AuthService, SessionStore } from '@klarahome/data-access-auth';
-import { BannerView, MiniCartLine, NavItem, SuggestionView } from '@klarahome/ui-patterns';
+import { BannerView, MiniCartLine, NavItem, NotificationItem, SuggestionView } from '@klarahome/ui-patterns';
 import { BrowserStorage, SeoService, ThemeService } from '@klarahome/util';
 import { money } from '@klarahome/domain';
 import { Subject, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
@@ -56,6 +57,7 @@ export class ShellStore {
   private readonly search = inject(ProductSearchService);
   private readonly mapper = inject(CatalogMapper);
   private readonly recentSearches = inject(RecentSearchesStore);
+  private readonly inbox = inject(NotificationInboxStore);
 
   private readonly announcements = signal<readonly BannerView[]>([]);
   private readonly header = signal<readonly NavItem[]>([]);
@@ -181,8 +183,12 @@ export class ShellStore {
     // single-flight and silent: it answers false, never throws, when there is nobody to restore.
     if (this.session.isResolved()) {
       this.cart.loadOnce();
+      this.refreshNotificationBadge();
     } else {
-      const load = () => this.cart.loadOnce();
+      const load = () => {
+        this.cart.loadOnce();
+        this.refreshNotificationBadge();
+      };
       this.auth.refresh().subscribe({ next: load, error: load });
     }
 
@@ -197,6 +203,57 @@ export class ShellStore {
       .subscribe((response) =>
         this.served.set(response.suggestions.map((item) => this.mapper.suggestion(item))),
       );
+  }
+
+  /**
+   * The newest messages, as the bell renders them.
+   *
+   * Mapped here rather than in the component because the mapping is storefront knowledge: which
+   * event key is worth a link, and where that link goes.
+   */
+  readonly notificationPreview: Signal<readonly NotificationItem[]> = computed(() =>
+    this.inbox.preview().map((message) => ({
+      id: message.id,
+      subject: message.subject ?? 'Notification',
+      body: message.body ?? '',
+      createdAt: message.createdAt,
+      isRead: message.readAt !== null,
+      href: notificationLink(message.eventKey),
+    })),
+  );
+
+  readonly unreadNotificationCount = this.inbox.unreadCount;
+  readonly notificationsLoading = this.inbox.isLoading;
+
+  /** The bell was opened. The list is fetched here, not on every page view. */
+  loadNotifications(): void {
+    this.inbox.load(INBOX_PREVIEW_SIZE).subscribe({ error: () => undefined });
+  }
+
+  /**
+   * A message in the panel was clicked.
+   *
+   * Marking read is fire-and-forget on purpose: the navigation the click also triggers is what the
+   * shopper is waiting for, and a failed mark is corrected by the next count refresh rather than
+   * by an error they can do nothing about.
+   */
+  readNotification(id: string): void {
+    this.inbox.markRead(id).subscribe({ error: () => undefined });
+  }
+
+  readAllNotifications(): void {
+    this.inbox.markAllRead().subscribe({ error: () => undefined });
+  }
+
+  /**
+   * Reads the unread count, if there is anybody to read it for.
+   *
+   * Guarded on the session rather than left to fail: an unauthenticated call is a 401 in the
+   * console on every first paint for every signed-out visitor, which trains everyone to ignore the
+   * console.
+   */
+  private refreshNotificationBadge(): void {
+    if (this.session.isAuthenticated()) this.inbox.refreshUnreadCount();
   }
 
   /** The shopper typed. Called on every keystroke; the debounce above decides what reaches the API. */
@@ -315,4 +372,17 @@ export class ShellStore {
     if (record['@type'] !== 'Organization' || record['logo']) return node;
     return { ...record, logo: this.seo.absolute(FALLBACK_LOGO_PATH) };
   }
+}
+
+/**
+ * Where reading a message should take the shopper.
+ *
+ * Coarse on purpose. The message carries an order *number* and not an id — the number is what a
+ * shopper quotes and the id is what the route wants — so the honest destination is the list they
+ * can find it in rather than a detail page assembled from a guess. A key with nowhere useful to go
+ * gets no link and falls back to the inbox.
+ */
+function notificationLink(eventKey: string): string | undefined {
+  if (eventKey.startsWith('orders.') || eventKey.startsWith('payments.')) return '/account/orders';
+  return undefined;
 }

@@ -28,7 +28,8 @@ const LINKS: readonly AccountLink[] = [
   { path: '/account/addresses', label: 'Addresses', icon: 'pin' },
   { path: '/account/profile', label: 'Profile', icon: 'user' },
   { path: '/account/wallet', label: 'Store credit', icon: 'wallet', flag: 'pricing.wallet' },
-  { path: '/account/notifications', label: 'Notifications', icon: 'bell' },
+  { path: '/account/inbox', label: 'Notifications', icon: 'bell' },
+  { path: '/account/notifications', label: 'Notification settings', icon: 'edit' },
 ];
 
 /**

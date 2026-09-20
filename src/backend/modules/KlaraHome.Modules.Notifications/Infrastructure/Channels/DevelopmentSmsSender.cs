@@ -97,8 +97,8 @@ internal sealed partial class DevelopmentSmsSender(
 /// <remarks>
 /// Storing the row is the delivery, so this sender does nothing and succeeds. It exists so the
 /// router has one uniform way to ask a channel to carry a message, rather than a special case that
-/// every caller has to know about. The surface that reads these back belongs to the account area
-/// and is not in Step 8's deliverables.
+/// every caller has to know about. The surface that reads these back is the account area's inbox:
+/// <c>GET /store/me/notifications</c>, over the same rows, scoped to the caller.
 /// </remarks>
 internal sealed class InAppSender : IChannelSender
 {

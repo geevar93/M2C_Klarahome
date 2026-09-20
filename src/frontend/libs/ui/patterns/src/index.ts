@@ -14,6 +14,7 @@ export * from './lib/listing-toolbar';
 export * from './lib/mini-cart';
 export * from './lib/mobile-nav-drawer';
 export * from './lib/navigation.model';
+export * from './lib/notification-bell';
 export * from './lib/offer-list';
 export * from './lib/offline-notice';
 export * from './lib/order-card';
