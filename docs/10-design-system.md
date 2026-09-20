@@ -213,6 +213,28 @@ and API images needed when `ThemeService` itself was introduced.
 
 ---
 
+### 6.1 Theme presets (2026-09-20)
+
+A store no longer has to hand-write tokens. `libs/util/src/lib/theme-presets.ts` holds a
+catalogue of nine presets - Sand & Coffee (the palette above), Coral & Lagoon, Indigo & Ember,
+Emerald & Mango, Ocean & Sunset, Berry & Lime, Violet & Tangerine, Terracotta & Teal and Slate &
+Teal. Each is a complete override of the semantic colour layer built from four distinct roles:
+
+- **primary** - the action colour (add to cart, checkout, pay), always dark enough to carry white;
+- **accent** - an emphasis colour from a *different* hue family, with `--color-accent-surface` and
+  `--color-accent-text` for the announcement strip and, through `--color-savings`, the "% off"
+  label on every listing;
+- **ink and muted** - the darkest text and a real mid-tone that still clears 4.5:1 on the ground;
+- **grounds** - page, surface and sunken as three steps of one tint of the theme.
+
+Every pairing is checked against §4's floors before a preset ships (4.5:1 for text on its surface
+and on the accent strip, 3:1 for a primary, accent or strong border against the ground). The
+preset in use is recorded in the token set as `--kh-theme`; the admin's Store settings page shows
+the catalogue as swatch cards, previews a choice on the admin itself, and saves it to the
+`branding` section, which the storefront reads on its next load. Two tokens this work added to
+`_tokens.scss`: `--color-accent-surface` and `--color-accent-text`, which the announcement bar had
+referenced without them existing.
+
 ## 7. Outstanding
 
 - **Dark mode: not implemented.** The token structure supports it — every colour has a semantic

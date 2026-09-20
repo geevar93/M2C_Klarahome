@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AddressBookStore } from '@klarahome/data-access-account';
 import { ReferenceDataService } from '@klarahome/data-access-content';
-import { Alert, Button, Drawer, EmptyState, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Button, Drawer, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import {
   AddressCard,
   AddressForm,
@@ -33,21 +33,25 @@ import { describeError } from '../../core/describe-error';
  */
 @Component({
   selector: 'kh-account-addresses-page',
-  imports: [AddressCard, AddressForm, Alert, Button, Drawer, EmptyState, Skeleton],
+  imports: [AddressCard, AddressForm, Alert, Button, Drawer, EmptyState, ErrorState, PageHeader, Skeleton],
   template: `
-    <div class="head">
-      <h1>Your addresses</h1>
-      <button khButton variant="primary" type="button" (click)="add()">Add an address</button>
-    </div>
+    <kh-page-header title="Addresses">
+      <button khButton variant="primary" type="button" (click)="add()">Add address</button>
+    </kh-page-header>
 
     @if (store.isLoading() && !store.hasLoaded()) {
-      <kh-skeleton height="8rem" />
+      <div class="list">
+        <kh-skeleton height="8rem" />
+        <kh-skeleton height="8rem" />
+      </div>
+    } @else if (error()) {
+      <kh-error-state (retry)="load()" />
     } @else if (store.isEmpty()) {
       <kh-empty-state
         heading="No addresses saved yet"
         message="Add one now and checkout will be a couple of taps."
       >
-        <button khButton variant="primary" type="button" (click)="add()">Add an address</button>
+        <button khButton variant="primary" type="button" (click)="add()">Add address</button>
       </kh-empty-state>
     } @else {
       <div class="list">
@@ -67,10 +71,11 @@ import { describeError } from '../../core/describe-error';
       [open]="formOpen()"
       side="bottom"
       [label]="editing() ? 'Edit address' : 'Add an address'"
+      labelledBy="address-form-heading"
       (closed)="closeForm()"
     >
       <div class="sheet">
-        <h2>{{ editing() ? 'Edit address' : 'Add an address' }}</h2>
+        <h2 id="address-form-heading">{{ editing() ? 'Edit address' : 'Add an address' }}</h2>
         <kh-address-form
           [states]="states()"
           [address]="editing()"
@@ -88,10 +93,11 @@ import { describeError } from '../../core/describe-error';
       [open]="removing() !== null"
       side="bottom"
       label="Delete this address"
+      labelledBy="address-delete-heading"
       (closed)="removing.set(null)"
     >
       <div class="sheet">
-        <h2>Delete this address?</h2>
+        <h2 id="address-delete-heading">Delete this address?</h2>
         <kh-alert tone="warning">
           {{ removing()?.recipientName }}'s address will be removed from your address book. Orders already
           sent there are not affected.
@@ -104,7 +110,7 @@ import { describeError } from '../../core/describe-error';
             [disabled]="store.isSaving()"
             (click)="confirmRemove()"
           >
-            Delete it
+            {{ store.isSaving() ? 'Deleting…' : 'Delete it' }}
           </button>
           <button khButton variant="tertiary" type="button" (click)="removing.set(null)">Keep it</button>
         </div>
@@ -116,24 +122,10 @@ import { describeError } from '../../core/describe-error';
       display: block;
     }
 
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-3);
-    }
-
-    h1 {
-      margin: 0;
-      font-size: var(--text-2xl);
-    }
-
     .list {
       display: flex;
       flex-direction: column;
       gap: var(--space-3);
-      margin-block-start: var(--space-4);
     }
 
     .sheet {
@@ -154,11 +146,13 @@ export class AccountAddressesPage {
   private readonly reference = inject(ReferenceDataService);
   private readonly mapper = inject(CommerceMapper);
   private readonly toasts = inject(ToastService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly formOpen = signal(false);
   protected readonly editing = signal<AddressView | null>(null);
   protected readonly removing = signal<AddressView | null>(null);
   protected readonly place = signal<PincodePlaceView | null>(null);
+  protected readonly error = signal(false);
 
   private readonly stateRows = toSignal(this.reference.states(), { initialValue: [] });
 
@@ -175,7 +169,12 @@ export class AccountAddressesPage {
   );
 
   constructor() {
-    this.store.loadOnce();
+    this.load();
+  }
+
+  protected load(): void {
+    this.error.set(false);
+    this.store.load().subscribe({ error: () => this.error.set(true) });
   }
 
   protected add(): void {
@@ -219,6 +218,7 @@ export class AccountAddressesPage {
       next: () => {
         this.closeForm();
         this.toasts.success(existing ? 'Address updated.' : 'Address saved.');
+        this.focusHeading();
       },
       error: (error: unknown) =>
         this.toasts.danger(
@@ -239,6 +239,7 @@ export class AccountAddressesPage {
       next: () => {
         this.removing.set(null);
         this.toasts.success('Address deleted.');
+        this.focusHeading();
       },
       error: (error: unknown) => {
         this.removing.set(null);
@@ -253,5 +254,19 @@ export class AccountAddressesPage {
       error: (error: unknown) =>
         this.toasts.danger(describeError(error, 'We could not change your default address.')),
     });
+  }
+
+  /**
+   * Moves focus to the page's own heading after a sheet closes on success.
+   *
+   * A drawer restores focus to whatever opened it, which is correct while cancelling — but a
+   * completed delete or save has removed that trigger's context, so focus is sent to the page's
+   * own name instead of being left to fall back to the document body.
+   */
+  private focusHeading(): void {
+    const heading = this.host.nativeElement.querySelector<HTMLElement>('h1');
+    if (!heading) return;
+    heading.setAttribute('tabindex', '-1');
+    heading.focus();
   }
 }

@@ -45,7 +45,21 @@
   [storeName]="shell.storeName()"
   [menu]="shell.headerMenu()"
   (closed)="shell.closeNav()"
-/>
+>
+  @if (shell.isAuthenticated()) {
+    <a class="drawer-foot-link" routerLink="/account" (click)="shell.closeNav()">Account</a>
+    <a class="drawer-foot-link" routerLink="/account/wishlist" (click)="shell.closeNav()">Wishlist</a>
+    <a class="drawer-foot-link" routerLink="/account/orders" (click)="shell.closeNav()">Orders</a>
+  } @else {
+    <a
+      class="drawer-foot-link"
+      routerLink="/auth/login"
+      [queryParams]="{ returnUrl: router.url }"
+      (click)="shell.closeNav()"
+      >Sign in</a
+    >
+  }
+</kh-mobile-nav-drawer>
 
 <kh-mini-cart
   [open]="shell.isCartOpen()"
@@ -53,6 +67,7 @@
   [lines]="shell.miniCartLines()"
   [total]="shell.cartSubtotal()"
   (closed)="shell.closeCart()"
+  (removed)="shell.removeCartLine($event)"
 />
 
 <!--
@@ -60,7 +75,13 @@
   order. The breadcrumb sits inside the main landmark because it describes this page's place, not
   the site's structure.
 -->
-<main id="main-content" khContainer tabindex="-1" [class.has-sticky-action]="hasStickyAction()">
+<main
+  id="main-content"
+  khContainer
+  tabindex="-1"
+  [class.has-sticky-action]="hasStickyAction()"
+  [class.has-cart-dock]="shell.isCartDockOpen() && !onCartRoute()"
+>
   <kh-breadcrumbs [items]="breadcrumbs()" />
   <router-outlet />
 </main>
@@ -71,6 +92,18 @@
   [social]="shell.socialLinks()"
   [clearsStickyBar]="hasStickyAction()"
   [hideOnMobile]="hideFooterOnMobile()"
+/>
+
+<!--
+  The floating cart panel: shown once the basket has something in it, on every page except the two
+  that already are the basket. Dismissed, it stays away until the basket changes.
+-->
+<kh-cart-dock
+  [open]="shell.isCartDockOpen() && !onCartRoute()"
+  [count]="shell.cartCount()"
+  [subtotal]="shell.cartSubtotal()"
+  [raised]="hasStickyAction()"
+  (hidden)="shell.hideCartDock()"
 />
 
 <kh-sticky-action-bar />

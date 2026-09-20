@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterNextRender,
+  computed,
+  inject,
+} from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ProfileStore } from '@klarahome/data-access-account';
 import { Button, Icon, IconName } from '@klarahome/ui-primitives';
@@ -12,9 +19,11 @@ interface AccountLink {
   readonly label: string;
   readonly icon: IconName;
   readonly flag?: string;
+  readonly exact?: boolean;
 }
 
 const LINKS: readonly AccountLink[] = [
+  { path: '/account', label: 'Overview', icon: 'home', exact: true },
   { path: '/account/orders', label: 'Orders', icon: 'package' },
   { path: '/account/returns', label: 'Returns', icon: 'refresh' },
   { path: '/account/wishlist', label: 'Wishlist', icon: 'heart' },
@@ -55,6 +64,7 @@ const LINKS: readonly AccountLink[] = [
               <a
                 [routerLink]="link.path"
                 routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: !!link.exact }"
                 #active="routerLinkActive"
                 [attr.aria-current]="active.isActive ? 'page' : null"
               >
@@ -152,9 +162,19 @@ export class AccountLayout {
   protected readonly profile = inject(ProfileStore);
   private readonly flags = inject(FeatureFlags);
   private readonly flow = inject(SignInFlow);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   constructor() {
     this.profile.loadOnce();
+
+    // The menu is a horizontal scroller on a phone (`ul` below `lg`), and the active section is not
+    // always the first one in it — landing on `/account/wallet` from a link should not leave its
+    // entry sitting off the right edge of the strip.
+    afterNextRender(() => {
+      this.host.nativeElement
+        .querySelector('.menu a.active')
+        ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    });
   }
 
   /**

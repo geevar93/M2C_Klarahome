@@ -3,12 +3,17 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ProfileStore } from '@klarahome/data-access-account';
 import { PaymentHandoff } from '@klarahome/data-access-checkout';
 import { OrderResponse, OrdersService } from '@klarahome/data-access-orders';
-import { KhDatePipe } from '@klarahome/i18n';
+import { KhDatePipe, MoneyPipe } from '@klarahome/i18n';
 import { Alert, Badge, Button, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { AddressCard, OrderSummary, StatusTone } from '@klarahome/ui-patterns';
 import { ToastService } from '@klarahome/util';
 
 import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
+
+/** The two statuses under which money has actually arrived. One rule, used everywhere on the page. */
+function isPaidStatus(status: string | null | undefined): boolean {
+  return status === 'Paid' || status === 'Captured';
+}
 
 /**
  * Order confirmation — `/checkout/confirmation/:orderNumber`.
@@ -31,6 +36,7 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
 @Component({
   selector: 'kh-order-confirmation-page',
   imports: [AddressCard, Alert, Badge, Button, Icon, KhDatePipe, OrderSummary, RouterLink, Skeleton],
+  providers: [MoneyPipe],
   template: `
     @if (loading()) {
       <kh-skeleton height="16rem" />
@@ -106,7 +112,7 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
 
         <aside>
           @if (summary(); as details) {
-            <kh-order-summary [summary]="details" heading="What you paid" />
+            <kh-order-summary [summary]="details" [heading]="isPaid() ? 'What you paid' : 'Order total'" />
           }
 
           <div class="actions">
@@ -203,6 +209,7 @@ export class OrderConfirmationPage {
   private readonly mapper = inject(CommerceMapper);
   private readonly toasts = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly money = inject(MoneyPipe);
 
   protected readonly order = signal<OrderResponse | null>(null);
   protected readonly loading = signal(true);
@@ -210,10 +217,7 @@ export class OrderConfirmationPage {
 
   protected readonly isCod = computed(() => isCashOnDelivery(this.order()?.paymentMethod));
 
-  protected readonly isPaid = computed(() => {
-    const status = this.order()?.paymentStatus;
-    return status === 'Paid' || status === 'Captured';
-  });
+  protected readonly isPaid = computed(() => isPaidStatus(this.order()?.paymentStatus));
 
   protected readonly summary = computed(() => {
     const order = this.order();
@@ -253,10 +257,7 @@ export class OrderConfirmationPage {
   protected readonly dueOnDelivery = computed(() => {
     const order = this.order();
     if (!order) return '';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: order.currencyCode || 'INR',
-    }).format(order.amountPayable);
+    return this.money.transform({ amount: order.amountPayable, currency: order.currencyCode || 'INR' });
   });
 
   constructor() {
@@ -323,7 +324,7 @@ export class OrderConfirmationPage {
         this.loading.set(false);
         // Asked once, not polled: a webhook that has not landed yet resolves in seconds, and the
         // order page is where somebody who waited longer than that would look.
-        if (!isCashOnDelivery(order.paymentMethod) && order.paymentStatus !== 'Paid')
+        if (!isCashOnDelivery(order.paymentMethod) && !isPaidStatus(order.paymentStatus))
           this.confirmPayment(order);
       },
       error: () => {

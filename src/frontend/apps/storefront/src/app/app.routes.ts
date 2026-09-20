@@ -95,8 +95,9 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./pages/cms-page.page').then((m) => m.CmsPage),
     resolve: { page: cmsPageResolver },
     // The label is replaced with the page's real title once it resolves; this is what the trail
-    // says while it is in flight.
-    data: { breadcrumb: 'Page' },
+    // and the tab say while it is in flight — `CmsPage` overwrites both with the page's own
+    // heading once it has one.
+    data: { breadcrumb: 'Page', seo: { title: 'Page' } },
   },
 
   // The blog ships behind `content.blog`, which is off by default. `canMatch` rather than
@@ -120,7 +121,7 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./pages/cart.page').then((m) => m.CartPage),
     data: {
       breadcrumb: 'Cart',
-      seo: { title: 'Your cart', noIndex: true },
+      seo: { title: 'Cart', noIndex: true },
     },
   },
   {
@@ -137,7 +138,7 @@ export const appRoutes: Route[] = [
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./pages/checkout/confirmation.page').then((m) => m.OrderConfirmationPage),
     data: {
-      seo: { title: 'Order confirmed', noIndex: true },
+      seo: { title: 'Order confirmation', noIndex: true },
     },
   },
 
@@ -146,48 +147,49 @@ export const appRoutes: Route[] = [
     path: 'account',
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./pages/account/account.layout').then((m) => m.AccountLayout),
-    data: { breadcrumb: 'Your account', seo: { title: 'Your account', noIndex: true } },
+    data: { breadcrumb: 'Account', seo: { title: 'Account', noIndex: true } },
     children: [
       {
         path: '',
         pathMatch: 'full',
         loadComponent: () => import('./pages/account/dashboard.page').then((m) => m.AccountDashboardPage),
+        data: { seo: { title: 'Account' } },
       },
       {
         path: 'orders',
         loadComponent: () => import('./pages/account/orders.page').then((m) => m.AccountOrdersPage),
-        data: { breadcrumb: 'Orders', seo: { title: 'Your orders' } },
+        data: { breadcrumb: 'Orders', seo: { title: 'Orders' } },
       },
       {
         path: 'orders/:orderNumber',
         loadComponent: () => import('./pages/account/order-detail.page').then((m) => m.OrderDetailPage),
         // Replaced with the order number once it loads — see `BreadcrumbTrail.setLeafLabel`.
-        data: { breadcrumb: 'Order', seo: { title: 'Your order' } },
+        data: { breadcrumb: 'Order', seo: { title: 'Order' } },
       },
       {
         path: 'returns',
         loadComponent: () => import('./pages/account/returns.page').then((m) => m.AccountReturnsPage),
-        data: { breadcrumb: 'Returns', seo: { title: 'Your returns' } },
+        data: { breadcrumb: 'Returns', seo: { title: 'Returns' } },
       },
       {
         path: 'returns/:rmaNumber',
         loadComponent: () => import('./pages/account/return-detail.page').then((m) => m.ReturnDetailPage),
-        data: { breadcrumb: 'Return', seo: { title: 'Your return' } },
+        data: { breadcrumb: 'Return', seo: { title: 'Return' } },
       },
       {
         path: 'addresses',
         loadComponent: () => import('./pages/account/addresses.page').then((m) => m.AccountAddressesPage),
-        data: { breadcrumb: 'Addresses', seo: { title: 'Your addresses' } },
+        data: { breadcrumb: 'Addresses', seo: { title: 'Addresses' } },
       },
       {
         path: 'profile',
         loadComponent: () => import('./pages/account/profile.page').then((m) => m.AccountProfilePage),
-        data: { breadcrumb: 'Profile', seo: { title: 'Your profile' } },
+        data: { breadcrumb: 'Profile', seo: { title: 'Profile' } },
       },
       {
         path: 'wishlist',
         loadComponent: () => import('./pages/account/wishlist.page').then((m) => m.AccountWishlistPage),
-        data: { breadcrumb: 'Wishlist', seo: { title: 'Your wishlist' } },
+        data: { breadcrumb: 'Wishlist', seo: { title: 'Wishlist' } },
       },
       {
         // Store credit is a flagged capability (Step 12). `canMatch`, so a deployment without it has
@@ -201,7 +203,7 @@ export const appRoutes: Route[] = [
         path: 'notifications',
         loadComponent: () =>
           import('./pages/account/notifications.page').then((m) => m.AccountNotificationsPage),
-        data: { breadcrumb: 'Notifications', seo: { title: 'Notification preferences' } },
+        data: { breadcrumb: 'Notifications', seo: { title: 'Notifications' } },
       },
     ],
   },
@@ -259,18 +261,22 @@ export const appRoutes: Route[] = [
   {
     path: '403',
     loadComponent: () => import('./pages/errors/forbidden.page').then((m) => m.ForbiddenPage),
+    data: { seo: { title: 'You do not have access to this page', noIndex: true } },
   },
   {
     path: '404',
     loadComponent: () => import('./pages/errors/not-found.page').then((m) => m.NotFoundPage),
+    data: { seo: { title: 'Page not found', noIndex: true } },
   },
   {
     path: '500',
     loadComponent: () => import('./pages/errors/server-error.page').then((m) => m.ServerErrorPage),
+    data: { seo: { title: 'Something went wrong', noIndex: true } },
   },
   {
     path: 'offline',
     loadComponent: () => import('./pages/errors/offline.page').then((m) => m.OfflinePage),
+    data: { seo: { title: 'You are offline', noIndex: true } },
   },
 
   // A CMS page at the site root — `/about`, `/returns-policy` — which is the address the admin shows
@@ -281,7 +287,7 @@ export const appRoutes: Route[] = [
     path: ':slug',
     loadComponent: () => import('./pages/cms-page.page').then((m) => m.CmsPage),
     resolve: { page: cmsPageResolver },
-    data: { breadcrumb: 'Page' },
+    data: { breadcrumb: 'Page', seo: { title: 'Page' } },
   },
 
   // Anything else is a 404 — and it is answered with a real 404 status, because `**` is declared

@@ -77,7 +77,7 @@ import { ProductCarousel } from './product-carousel';
         @case ('bannerGrid') {
           <section>
             @if (block.heading) {
-              <h2>{{ block.heading }}</h2>
+              <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
             <kh-grid [fixedColumns]="block.columns" minColumnWidth="14rem" [gap]="3">
               @for (item of block.items; track $index) {
@@ -126,9 +126,9 @@ import { ProductCarousel } from './product-carousel';
         }
 
         @case ('categoryTiles') {
-          <section>
+          <section class="banded">
             @if (block.heading) {
-              <h2>{{ block.heading }}</h2>
+              <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
             <kh-grid [fixedColumns]="block.columns" minColumnWidth="7rem" [gap]="3">
               @for (tile of block.items; track tile.href) {
@@ -148,15 +148,15 @@ import { ProductCarousel } from './product-carousel';
         @case ('richText') {
           <section class="rich" [attr.data-width]="block.width">
             @if (block.heading) {
-              <h2>{{ block.heading }}</h2>
+              <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
             <div class="rich-body" [innerHTML]="block.html"></div>
           </section>
         }
 
         @case ('faq') {
-          <section>
-            <h2>{{ block.heading || 'Questions' }}</h2>
+          <section class="banded">
+            <h2 class="kh-section-heading">{{ block.heading || 'Questions' }}</h2>
             @for (item of block.items; track item.question) {
               <kh-disclosure [heading]="item.question">
                 <div class="rich-body" [innerHTML]="item.answer"></div>
@@ -166,9 +166,9 @@ import { ProductCarousel } from './product-carousel';
         }
 
         @case ('testimonial') {
-          <section>
+          <section class="banded">
             @if (block.heading) {
-              <h2>{{ block.heading }}</h2>
+              <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
             <kh-grid minColumnWidth="16rem" [gap]="3">
               @for (item of block.items; track item.quote) {
@@ -200,6 +200,28 @@ import { ProductCarousel } from './product-carousel';
 
     h2 {
       font-size: var(--text-xl);
+    }
+
+    /* A tinted panel, for the blocks that are a *section of the page* rather than a grid of
+       merchandise: the category tiles, the questions, the testimonials. A home page whose every
+       block sits on the same ground is one flat wash from the header to the footer, which is what
+       a themed storefront looked like before this — the palette was applied and had nowhere to
+       show. The three kinds banded here are the ones whose content is not photography, so a tint
+       behind them competes with nothing.
+
+       A padded panel inside the container rather than a full-bleed \`.kh-band\`: the renderer does
+       not own the page's container and cannot break out of it without knowing what wraps it, and a
+       rounded panel reads as a band at every width without that coupling. */
+    .banded {
+      padding: var(--space-6) var(--space-5);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface);
+    }
+
+    @media (min-width: 768px) {
+      .banded {
+        padding: var(--space-8);
+      }
     }
 
     /* A merchant's headline, caption, quote or label is free text with no length limit on the CMS

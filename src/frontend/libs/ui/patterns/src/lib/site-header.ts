@@ -1,6 +1,8 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { Badge, Button, Icon } from '@klarahome/ui-primitives';
+import { filter, map } from 'rxjs';
 
 import { NavItem, isInternalHref } from './navigation.model';
 
@@ -29,7 +31,7 @@ import { NavItem, isInternalHref } from './navigation.model';
         [iconOnly]="true"
         class="menu-button"
         type="button"
-        aria-label="Open menu"
+        [attr.aria-label]="menuOpen() ? 'Close menu' : 'Open menu'"
         aria-haspopup="dialog"
         [attr.aria-expanded]="menuOpen()"
         (click)="menuToggled.emit()"
@@ -45,7 +47,7 @@ import { NavItem, isInternalHref } from './navigation.model';
            tenant, is being identified (favicon, PWA icons, OG image, error art). -->
       <a class="wordmark" routerLink="/">{{ storeName() }}</a>
 
-      <nav class="primary" [attr.aria-label]="'Primary'">
+      <nav class="primary" aria-label="Main">
         @for (item of menu(); track item.label) {
           @if (isInternal(item.href)) {
             <a
@@ -68,12 +70,26 @@ import { NavItem, isInternalHref } from './navigation.model';
       </nav>
 
       <div class="actions">
+        @if (isAuthenticated()) {
+          <a
+            khButton
+            variant="tertiary"
+            [iconOnly]="true"
+            class="wishlist"
+            routerLink="/account/wishlist"
+            aria-label="Your wishlist"
+          >
+            <kh-icon name="heart" />
+          </a>
+        }
+
         <a
           khButton
           variant="tertiary"
           [iconOnly]="true"
           class="account"
           [routerLink]="accountLink()"
+          [queryParams]="accountQueryParams()"
           [attr.aria-label]="isAuthenticated() ? 'Your account' : 'Sign in'"
         >
           <kh-icon name="user" />
@@ -110,8 +126,13 @@ import { NavItem, isInternalHref } from './navigation.model';
       inset-block-start: 0;
       z-index: var(--z-header);
       display: block;
-      background: var(--color-bg);
-      border-block-end: 1px solid var(--color-border);
+      /* The surface step, not the page ground. A header the same colour as the page behind it
+         reads as part of the page rather than as the thing that stays put when the page scrolls —
+         and on a sticky bar that is exactly the distinction the shopper needs. The bottom rule is
+         the strong border for the same reason: it is the boundary between two surfaces, not a
+         divider inside one. */
+      background: var(--color-surface);
+      border-block-end: 1px solid var(--color-border-strong);
     }
 
     .bar {
@@ -155,14 +176,31 @@ import { NavItem, isInternalHref } from './navigation.model';
       display: none;
     }
 
+    .wishlist {
+      display: none;
+    }
+
+    @media (min-width: 480px) {
+      .wishlist {
+        display: inline-flex;
+      }
+    }
+
     .cart {
       position: relative;
     }
 
+    /* A count, not a label: the smallest the badge can be while still a bordered box, tucked into
+       the icon's top corner. */
     .count {
       position: absolute;
       inset-block-start: var(--space-1);
-      inset-inline-end: 0;
+      inset-inline-end: calc(var(--space-1) * -1);
+      min-width: var(--space-4);
+      min-block-size: var(--space-4);
+      padding: 0 var(--space-1);
+      font-size: var(--text-xs);
+      box-shadow: none;
     }
 
     .nav-link {
@@ -175,8 +213,15 @@ import { NavItem, isInternalHref } from './navigation.model';
     }
 
     .nav-link.is-active {
-      /* Not colour alone: an underline survives a monochrome screen and colour blindness. */
+      /* Not colour alone: an underline survives a monochrome screen and colour blindness. The
+         colour is carried too, because on a page with six menu items an underline alone is a
+         small mark to find — but it is the second signal, never the only one. The rule is drawn
+         in the accent rather than the primary: the primary is what a shopper *acts* on, and a
+         menu item marking where they already are is not an action. */
+      color: var(--color-primary);
       text-decoration: underline;
+      text-decoration-color: var(--color-accent);
+      text-decoration-thickness: 2px;
       text-underline-offset: var(--space-1);
     }
 
@@ -238,8 +283,28 @@ export class SiteHeader {
 
   protected readonly isInternal = isInternalHref;
 
+  private readonly router = inject(Router);
+
+  /**
+   * The URL the account icon links to when signed out is `/auth/login`, carrying a `returnUrl` of
+   * the page the shopper is on right now — signing in should hand them straight back, not to the
+   * home page. Tracked as a signal off `NavigationEnd` rather than read once, because the header is
+   * created once and outlives every navigation.
+   */
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+
   protected accountLink(): string {
     return this.isAuthenticated() ? '/account' : '/auth/login';
+  }
+
+  protected accountQueryParams(): Record<string, string> | undefined {
+    return this.isAuthenticated() ? undefined : { returnUrl: this.currentUrl() };
   }
 
   protected cartLabel(): string {

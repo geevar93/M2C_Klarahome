@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { NotificationPreferencesStore, PreferenceResponse } from '@klarahome/data-access-account';
-import { Alert, Checkbox, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Checkbox, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -32,16 +32,17 @@ const CHANNELS: readonly { readonly key: 'email' | 'sms' | 'whatsApp' | 'inApp';
  */
 @Component({
   selector: 'kh-account-notifications-page',
-  imports: [Alert, Checkbox, Skeleton],
+  imports: [Alert, Checkbox, ErrorState, PageHeader, Skeleton],
   template: `
-    <h1>Notifications</h1>
-    <p class="lead">
-      Choose what we tell you about, and where. Some messages about an order you have placed are sent whatever
-      you choose here — they are part of buying something.
-    </p>
+    <kh-page-header
+      title="Notifications"
+      lead="Choose what we tell you about, and where. Some messages about an order you have placed are sent whatever you choose here — they are part of buying something."
+    />
 
     @if (!store.hasLoaded()) {
       <kh-skeleton height="12rem" />
+    } @else if (error()) {
+      <kh-error-state (retry)="load()" />
     } @else if (store.categories().length === 0) {
       <kh-alert tone="info">There is nothing to configure on this store yet.</kh-alert>
     } @else {
@@ -58,7 +59,7 @@ const CHANNELS: readonly { readonly key: 'email' | 'sms' | 'whatsApp' | 'inApp';
                   [label]="channel.label"
                   [inputId]="category.category + '-' + channel.key"
                   [checked]="isOn(category, channel.key)"
-                  [disabled]="store.savingCategory() !== null"
+                  [disabled]="store.savingCategory() === category.category"
                   (checkedChange)="toggle(category, channel.key, $event)"
                 />
               }
@@ -71,15 +72,6 @@ const CHANNELS: readonly { readonly key: 'email' | 'sms' | 'whatsApp' | 'inApp';
   styles: `
     :host {
       display: block;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
-    .lead {
-      color: var(--color-text-muted);
-      font-size: var(--text-sm);
     }
 
     .grid {
@@ -124,8 +116,15 @@ export class AccountNotificationsPage {
   protected readonly store = inject(NotificationPreferencesStore);
   private readonly toasts = inject(ToastService);
 
+  protected readonly error = signal(false);
+
   constructor() {
-    this.store.loadOnce();
+    this.load();
+  }
+
+  protected load(): void {
+    this.error.set(false);
+    this.store.load().subscribe({ error: () => this.error.set(true) });
   }
 
   /** The columns this deployment can actually send on. */
@@ -154,6 +153,7 @@ export class AccountNotificationsPage {
         inApp: key === 'inApp' ? value : category.inApp,
       })
       .subscribe({
+        next: () => this.toasts.success('Preferences saved.'),
         error: (error: unknown) =>
           this.toasts.warning(describeError(error, 'We could not save that preference. Please try again.')),
       });

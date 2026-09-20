@@ -1,10 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { AddressBookStore, ProfileStore } from '@klarahome/data-access-account';
-import { AuthService, SessionStore, SignInResponse } from '@klarahome/data-access-auth';
-import { CartStore } from '@klarahome/data-access-cart';
+import { AuthService, SessionStore, SignInResponse, safeReturnUrl } from '@klarahome/data-access-auth';
+import { CartStore, CartSummaryStore } from '@klarahome/data-access-cart';
 import { WishlistStore } from '@klarahome/data-access-engagement';
 import { AnalyticsEvents, AnalyticsService, ToastService } from '@klarahome/util';
+
+/** How the shopper proved who they were, for analytics. `<provider>` is the external identity provider's own name. */
+export type SignInMethod = 'password' | `social:${string}`;
 
 /**
  * What happens after a customer signs in — in one place, because four screens do it.
@@ -29,6 +32,8 @@ export class SignInFlow {
   private readonly auth = inject(AuthService);
   private readonly session = inject(SessionStore);
   private readonly cart = inject(CartStore);
+  /** The read-only summary the shell's header badge and mini-cart render — refreshed once the merge lands. */
+  private readonly cartSummary = inject(CartSummaryStore);
   private readonly wishlist = inject(WishlistStore);
   private readonly profile = inject(ProfileStore);
   private readonly addresses = inject(AddressBookStore);
@@ -43,10 +48,10 @@ export class SignInFlow {
    * routes to the code screen with the challenge token. Nothing below runs in that case, because
    * the customer is not signed in yet: one factor proved is not a session.
    */
-  complete(response: SignInResponse, returnUrl: string | null): boolean {
+  complete(response: SignInResponse, returnUrl: string | null, method: SignInMethod = 'password'): boolean {
     if (!this.session.isAuthenticated()) return false;
 
-    this.analytics.track(AnalyticsEvents.login, { method: response.user?.mobile ? 'otp' : 'password' });
+    this.analytics.track(AnalyticsEvents.login, { method });
 
     // The merge is fired and not waited on. It is a server-side reconciliation of two baskets, and
     // holding the customer on a spinner while it happens buys nothing — the header badge updates
@@ -56,6 +61,10 @@ export class SignInFlow {
         if (merged && merged.lines.length > 0) {
           this.toasts.info('We have kept the items you had in your cart.');
         }
+        // `CartStore.mergeAfterSignIn` updates its own basket, not the shell's read-only summary —
+        // the header badge and the mini-cart read `CartSummaryStore`, and without this they would
+        // keep showing whatever an anonymous visitor last saw until the next navigation.
+        this.cartSummary.load();
       },
       error: () => undefined,
     });
@@ -89,16 +98,11 @@ export class SignInFlow {
   /**
    * The URL to return to, if it is one of ours.
    *
-   * A `returnUrl` arrives in a query string, which means anybody can put anything in it. Only a
-   * path beginning with a single `/` is honoured — `//evil.example` is a protocol-relative URL and
-   * would send the customer off-site with our sign-in page as the referrer, which is the
-   * open-redirect this check exists for (docs/07-security-compliance.md).
+   * The validation itself is `safeReturnUrl` from `@klarahome/data-access-auth` — the same rule
+   * `anonymousOnlyGuard` applies to the query parameter it reads, so a `returnUrl` is judged safe
+   * or not exactly once rather than by two implementations that could drift.
    */
   private safeReturnUrl(returnUrl: string | null): string {
-    if (!returnUrl) return '/account';
-    if (!returnUrl.startsWith('/') || returnUrl.startsWith('//')) return '/account';
-    // The sign-in screens themselves are never a destination; returning to one loops.
-    if (returnUrl.startsWith('/auth')) return '/account';
-    return returnUrl;
+    return safeReturnUrl(returnUrl, '/account');
   }
 }

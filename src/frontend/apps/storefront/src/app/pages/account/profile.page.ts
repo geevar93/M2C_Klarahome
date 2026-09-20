@@ -1,6 +1,15 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ProfileStore } from '@klarahome/data-access-account';
-import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
+import { isApiError } from '@klarahome/data-access-auth';
+import { Alert, Badge, Button, Checkbox, Control, ErrorState, Field, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { formField, formGroup, gstin, maxLength } from '@klarahome/util';
 import { ToastService } from '@klarahome/util';
 
@@ -25,48 +34,52 @@ import { describeError } from '../../core/describe-error';
  */
 @Component({
   selector: 'kh-account-profile-page',
-  imports: [Alert, Badge, Button, Checkbox, Control, Field, Skeleton],
+  imports: [Alert, Badge, Button, Checkbox, Control, ErrorState, Field, PageHeader, Skeleton],
   template: `
-    <h1>Your profile</h1>
+    <kh-page-header title="Profile" />
 
     @if (!store.hasLoaded()) {
       <kh-skeleton height="12rem" />
+    } @else if (error()) {
+      <kh-error-state (retry)="load()" />
     } @else {
       <section class="identity">
         <h2>How you sign in</h2>
 
         @if (store.user(); as user) {
-          <div class="row">
-            <div>
-              <p class="label">Mobile number</p>
-              <p class="value">{{ user.mobile || 'Not added' }}</p>
+          <dl class="identity-list">
+            <div class="row">
+              <dt>Mobile number</dt>
+              <dd>
+                <span class="value">{{ user.mobile || 'Not added' }}</span>
+                @if (user.mobile) {
+                  @if (user.mobileVerified) {
+                    <kh-badge tone="success">Verified</kh-badge>
+                  } @else {
+                    <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Sms')">
+                      Verify
+                    </button>
+                  }
+                }
+              </dd>
             </div>
-            @if (user.mobile) {
-              @if (user.mobileVerified) {
-                <kh-badge tone="success">Verified</kh-badge>
-              } @else {
-                <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Sms')">
-                  Verify
-                </button>
-              }
-            }
-          </div>
 
-          <div class="row">
-            <div>
-              <p class="label">Email address</p>
-              <p class="value">{{ user.email || 'Not added' }}</p>
+            <div class="row">
+              <dt>Email address</dt>
+              <dd>
+                <span class="value">{{ user.email || 'Not added' }}</span>
+                @if (user.email) {
+                  @if (user.emailVerified) {
+                    <kh-badge tone="success">Verified</kh-badge>
+                  } @else {
+                    <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Email')">
+                      Verify
+                    </button>
+                  }
+                }
+              </dd>
             </div>
-            @if (user.email) {
-              @if (user.emailVerified) {
-                <kh-badge tone="success">Verified</kh-badge>
-              } @else {
-                <button khButton variant="tertiary" size="sm" type="button" (click)="startVerify('Email')">
-                  Verify
-                </button>
-              }
-            }
-          </div>
+          </dl>
         }
 
         @if (verifying(); as channel) {
@@ -79,6 +92,7 @@ import { describeError } from '../../core/describe-error';
               "
             >
               <input
+                #verifyCodeInput
                 khControl
                 khNumeric
                 id="verify-code"
@@ -91,7 +105,9 @@ import { describeError } from '../../core/describe-error';
               />
             </kh-field>
             <div class="actions">
-              <button khButton variant="primary" type="submit" [disabled]="busy()">Confirm</button>
+              <button khButton variant="primary" type="submit" [disabled]="busy()">
+                {{ busy() ? 'Confirming…' : 'Confirm' }}
+              </button>
               <button khButton variant="tertiary" type="button" (click)="verifying.set(null)">Cancel</button>
             </div>
           </form>
@@ -190,16 +206,16 @@ import { describeError } from '../../core/describe-error';
       display: block;
     }
 
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
     h2 {
       font-size: var(--text-lg);
     }
 
     section {
       margin-block-end: var(--space-8);
+    }
+
+    .identity-list {
+      margin: 0;
     }
 
     .row {
@@ -211,14 +227,20 @@ import { describeError } from '../../core/describe-error';
       border-block-end: 1px solid var(--color-border);
     }
 
-    .label {
+    dt {
       margin: 0;
       font-size: var(--text-xs);
       color: var(--color-text-muted);
     }
 
-    .value {
+    dd {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
       margin: 0;
+    }
+
+    .value {
       font-size: var(--text-sm);
     }
 
@@ -257,6 +279,9 @@ export class AccountProfilePage {
   protected readonly verifyCode = signal('');
   protected readonly busy = signal(false);
   protected readonly referralCode = signal<string | null>(null);
+  protected readonly error = signal(false);
+
+  private readonly verifyCodeInput = viewChild<ElementRef<HTMLInputElement>>('verifyCodeInput');
 
   private readonly submitted = signal(false);
 
@@ -268,7 +293,7 @@ export class AccountProfilePage {
   });
 
   constructor() {
-    this.store.loadOnce();
+    this.load();
 
     // The document arrives after the form is constructed, so seeding is an effect. It is guarded on
     // the profile changing identity rather than running on every emission, so a save that answers
@@ -286,6 +311,19 @@ export class AccountProfilePage {
       this.consent.set(profile.marketingConsent);
       this.referralCode.set(profile.referralCode || null);
     });
+
+    // The verification code box appears mid-form; sending focus to it is what lets somebody who
+    // asked for a code start typing it without reaching for the mouse.
+    effect(() => {
+      const isVerifying = this.verifying();
+      const input = this.verifyCodeInput();
+      if (isVerifying && input) input.nativeElement.focus();
+    });
+  }
+
+  protected load(): void {
+    this.error.set(false);
+    this.store.load().subscribe({ error: () => this.error.set(true) });
   }
 
   protected save(event: Event): void {
@@ -306,8 +344,14 @@ export class AccountProfilePage {
       })
       .subscribe({
         next: () => this.toasts.success('Your profile is saved.'),
-        error: (error: unknown) =>
-          this.toasts.danger(describeError(error, 'We could not save your profile.')),
+        error: (error: unknown) => {
+          if (isApiError(error) && error.status === 422) {
+            const unmatched = this.form.applyServerErrors(error.fieldErrors);
+            if (unmatched.length > 0) this.toasts.danger(unmatched.join(' '));
+            return;
+          }
+          this.toasts.danger(describeError(error, 'We could not save your profile.'));
+        },
       });
   }
 

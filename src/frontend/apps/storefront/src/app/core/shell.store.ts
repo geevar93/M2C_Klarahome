@@ -1,10 +1,10 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
-import { CartSummaryStore } from '@klarahome/data-access-cart';
+import { CartStore, CartSummaryStore } from '@klarahome/data-access-cart';
 import { ProductSearchService } from '@klarahome/data-access-catalog';
 import { StoreConfigService, StoreContentService } from '@klarahome/data-access-content';
-import { SessionStore } from '@klarahome/data-access-auth';
+import { AuthService, SessionStore } from '@klarahome/data-access-auth';
 import { BannerView, MiniCartLine, NavItem, SuggestionView } from '@klarahome/ui-patterns';
-import { SeoService, ThemeService } from '@klarahome/util';
+import { BrowserStorage, SeoService, ThemeService } from '@klarahome/util';
 import { money } from '@klarahome/domain';
 import { Subject, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 
@@ -22,6 +22,9 @@ import { RecentSearchesStore } from './recent-searches.store';
  * a text box.
  */
 const SUGGEST_DEBOUNCE_MS = 200;
+
+/** Where the dismissed cart dock remembers the item count it was dismissed at. */
+const DOCK_HIDDEN_KEY = 'kh.cart.dock.hidden';
 
 /** Below this, the server has nothing better to offer than the shopper's own history. */
 const MIN_SUGGEST_LENGTH = 2;
@@ -43,6 +46,10 @@ export class ShellStore {
   private readonly content = inject(StoreContentService);
   private readonly config = inject(StoreConfigService);
   private readonly cart = inject(CartSummaryStore);
+  private readonly auth = inject(AuthService);
+  private readonly storage = inject(BrowserStorage);
+  /** The mutating half of the basket — only used here for the mini-cart's per-line remove. */
+  private readonly cartActions = inject(CartStore);
   private readonly session = inject(SessionStore);
   private readonly seo = inject(SeoService);
   private readonly theme = inject(ThemeService);
@@ -102,6 +109,20 @@ export class ShellStore {
   readonly cartLoading = this.cart.isLoading;
   readonly cartSubtotal = this.cart.subtotal;
 
+  /**
+   * The item count at which the shopper last hid the cart dock, or null.
+   *
+   * Session-scoped: a dismissed dock stays away for this visit, but a basket that has changed
+   * since — one more item, one fewer — is news, and the dock comes back to report it.
+   */
+  private readonly dockHiddenAt = signal<number | null>(this.readDockHiddenAt());
+
+  /** Whether the floating cart panel should show: something in the basket, and not dismissed at this count. */
+  readonly isCartDockOpen = computed(() => {
+    const count = this.cart.itemCount();
+    return count > 0 && this.dockHiddenAt() !== count && !this.cartDrawerOpen();
+  });
+
   /** The basket, in the shape the mini-cart renders. Capped: a drawer is a summary, not the cart. */
   readonly miniCartLines: Signal<readonly MiniCartLine[]> = computed(() => {
     const currency = this.cart.current()?.currencyCode ?? 'INR';
@@ -154,7 +175,16 @@ export class ShellStore {
       this.publishSiteStructuredData();
     });
 
-    this.cart.loadOnce();
+    // The session is restored before the basket is read. A returning customer's anonymous basket
+    // was merged into their own at sign-in, so a cart read before `/auth/refresh` answers shows the
+    // empty anonymous one — a "0" badge over a basket with three things in it. The refresh is
+    // single-flight and silent: it answers false, never throws, when there is nobody to restore.
+    if (this.session.isResolved()) {
+      this.cart.loadOnce();
+    } else {
+      const load = () => this.cart.loadOnce();
+      this.auth.refresh().subscribe({ next: load, error: load });
+    }
 
     // `switchMap`, so a slow answer for "cof" can never arrive after and overwrite the answer for
     // "coffee" — which is the bug that makes an autocomplete look haunted.
@@ -194,6 +224,18 @@ export class ShellStore {
     this.navDrawerOpen.update((open) => !open);
   }
 
+  hideCartDock(): void {
+    const count = this.cart.itemCount();
+    this.dockHiddenAt.set(count);
+    this.storage.set(DOCK_HIDDEN_KEY, String(count), 'session');
+  }
+
+  private readDockHiddenAt(): number | null {
+    const raw = this.storage.get(DOCK_HIDDEN_KEY, 'session');
+    const parsed = raw === null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   openCart(): void {
     // Opened, so it is read now rather than from whenever the page last loaded — a basket changed
     // in another tab is the ordinary case on a desktop.
@@ -203,6 +245,22 @@ export class ShellStore {
 
   closeCart(): void {
     this.cartDrawerOpen.set(false);
+  }
+
+  /**
+   * Removes one line from the mini-cart.
+   *
+   * Delegated to `CartStore` — the mutating half of the basket, normally reserved for the cart
+   * page — rather than duplicating a remove call here: it already carries the optimistic update
+   * and rollback (`docs/25` cart work). `CartSummaryStore` is read-only by design (see its own doc
+   * comment), so its copy is refreshed from the same response once the write lands, which is what
+   * keeps the header badge and the drawer themselves in step with the cart page.
+   */
+  removeCartLine(lineId: string): void {
+    this.cartActions.remove(lineId).subscribe({
+      next: (cart) => this.cart.replace(cart),
+      error: () => undefined,
+    });
   }
 
   /**

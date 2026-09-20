@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
 import { Alert, Button, Checkbox, Control, Field } from '@klarahome/ui-primitives';
@@ -14,7 +23,9 @@ import {
 } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../core/password-policy';
 import { SignInFlow } from '../../core/sign-in.flow';
+import { AuthLayout } from './auth.layout';
 import { SocialSignIn } from './social-sign-in';
 
 /**
@@ -36,17 +47,18 @@ import { SocialSignIn } from './social-sign-in';
  */
 @Component({
   selector: 'kh-register-page',
-  imports: [Alert, Button, Checkbox, Control, Field, RouterLink, SocialSignIn],
+  imports: [Alert, AuthLayout, Button, Checkbox, Control, Field, RouterLink, SocialSignIn],
   template: `
-    <div class="panel">
-      <h1>Create an account</h1>
+    <kh-auth-layout title="Create an account">
       <p class="lead">
         Already have one?
         <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Sign in</a>.
+        Forgot your password?
+        <a routerLink="/auth/forgot-password" [queryParams]="{ returnUrl: returnUrl() }">Reset it</a>.
       </p>
 
       @if (failure(); as message) {
-        <kh-alert tone="danger">{{ message }}</kh-alert>
+        <kh-alert tone="danger" #errorAlert tabindex="-1">{{ message }}</kh-alert>
       }
 
       <!--
@@ -95,32 +107,54 @@ import { SocialSignIn } from './social-sign-in';
         <kh-field
           label="Password"
           for="reg-password"
-          hint="At least 10 characters."
+          [hint]="passwordHint"
           [error]="form.fields.password.error()"
         >
-          <input
-            khControl
-            id="reg-password"
-            type="password"
-            autocomplete="new-password"
-            [khInvalid]="!!form.fields.password.error()"
-            [value]="form.fields.password.value()"
-            (input)="form.fields.password.set($any($event.target).value)"
-            (touched)="form.fields.password.markTouched()"
-          />
+          <div class="password-wrap">
+            <input
+              khControl
+              id="reg-password"
+              [type]="passwordVisible() ? 'text' : 'password'"
+              autocomplete="new-password"
+              [khInvalid]="!!form.fields.password.error()"
+              [value]="form.fields.password.value()"
+              (input)="form.fields.password.set($any($event.target).value)"
+              (touched)="form.fields.password.markTouched()"
+            />
+            <button
+              type="button"
+              class="reveal"
+              [attr.aria-pressed]="passwordVisible()"
+              aria-controls="reg-password"
+              (click)="passwordVisible.set(!passwordVisible())"
+            >
+              {{ passwordVisible() ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </kh-field>
 
         <kh-field label="Confirm password" for="reg-confirm" [error]="form.fields.confirm.error()">
-          <input
-            khControl
-            id="reg-confirm"
-            type="password"
-            autocomplete="new-password"
-            [khInvalid]="!!form.fields.confirm.error()"
-            [value]="form.fields.confirm.value()"
-            (input)="form.fields.confirm.set($any($event.target).value)"
-            (touched)="form.fields.confirm.markTouched()"
-          />
+          <div class="password-wrap">
+            <input
+              khControl
+              id="reg-confirm"
+              [type]="confirmVisible() ? 'text' : 'password'"
+              autocomplete="new-password"
+              [khInvalid]="!!form.fields.confirm.error()"
+              [value]="form.fields.confirm.value()"
+              (input)="form.fields.confirm.set($any($event.target).value)"
+              (touched)="form.fields.confirm.markTouched()"
+            />
+            <button
+              type="button"
+              class="reveal"
+              [attr.aria-pressed]="confirmVisible()"
+              aria-controls="reg-confirm"
+              (click)="confirmVisible.set(!confirmVisible())"
+            >
+              {{ confirmVisible() ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </kh-field>
 
         <kh-checkbox
@@ -136,34 +170,38 @@ import { SocialSignIn } from './social-sign-in';
           {{ busy() ? 'Creating…' : 'Create account' }}
         </button>
       </form>
-    </div>
+    </kh-auth-layout>
   `,
   styles: `
-    :host {
-      display: block;
-      padding-block: var(--space-8) var(--space-10);
-    }
-
-    .panel {
-      max-inline-size: 26rem;
-      margin-inline: auto;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
-    .lead {
-      color: var(--color-text-muted);
-      font-size: var(--text-sm);
-    }
-
-    form {
-      margin-block-start: var(--space-4);
-    }
-
     kh-checkbox {
       margin-block-end: var(--space-4);
+    }
+
+    .password-wrap {
+      position: relative;
+    }
+
+    .password-wrap .kh-control {
+      padding-inline-end: var(--space-12);
+    }
+
+    .reveal {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-end: var(--space-2);
+      transform: translateY(-50%);
+      border: none;
+      background: none;
+      padding: var(--space-1) var(--space-2);
+      color: var(--color-primary);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      cursor: pointer;
+    }
+
+    .reveal:hover,
+    .reveal:focus-visible {
+      text-decoration: underline;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -176,6 +214,9 @@ export class RegisterPage {
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
   protected readonly consent = signal(false);
+  protected readonly passwordVisible = signal(false);
+  protected readonly confirmVisible = signal(false);
+  protected readonly passwordHint = PASSWORD_HINT;
 
   protected readonly returnUrl = computed(
     () => this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined,
@@ -184,7 +225,7 @@ export class RegisterPage {
   private readonly submitted = signal(false);
   private readonly password = formField(
     '',
-    [required('Password'), minLength(10, 'Password')],
+    [required('Password'), minLength(PASSWORD_MIN_LENGTH, 'Password')],
     this.submitted,
   );
 
@@ -193,13 +234,22 @@ export class RegisterPage {
     mobile: formField('', [mobile], this.submitted),
     password: this.password,
     // Compared against the password's own signal, so the message appears the moment the two stop
-    // agreeing rather than on submit.
+    // agreeing rather than on submit. The label matches the visible "Confirm password" label above
+    // it, so the field's own error reads as an answer to the field it is under.
     confirm: formField(
       '',
-      [required('Confirmation'), matches(this.password.value, 'The passwords')],
+      [required('Confirm password'), matches(this.password.value, 'The passwords')],
       this.submitted,
     ),
   });
+
+  private readonly errorAlert = viewChild('errorAlert', { read: ElementRef<HTMLElement> });
+
+  constructor() {
+    effect(() => {
+      if (this.failure()) this.errorAlert()?.nativeElement.focus();
+    });
+  }
 
   protected submit(event: Event): void {
     event.preventDefault();
@@ -219,7 +269,7 @@ export class RegisterPage {
       .subscribe({
         next: (response) => {
           this.busy.set(false);
-          this.flow.complete(response, this.returnUrl() ?? null);
+          this.flow.complete(response, this.returnUrl() ?? null, 'password');
         },
         error: (error: unknown) => {
           this.busy.set(false);

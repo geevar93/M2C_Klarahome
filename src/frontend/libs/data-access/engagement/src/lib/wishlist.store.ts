@@ -1,6 +1,6 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { ReviewsApiClient, WishlistResponse } from '@klarahome/data-access-api';
-import { SessionStore } from '@klarahome/data-access-auth';
+import { SessionStore, isApiError } from '@klarahome/data-access-auth';
 import { catchError, of, tap } from 'rxjs';
 
 /**
@@ -24,11 +24,21 @@ export class WishlistStore {
   private readonly list = signal<WishlistResponse | null>(null);
   private readonly savedIds = signal<readonly string[]>([]);
   private readonly loaded = signal(false);
+  private readonly loadingSignal = signal(false);
+  private readonly errorSignal = signal(false);
 
   readonly current: Signal<WishlistResponse | null> = this.list.asReadonly();
   /** The variant ids on the list — what a product card checks to decide its heart. */
   readonly variantIds: Signal<readonly string[]> = this.savedIds.asReadonly();
   readonly itemCount = computed(() => this.savedIds().length);
+  /** Whether a fetch is in flight. A page's loading skeleton should read this, not `!current()`. */
+  readonly loading: Signal<boolean> = this.loadingSignal.asReadonly();
+  /**
+   * Whether the last fetch failed for a reason other than "nothing saved yet". `current()` stays
+   * `null` in both cases, so a page that used it alone as its loading proxy would skeleton forever
+   * on a genuine failure — this is what tells it to show `kh-error-state` instead.
+   */
+  readonly error: Signal<boolean> = this.errorSignal.asReadonly();
 
   /** Loads once per application lifetime, and only for a signed-in customer. */
   loadOnce(): void {
@@ -40,14 +50,24 @@ export class WishlistStore {
   load(): void {
     if (!this.session.isAuthenticated()) return;
 
+    this.loadingSignal.set(true);
+    this.errorSignal.set(false);
+
     this.api
       .storeGetWishlist(undefined, { silentErrors: true, showLoading: false })
       .pipe(
-        tap((wishlist) => this.apply(wishlist)),
-        catchError(() => {
-          // No list yet is the ordinary case for a new customer, and indistinguishable here from
-          // an unwell service. Both mean "nothing is saved".
-          this.apply(null);
+        tap((wishlist) => {
+          this.apply(wishlist);
+          this.loadingSignal.set(false);
+        }),
+        catchError((error: unknown) => {
+          this.loadingSignal.set(false);
+          if (isApiError(error) && error.status === 404) {
+            // No list yet is the ordinary case for a new customer — not a failure.
+            this.apply(null);
+          } else {
+            this.errorSignal.set(true);
+          }
           return of(null);
         }),
       )
@@ -63,8 +83,15 @@ export class WishlistStore {
    *
    * Answers whether the request was made at all — false means the visitor is not signed in, which
    * is a state the caller has to handle rather than an error to report.
+   *
+   * `options.onSettled` fires once the request resolves, with whether it removed or added the item
+   * and whether it succeeded — a page that wants to toast the outcome (the wishlist page does) needs
+   * that, since the optimistic update itself is silent by design.
    */
-  toggle(variantId: string): boolean {
+  toggle(
+    variantId: string,
+    options?: { readonly onSettled?: (result: { readonly removed: boolean; readonly ok: boolean }) => void },
+  ): boolean {
     if (!this.session.isAuthenticated()) return false;
 
     const wasSaved = this.isSaved(variantId);
@@ -78,16 +105,24 @@ export class WishlistStore {
       // Put it back exactly as it was. Recomputing from the current set would lose a second
       // toggle the shopper made while this one was in flight.
       this.savedIds.set(before);
+      options?.onSettled?.({ removed: wasSaved, ok: false });
     };
 
     if (wasSaved) {
-      this.api
-        .storeRemoveFromWishlist(variantId, undefined, { silentErrors: true })
-        .subscribe({ error: rollback });
+      this.api.storeRemoveFromWishlist(variantId, undefined, { silentErrors: true }).subscribe({
+        next: () => options?.onSettled?.({ removed: true, ok: true }),
+        error: rollback,
+      });
     } else {
       this.api
         .storeAddToWishlist({ variantId, wishlistId: null, note: null, priority: 0 }, { silentErrors: true })
-        .subscribe({ next: (wishlist) => this.apply(wishlist), error: rollback });
+        .subscribe({
+          next: (wishlist) => {
+            this.apply(wishlist);
+            options?.onSettled?.({ removed: false, ok: true });
+          },
+          error: rollback,
+        });
     }
 
     return true;

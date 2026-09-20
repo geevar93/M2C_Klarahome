@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthService, SessionStore } from '@klarahome/data-access-auth';
 import { CartStore } from '@klarahome/data-access-cart';
 import { MoneyPipe } from '@klarahome/i18n';
-import { Alert, Button, Control, EmptyState, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Button, Control, EmptyState, Field, Icon, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { CartLine, CartLineChange, CartLineView, OrderSummary, StickyAction } from '@klarahome/ui-patterns';
 import { AnalyticsEvents, AnalyticsService, LiveAnnouncer, ToastService } from '@klarahome/util';
 
@@ -45,14 +46,15 @@ import { CommerceMapper } from '../core/commerce.mapper';
     Icon,
     MoneyPipe,
     OrderSummary,
+    PageHeader,
     RouterLink,
     Skeleton,
     StickyAction,
   ],
   template: `
-    <h1>Your cart</h1>
+    <kh-page-header title="Cart" />
 
-    @if (store.isLoading() && !store.hasLoaded()) {
+    @if (!store.hasLoaded()) {
       <div class="loading">
         <kh-skeleton height="6rem" />
         <kh-skeleton height="6rem" />
@@ -150,9 +152,21 @@ import { CommerceMapper } from '../core/commerce.mapper';
 
           @if (summary(); as details) {
             <kh-order-summary [summary]="details">
-              <a khButton variant="primary" [block]="true" routerLink="/checkout" class="checkout-desktop">
-                Proceed to checkout
-              </a>
+              <div class="checkout-desktop">
+                <a
+                  khButton
+                  variant="primary"
+                  [block]="true"
+                  routerLink="/checkout"
+                  [attr.aria-disabled]="store.isReadyForCheckout() ? null : 'true'"
+                  (click)="guardCheckout($event)"
+                >
+                  Checkout
+                </a>
+                @if (signedOut()) {
+                  <p class="signpost">You will be asked to sign in or create an account first.</p>
+                }
+              </div>
             </kh-order-summary>
           } @else {
             <kh-skeleton height="12rem" />
@@ -163,12 +177,17 @@ import { CommerceMapper } from '../core/commerce.mapper';
       <!-- The primary action stays in the thumb zone while the basket scrolls
            (docs/05-frontend-architecture.md §3.3). The same button is repeated inside the summary
            panel above, where it is the natural place for it from the 'lg' breakpoint. -->
-      <ng-template khStickyAction>
+      <ng-template khStickyAction mobileOnly>
         <div class="bar">
           <span class="bar-total">
             @if (grandTotal(); as amount) {
               <strong>{{ amount | khMoney }}</strong>
-              <span>{{ store.itemCount() }} {{ store.itemCount() === 1 ? 'item' : 'items' }}</span>
+              <span>
+                {{ store.itemCount() }} {{ store.itemCount() === 1 ? 'item' : 'items' }}
+                @if (signedOut()) {
+                  · Sign in to check out
+                }
+              </span>
             }
           </span>
           <a
@@ -188,10 +207,6 @@ import { CommerceMapper } from '../core/commerce.mapper';
     :host {
       display: block;
       padding-block: var(--space-4) var(--space-10);
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
     }
 
     .loading {
@@ -268,8 +283,15 @@ import { CommerceMapper } from '../core/commerce.mapper';
 
     @media (min-width: 1024px) {
       .checkout-desktop {
-        display: flex;
+        display: block;
       }
+    }
+
+    .signpost {
+      margin: var(--space-2) 0 0;
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      text-align: center;
     }
 
     .bar {
@@ -297,12 +319,25 @@ import { CommerceMapper } from '../core/commerce.mapper';
 })
 export class CartPage {
   protected readonly store = inject(CartStore);
+  private readonly session = inject(SessionStore);
+  private readonly auth = inject(AuthService);
   private readonly mapper = inject(CommerceMapper);
   private readonly toasts = inject(ToastService);
   private readonly announcer = inject(LiveAnnouncer);
   private readonly analytics = inject(AnalyticsService);
 
   protected readonly couponInput = signal('');
+
+  /**
+   * Whether the sign-in step is genuinely ahead of the shopper.
+   *
+   * The session is restored lazily — a public page never asks `/auth/refresh` until a request
+   * needs it — so on the cart "not authenticated" usually means "not asked yet". The sign-in hint
+   * is only shown once the refresh has answered, because telling a signed-in customer they will be
+   * asked to sign in is worse than saying nothing.
+   */
+  private readonly sessionChecked = signal(false);
+  protected readonly signedOut = computed(() => this.sessionChecked() && !this.session.isAuthenticated());
   protected readonly couponError = computed(() => this.store.couponRejection());
 
   protected readonly groups = computed(() =>
@@ -328,8 +363,22 @@ export class CartPage {
   protected readonly grandTotal = computed(() => this.summary()?.total ?? null);
 
   constructor() {
-    this.store.load();
     this.analytics.track(AnalyticsEvents.viewCart);
+
+    if (this.session.isResolved()) {
+      this.sessionChecked.set(true);
+      this.store.load();
+    } else {
+      // The session is restored before the basket is read, not after: a signed-in customer whose
+      // anonymous basket was merged at sign-in has an empty anonymous basket and a full one of
+      // their own, and reading before the refresh answers shows them the wrong one. Single-flight
+      // and silent — it answers false, never throws, when there is no session to restore.
+      const settle = () => {
+        this.sessionChecked.set(true);
+        this.store.load();
+      };
+      this.auth.refresh().subscribe({ next: settle, error: settle });
+    }
   }
 
   /** The lines of one seller's group, in the order the group named them. */
@@ -399,7 +448,8 @@ export class CartPage {
    *
    * The link is `aria-disabled` rather than removed, so a shopper can see the action and read why
    * it is unavailable — a missing button explains nothing. The click is intercepted rather than the
-   * `routerLink` being conditional, which keeps the markup one element.
+   * `routerLink` being conditional, which keeps the markup one element. Both the sticky bar and the
+   * summary panel go through here: one rule, whichever button was tapped.
    */
   protected guardCheckout(event: Event): void {
     if (this.store.isReadyForCheckout()) {

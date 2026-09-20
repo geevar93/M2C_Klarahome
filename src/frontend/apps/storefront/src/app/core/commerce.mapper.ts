@@ -351,6 +351,30 @@ export class CommerceMapper {
     return this.status(subOrder.status);
   }
 
+  /**
+   * A return's status, for its badge.
+   *
+   * Returns and orders share a `Cancelled` status on the wire, but a customer who withdrew a return
+   * request did not cancel anything — "Cancelled" on a return reads as if the *seller* stopped it.
+   * "Withdrawn" is the return's own word for the same transition, so this variant exists rather than
+   * reusing `status()` for both.
+   */
+  returnStatus(status: string): { label: string; tone: StatusTone } {
+    if (status === 'Cancelled') return { label: 'Withdrawn', tone: statusTone(status) };
+    return this.status(status);
+  }
+
+  /**
+   * A raw amount with its currency attached.
+   *
+   * `khMoney` takes a `Money` so a price can never be rendered without its currency, and several
+   * responses (orders, returns) carry the two apart on the wire. Pairing them here is the boundary
+   * doing its job, not arithmetic — the one place this used to happen, copy-pasted onto three pages.
+   */
+  money(amount: number, currency: string): Money {
+    return money(amount, currency || INR);
+  }
+
   // ---- Returns ---------------------------------------------------------------------------------
 
   returnableLine(line: ReturnableLineResponse, currency: string): ReturnableLineView {

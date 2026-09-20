@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RouterLink } from '@angular/router';
 import { ProfileStore } from '@klarahome/data-access-account';
 import { OrdersService } from '@klarahome/data-access-orders';
-import { Alert, Button, Skeleton } from '@klarahome/ui-primitives';
+import { Alert, Button, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { OrderCard, OrderCardView } from '@klarahome/ui-patterns';
 
 import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
@@ -21,15 +21,15 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
  */
 @Component({
   selector: 'kh-account-dashboard-page',
-  imports: [Alert, Button, OrderCard, RouterLink, Skeleton],
+  imports: [Alert, Button, EmptyState, ErrorState, OrderCard, PageHeader, RouterLink, Skeleton],
   template: `
-    <h1>Your account</h1>
+    <kh-page-header title="Account" />
 
     @if (unpaid(); as order) {
       <kh-alert tone="warning" heading="One order is waiting for payment">
         Order {{ order.orderNumber }} is placed but not paid for.
         <a khButton variant="tertiary" size="sm" [routerLink]="['/account/orders', order.orderNumber]">
-          Pay for it now
+          Pay now
         </a>
       </kh-alert>
     }
@@ -41,12 +41,19 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
       </div>
 
       @if (loading()) {
-        <kh-skeleton height="8rem" />
+        <div class="skeletons">
+          <kh-skeleton height="8rem" />
+          <kh-skeleton height="8rem" />
+        </div>
+      } @else if (error()) {
+        <kh-error-state (retry)="load()" />
       } @else if (recent().length === 0) {
-        <p class="empty">
-          You have not ordered anything yet.
-          <a routerLink="/">Have a look around</a>.
-        </p>
+        <kh-empty-state
+          heading="You have not ordered anything yet"
+          message="When you buy something it will show up here, with its tracking and invoice."
+        >
+          <a khButton variant="primary" routerLink="/">Start shopping</a>
+        </kh-empty-state>
       } @else {
         <div class="orders">
           @for (order of recent(); track order.id) {
@@ -61,10 +68,6 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
       display: block;
     }
 
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
     .head {
       display: flex;
       align-items: baseline;
@@ -77,16 +80,18 @@ import { CommerceMapper, isCashOnDelivery } from '../../core/commerce.mapper';
       font-size: var(--text-lg);
     }
 
-    .orders {
+    .skeletons {
       display: flex;
       flex-direction: column;
       gap: var(--space-3);
       margin-block-start: var(--space-3);
     }
 
-    .empty {
-      color: var(--color-text-muted);
-      font-size: var(--text-sm);
+    .orders {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-block-start: var(--space-3);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -97,6 +102,7 @@ export class AccountDashboardPage {
   private readonly mapper = inject(CommerceMapper);
 
   protected readonly loading = signal(true);
+  protected readonly error = signal(false);
   protected readonly recent = signal<readonly OrderCardView[]>([]);
   private readonly rows = signal<
     readonly { orderNumber: string; paymentStatus: string; paymentMethod: string }[]
@@ -116,6 +122,12 @@ export class AccountDashboardPage {
 
   constructor() {
     this.profile.loadOnce();
+    this.load();
+  }
+
+  protected load(): void {
+    this.loading.set(true);
+    this.error.set(false);
 
     this.orders.list({ size: 3 }).subscribe({
       next: (page) => {
@@ -129,7 +141,10 @@ export class AccountDashboardPage {
         this.recent.set(page.items.map((order) => this.mapper.orderCard(order)));
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        this.error.set(true);
+      },
     });
   }
 }

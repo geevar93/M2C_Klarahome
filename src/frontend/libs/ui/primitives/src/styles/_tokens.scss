@@ -30,9 +30,11 @@
   // a surface and a band to separate sections with. Referenced by the semantic roles below and,
   // deliberately, by nothing else: a component that reaches for `--brand-*` has skipped the decision
   // about what the colour *means*, and that decision is the one a re-theme needs to change.
-  --brand-sand-050: #faf6f1; // mixed  — the page ground
-  --brand-sand-100: #f4ece2; // mixed  — a surface raised off that ground
-  --brand-sand-200: #ecddce; // client — section bands, the quiet fill
+  --brand-sand-025: #fffcf8; // mixed  — the card, a tinted off-white rather than paper
+  --brand-sand-050: #faf6f1; // mixed  — the palest tint; hairlines and subtle fills
+  --brand-sand-100: #f4ece2; // mixed  — the page ground
+  --brand-sand-200: #ecddce; // client — section bands
+  --brand-sand-300: #e0ccb6; // mixed  — the quiet fill, a sunken well
   --brand-tan-300: #ddc2a6; // mixed  — hairline rules
   --brand-tan-400: #cda887; // client — decorative rules, disabled edges
   --brand-bronze-500: #9e6d43; // client — boundaries, focus, display accents. Never small text
@@ -43,10 +45,18 @@
   // ---- Surfaces ---------------------------------------------------------------------------------
   // Warm rather than white. A commerce page is mostly product photography, and a paper-white ground
   // makes every uncropped product shot look like it is floating; a sand ground seats them.
-  --color-bg: var(--brand-sand-050);
-  --color-surface: var(--brand-sand-100);
-  --color-surface-sunken: var(--brand-sand-200);
-  --color-surface-raised: #ffffff;
+  //
+  // **Four steps, and none of them is white.** The card is the dominant surface on a storefront, so
+  // a `#ffffff` card over an almost-white ground is a page with no palette in it whichever theme is
+  // applied — the point the preset set in `theme-presets.ts` makes at length. The ground is sand-100
+  // and the card sand-025: still light enough that photography leads, far enough apart to see.
+  --color-surface-raised: var(--brand-sand-025);
+  --color-bg: var(--brand-sand-100);
+  --color-surface: var(--brand-sand-200);
+  --color-surface-sunken: var(--brand-sand-300);
+  // The quiet fill behind a chip, a token row, a disabled well. A role of its own rather than an
+  // alias of `sunken`, because a theme may want the two to diverge.
+  --color-surface-muted: var(--brand-sand-300);
   --color-surface-inverse: var(--brand-ink-900);
   --color-overlay: rgb(52 12 0 / 55%);
 
@@ -57,7 +67,10 @@
   // clears 3:1 against every ground this theme puts behind it.
   --color-border: var(--brand-tan-300);
   --color-border-strong: var(--brand-bronze-500);
-  --color-border-inverse: rgb(236 221 206 / 24%);
+  // Quieter than `--color-border`, for a rule inside an already-bounded surface — the divider
+  // between two rows of a card that is itself outlined. Not for anything a user has to find.
+  --color-border-subtle: var(--brand-sand-200);
+  --color-border-inverse: rgb(255 255 255 / 22%);
 
   // ---- Text -------------------------------------------------------------------------------------
   --color-text: var(--brand-ink-900); // 16.28:1 on the page ground
@@ -82,12 +95,20 @@
   --color-primary-subtle: var(--brand-sand-100);
   --color-primary-subtle-hover: var(--brand-sand-200);
   --color-on-primary: var(--color-text-on-brand);
+  // An inline link inside body copy. The same colour as the primary action here, but a role of its
+  // own: a theme whose primary is near-black (`slate`) may want a link that is still readably a
+  // link, and thirteen call sites should not each have to decide that.
+  --color-link: var(--color-primary);
 
   // ---- Accent -----------------------------------------------------------------------------------
   // Bronze, and everything it is allowed to do is non-textual: the rule under a section heading, a
   // rating star, a 24px icon, a display numeral. See the note at the top of this file.
   --color-accent: var(--brand-bronze-500);
   --color-accent-muted: var(--brand-tan-400);
+  // A tinted strip and the text that reads on it: the announcement bar, an offer band. The text
+  // is the accent's own family at a strength that clears 4.5:1 on the strip.
+  --color-accent-surface: var(--brand-sand-200);
+  --color-accent-text: var(--brand-coffee-600);
 
   // ---- Status -----------------------------------------------------------------------------------
   // Warm-shifted so they sit in the same world as the brand, each with a subtle companion for alert
@@ -100,6 +121,9 @@
 
   --color-warning: #8a5512;
   --color-warning-subtle: #f9eddb;
+  // A whole strip of warning — the impersonation banner across the top of the admin — rather than
+  // the fill behind an inline alert. Stronger, because it has to be noticed from the page edge.
+  --color-warning-surface: #f2dcb8;
   --color-warning-text: #734511;
 
   --color-danger: #a3281c;
@@ -212,10 +236,16 @@
   // ---- Elevation --------------------------------------------------------------------------------
   // Warm shadows. A neutral black shadow over a sand ground reads as grey dirt; these are cast in
   // the ramp's own ink, which is what makes them look like shade rather than smudge.
-  --shadow-sm: 0 1px 2px rgb(52 12 0 / 6%);
-  --shadow-md: 0 2px 4px rgb(52 12 0 / 5%), 0 6px 16px rgb(52 12 0 / 7%);
-  --shadow-lg: 0 4px 8px rgb(52 12 0 / 5%), 0 16px 40px rgb(52 12 0 / 10%);
-  --shadow-inset: inset 0 1px 2px rgb(52 12 0 / 6%);
+  //
+  // The colour is its own token — an `r g b` triplet, so the four shadows below can each set their
+  // own alpha — because "cast in the ink" has to stay true after a re-theme. Hard-coding burnt
+  // umber here put a warm sand shadow under every card in the indigo and ocean themes, which is
+  // exactly the grey-dirt effect the comment above warns about, in the other direction.
+  --shadow-color: 52 12 0;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 6%);
+  --shadow-md: 0 2px 4px rgb(var(--shadow-color) / 5%), 0 6px 16px rgb(var(--shadow-color) / 7%);
+  --shadow-lg: 0 4px 8px rgb(var(--shadow-color) / 5%), 0 16px 40px rgb(var(--shadow-color) / 10%);
+  --shadow-inset: inset 0 1px 2px rgb(var(--shadow-color) / 6%);
 
   // ---- Layout -----------------------------------------------------------------------------------
   --container-max: 1280px;

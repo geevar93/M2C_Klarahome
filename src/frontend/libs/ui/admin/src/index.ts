@@ -20,3 +20,4 @@ export * from './lib/reorder-list';
 export * from './lib/schema-field';
 export * from './lib/report-chart';
 export * from './lib/status-badge';
+export * from './lib/theme-picker';

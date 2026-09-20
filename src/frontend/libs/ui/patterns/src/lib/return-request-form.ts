@@ -36,7 +36,7 @@ export interface ReturnRequestValue {
   imports: [Alert, Button, Control, Field, MoneyPipe, ProductImage, QuantityStepper],
   template: `
     <form (submit)="submit($event)" novalidate>
-      <fieldset class="lines">
+      <fieldset class="lines" [attr.aria-describedby]="linesError() ? 'ret-lines-error' : null">
         <legend>What are you sending back?</legend>
 
         @for (line of lines(); track line.orderLineId) {
@@ -176,12 +176,12 @@ export interface ReturnRequestValue {
       }
 
       @if (linesError()) {
-        <kh-alert tone="danger">{{ linesError() }}</kh-alert>
+        <kh-alert tone="danger" id="ret-lines-error">{{ linesError() }}</kh-alert>
       }
 
       <div class="actions">
         <button khButton variant="primary" type="submit" [disabled]="saving()">
-          {{ saving() ? 'Sending…' : 'Request return' }}
+          {{ saving() ? 'Sending…' : 'Request a return' }}
         </button>
         <button khButton variant="tertiary" type="button" (click)="cancelled.emit()">Cancel</button>
       </div>

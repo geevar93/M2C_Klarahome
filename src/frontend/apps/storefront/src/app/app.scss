@@ -22,9 +22,54 @@ main.has-sticky-action {
   padding-block-end: calc(var(--bottom-bar-height) + var(--space-4));
 }
 
+// The cart dock is a second strip on a phone, above the sticky bar when both are present, so the
+// page reserves one strip for the dock alone and two when the bar is there too. From 'md' the
+// dock is a corner card that covers nothing.
+main.has-cart-dock {
+  padding-block-end: calc(var(--bottom-bar-height) + var(--space-4));
+}
+
+main.has-sticky-action.has-cart-dock {
+  padding-block-end: calc(var(--bottom-bar-height) * 2 + var(--space-4));
+}
+
+@media (min-width: 768px) {
+  main.has-cart-dock,
+  main.has-sticky-action.has-cart-dock {
+    padding-block-end: calc(var(--bottom-bar-height) + var(--space-4));
+  }
+}
+
 // 1024px is the `lg` breakpoint from _breakpoints.scss, where the bar stops being fixed.
 @media (min-width: 1024px) {
-  main.has-sticky-action {
+  main.has-sticky-action,
+  main.has-cart-dock,
+  main.has-sticky-action.has-cart-dock {
     padding-block-end: var(--space-4);
   }
+}
+
+// The mobile nav drawer's `.foot` slot — Account/Sign in, Wishlist and Orders. Styled here rather
+// than in the drawer component, which knows nothing about what the shell projects into it.
+.drawer-foot-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-target-min);
+  padding-block: var(--space-2);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.drawer-foot-link:hover,
+.drawer-foot-link:focus-visible {
+  text-decoration: underline;
+}
+
+// The heading the shell moves focus to after a navigation (`focusMain` in `@klarahome/util`) is a
+// landing point for screen readers, not a control: a ring around the page title on every page
+// change reads as a mistake. Keyboard users still get the ring on anything they can act on.
+main h1[tabindex='-1']:focus {
+  outline: none;
 }

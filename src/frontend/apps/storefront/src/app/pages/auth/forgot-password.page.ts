@@ -1,10 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
-import { email, formField, formGroup, matches, minLength, required } from '@klarahome/util';
+import { ToastService, email, formField, formGroup, matches, minLength, required } from '@klarahome/util';
+import { map } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../core/password-policy';
+import { AuthLayout } from './auth.layout';
 
 /**
  * Password reset — `/auth/forgot-password`, in both of its halves.
@@ -21,14 +25,12 @@ import { describeError } from '../../core/describe-error';
  */
 @Component({
   selector: 'kh-forgot-password-page',
-  imports: [Alert, Button, Control, Field, RouterLink],
+  imports: [Alert, AuthLayout, Button, Control, Field, RouterLink],
   template: `
-    <div class="panel">
-      @if (token()) {
-        <h1>Choose a new password</h1>
-
+    @if (token()) {
+      <kh-auth-layout title="Choose a new password">
         @if (failure(); as message) {
-          <kh-alert tone="danger">{{ message }}</kh-alert>
+          <kh-alert tone="danger" #errorAlert tabindex="-1">{{ message }}</kh-alert>
         }
 
         <form (submit)="reset($event)" novalidate>
@@ -48,19 +50,30 @@ import { describeError } from '../../core/describe-error';
           <kh-field
             label="New password"
             for="reset-password"
-            hint="At least 10 characters."
+            [hint]="passwordHint"
             [error]="resetForm.fields.password.error()"
           >
-            <input
-              khControl
-              id="reset-password"
-              type="password"
-              autocomplete="new-password"
-              [khInvalid]="!!resetForm.fields.password.error()"
-              [value]="resetForm.fields.password.value()"
-              (input)="resetForm.fields.password.set($any($event.target).value)"
-              (touched)="resetForm.fields.password.markTouched()"
-            />
+            <div class="password-wrap">
+              <input
+                khControl
+                id="reset-password"
+                [type]="passwordVisible() ? 'text' : 'password'"
+                autocomplete="new-password"
+                [khInvalid]="!!resetForm.fields.password.error()"
+                [value]="resetForm.fields.password.value()"
+                (input)="resetForm.fields.password.set($any($event.target).value)"
+                (touched)="resetForm.fields.password.markTouched()"
+              />
+              <button
+                type="button"
+                class="reveal"
+                [attr.aria-pressed]="passwordVisible()"
+                aria-controls="reset-password"
+                (click)="passwordVisible.set(!passwordVisible())"
+              >
+                {{ passwordVisible() ? 'Hide' : 'Show' }}
+              </button>
+            </div>
           </kh-field>
 
           <kh-field
@@ -68,36 +81,50 @@ import { describeError } from '../../core/describe-error';
             for="reset-confirm"
             [error]="resetForm.fields.confirm.error()"
           >
-            <input
-              khControl
-              id="reset-confirm"
-              type="password"
-              autocomplete="new-password"
-              [khInvalid]="!!resetForm.fields.confirm.error()"
-              [value]="resetForm.fields.confirm.value()"
-              (input)="resetForm.fields.confirm.set($any($event.target).value)"
-              (touched)="resetForm.fields.confirm.markTouched()"
-            />
+            <div class="password-wrap">
+              <input
+                khControl
+                id="reset-confirm"
+                [type]="confirmVisible() ? 'text' : 'password'"
+                autocomplete="new-password"
+                [khInvalid]="!!resetForm.fields.confirm.error()"
+                [value]="resetForm.fields.confirm.value()"
+                (input)="resetForm.fields.confirm.set($any($event.target).value)"
+                (touched)="resetForm.fields.confirm.markTouched()"
+              />
+              <button
+                type="button"
+                class="reveal"
+                [attr.aria-pressed]="confirmVisible()"
+                aria-controls="reset-confirm"
+                (click)="confirmVisible.set(!confirmVisible())"
+              >
+                {{ confirmVisible() ? 'Hide' : 'Show' }}
+              </button>
+            </div>
           </kh-field>
 
           <button khButton variant="primary" [block]="true" type="submit" [disabled]="busy()">
             {{ busy() ? 'Saving…' : 'Save new password' }}
           </button>
         </form>
-      } @else if (sent()) {
-        <h1>Check your email</h1>
+      </kh-auth-layout>
+    } @else if (sent()) {
+      <kh-auth-layout title="Check your email">
         <kh-alert tone="info">
           If that address is registered, we have sent a link to reset the password. It expires in an hour.
         </kh-alert>
         <p class="foot">
           <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Back to sign in</a>
         </p>
-      } @else {
-        <h1>Reset your password</h1>
-        <p class="lead">Tell us the email address on the account and we will send a link.</p>
-
+      </kh-auth-layout>
+    } @else {
+      <kh-auth-layout
+        title="Reset your password"
+        lead="Tell us the email address on the account and we will send a link."
+      >
         @if (failure(); as message) {
-          <kh-alert tone="danger">{{ message }}</kh-alert>
+          <kh-alert tone="danger" #errorAlert tabindex="-1">{{ message }}</kh-alert>
         }
 
         <form (submit)="request($event)" novalidate>
@@ -124,36 +151,40 @@ import { describeError } from '../../core/describe-error';
           Remembered it?
           <a routerLink="/auth/login" [queryParams]="{ returnUrl: returnUrl() }">Back to sign in</a>
         </p>
-      }
-    </div>
+      </kh-auth-layout>
+    }
   `,
   styles: `
-    :host {
-      display: block;
-      padding-block: var(--space-8) var(--space-10);
-    }
-
-    .panel {
-      max-inline-size: 26rem;
-      margin-inline: auto;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
-    }
-
-    .lead {
-      color: var(--color-text-muted);
-      font-size: var(--text-sm);
-    }
-
-    form {
-      margin-block-start: var(--space-4);
-    }
-
     .foot {
       margin-block-start: var(--space-4);
       font-size: var(--text-sm);
+    }
+
+    .password-wrap {
+      position: relative;
+    }
+
+    .password-wrap .kh-control {
+      padding-inline-end: var(--space-12);
+    }
+
+    .reveal {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-end: var(--space-2);
+      transform: translateY(-50%);
+      border: none;
+      background: none;
+      padding: var(--space-1) var(--space-2);
+      color: var(--color-primary);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      cursor: pointer;
+    }
+
+    .reveal:hover,
+    .reveal:focus-visible {
+      text-decoration: underline;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -162,22 +193,30 @@ export class ForgotPasswordPage {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly toasts = inject(ToastService);
 
   protected readonly busy = signal(false);
   protected readonly sent = signal(false);
   protected readonly failure = signal<string | null>(null);
-
-  private readonly params = this.route.snapshot.queryParamMap;
+  protected readonly passwordVisible = signal(false);
+  protected readonly confirmVisible = signal(false);
+  protected readonly passwordHint = PASSWORD_HINT;
 
   /** Present when the customer followed the emailed link. Its absence is what shows the request form. */
-  protected readonly token = signal(this.params.get('token'));
-  protected readonly returnUrl = computed(() => this.params.get('returnUrl') ?? undefined);
+  protected readonly token = signal(this.route.snapshot.queryParamMap.get('token'));
+
+  /** Live, not a snapshot — the "Back to sign in" link must carry whatever `returnUrl` is on the
+   *  URL right now, including one that arrived after this component was already created. */
+  protected readonly returnUrl = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('returnUrl') ?? undefined)),
+    { initialValue: this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined },
+  );
 
   private readonly requestSubmitted = signal(false);
   private readonly resetSubmitted = signal(false);
   private readonly newPassword = formField(
     '',
-    [required('Password'), minLength(10, 'Password')],
+    [required('Password'), minLength(PASSWORD_MIN_LENGTH, 'Password')],
     this.resetSubmitted,
   );
 
@@ -189,17 +228,25 @@ export class ForgotPasswordPage {
     // Prefilled from the link when the API put it there, and still editable — the customer knows
     // which address they used and the token is what actually authorises the change.
     email: formField(
-      this.params.get('email') ?? '',
+      this.route.snapshot.queryParamMap.get('email') ?? '',
       [required('Email address'), email()],
       this.resetSubmitted,
     ),
     password: this.newPassword,
     confirm: formField(
       '',
-      [required('Confirmation'), matches(this.newPassword.value, 'The passwords')],
+      [required('Confirm new password'), matches(this.newPassword.value, 'The passwords')],
       this.resetSubmitted,
     ),
   });
+
+  private readonly errorAlert = viewChild('errorAlert', { read: ElementRef<HTMLElement> });
+
+  constructor() {
+    effect(() => {
+      if (this.failure()) this.errorAlert()?.nativeElement.focus();
+    });
+  }
 
   protected request(event: Event): void {
     event.preventDefault();
@@ -235,6 +282,7 @@ export class ForgotPasswordPage {
         this.busy.set(false);
         // Deliberately not signed in here. A reset invalidates every session (Step 7), and proving
         // the new password once is the point of having set it.
+        this.toasts.success('Your password has been changed. Sign in with the new one.');
         void this.router.navigate(['/auth/login'], {
           queryParams: { returnUrl: this.returnUrl() },
         });

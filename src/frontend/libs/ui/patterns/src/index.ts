@@ -35,3 +35,4 @@ export * from './lib/site-footer';
 export * from './lib/site-header';
 export * from './lib/sticky-action-bar';
 export * from './lib/variant-selector';
+export * from './lib/cart-dock';

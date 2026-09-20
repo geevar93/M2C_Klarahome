@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { OrdersService } from '@klarahome/data-access-orders';
-import { Button, Chip, EmptyState, Skeleton } from '@klarahome/ui-primitives';
+import { Button, Chip, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { OrderCard, OrderCardView } from '@klarahome/ui-patterns';
 
 import { CommerceMapper } from '../../core/commerce.mapper';
@@ -29,9 +29,9 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
  */
 @Component({
   selector: 'kh-account-orders-page',
-  imports: [Button, Chip, EmptyState, OrderCard, RouterLink, Skeleton],
+  imports: [Button, Chip, EmptyState, ErrorState, OrderCard, PageHeader, RouterLink, Skeleton],
   template: `
-    <h1>Your orders</h1>
+    <kh-page-header title="Orders" />
 
     <div class="filters" role="group" aria-label="Filter orders">
       @for (filter of filters; track filter.label) {
@@ -48,6 +48,8 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
         <kh-skeleton height="8rem" />
         <kh-skeleton height="8rem" />
       </div>
+    } @else if (error() && orders().length === 0) {
+      <kh-error-state (retry)="load(true)" />
     } @else if (orders().length === 0) {
       <kh-empty-state
         [heading]="status() ? 'No orders here' : 'You have not ordered anything yet'"
@@ -66,9 +68,11 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
         }
       </div>
 
-      @if (cursor()) {
-        <button khButton variant="secondary" type="button" [disabled]="loading()" (click)="loadMore()">
-          {{ loading() ? 'Loading…' : 'Load more orders' }}
+      @if (error()) {
+        <kh-error-state (retry)="loadMore()" />
+      } @else if (cursor()) {
+        <button khButton variant="secondary" type="button" [disabled]="loadingMore()" (click)="loadMore()">
+          {{ loadingMore() ? 'Loading…' : 'Load more' }}
         </button>
       }
     }
@@ -76,10 +80,6 @@ const FILTERS: readonly { readonly label: string; readonly status: string | null
   styles: `
     :host {
       display: block;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
     }
 
     .filters {
@@ -106,6 +106,8 @@ export class AccountOrdersPage {
   protected readonly filters = FILTERS;
   protected readonly orders = signal<readonly OrderCardView[]>([]);
   protected readonly loading = signal(true);
+  protected readonly loadingMore = signal(false);
+  protected readonly error = signal(false);
   protected readonly cursor = signal<string | null>(null);
   protected readonly status = signal<string | null>(null);
 
@@ -120,15 +122,18 @@ export class AccountOrdersPage {
   }
 
   protected loadMore(): void {
-    if (!this.cursor() || this.loading()) return;
+    if (!this.cursor() || this.loadingMore()) return;
     this.load(false);
   }
 
-  private load(reset: boolean): void {
-    this.loading.set(true);
+  protected load(reset: boolean): void {
+    this.error.set(false);
     if (reset) {
+      this.loading.set(true);
       this.orders.set([]);
       this.cursor.set(null);
+    } else {
+      this.loadingMore.set(true);
     }
 
     this.api.list({ status: this.status(), cursor: reset ? null : this.cursor() }).subscribe({
@@ -137,8 +142,13 @@ export class AccountOrdersPage {
         this.orders.update((current) => (reset ? mapped : [...current, ...mapped]));
         this.cursor.set(page.page.nextCursor);
         this.loading.set(false);
+        this.loadingMore.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        this.loadingMore.set(false);
+        this.error.set(true);
+      },
     });
   }
 }

@@ -108,8 +108,11 @@
   background: var(--color-text-inverse);
   color: var(--color-text);
 
+  // A step down from `--color-text-inverse` in the theme's own tint, not the built-in ramp's: the
+  // brand ramp is not part of a theme's token set, so reaching for it here left this button's
+  // hover sand-coloured under every other palette.
   &:hover:not(:disabled):not([aria-disabled='true']) {
-    background: var(--brand-sand-200);
+    background: var(--color-surface-sunken);
   }
 }
 

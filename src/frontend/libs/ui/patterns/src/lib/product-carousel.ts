@@ -27,7 +27,7 @@ import { ProductCard } from './product-card';
   imports: [ProductCard, RouterLink],
   template: `
     <div class="head">
-      <h2>{{ heading() }}</h2>
+      <h2 class="kh-section-heading">{{ heading() }}</h2>
       @if (viewAllHref()) {
         <a class="view-all" [routerLink]="viewAllHref()">View all</a>
       }

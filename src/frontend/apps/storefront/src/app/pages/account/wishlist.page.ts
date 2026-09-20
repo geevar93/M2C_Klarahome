@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { RouterLink } from '@angular/router';
 import { CartActions } from '@klarahome/data-access-cart';
 import { WishlistStore } from '@klarahome/data-access-engagement';
-import { Button, EmptyState, Skeleton } from '@klarahome/ui-primitives';
+import { Button, EmptyState, ErrorState, PageHeader, Skeleton } from '@klarahome/ui-primitives';
 import { ProductCardView, ProductGrid } from '@klarahome/ui-patterns';
 import { INR, money } from '@klarahome/domain';
 import { AnalyticsEvents, AnalyticsService, ImageUrls, ToastService } from '@klarahome/util';
@@ -24,18 +24,23 @@ import { AnalyticsEvents, AnalyticsService, ImageUrls, ToastService } from '@kla
  */
 @Component({
   selector: 'kh-account-wishlist-page',
-  imports: [Button, EmptyState, ProductGrid, RouterLink, Skeleton],
+  imports: [Button, EmptyState, ErrorState, PageHeader, ProductGrid, RouterLink, Skeleton],
   template: `
-    <h1>Your wishlist</h1>
+    <kh-page-header title="Wishlist" />
 
-    @if (!store.current()) {
-      <kh-skeleton height="12rem" />
+    @if (store.loading() && !store.current()) {
+      <div class="list">
+        <kh-skeleton height="8rem" />
+        <kh-skeleton height="8rem" />
+      </div>
+    } @else if (store.error() && !store.current()) {
+      <kh-error-state (retry)="store.load()" />
     } @else if (products().length === 0) {
       <kh-empty-state
         heading="Nothing saved yet"
         message="Tap the heart on anything you want to come back to. It stays on every device you sign in on."
       >
-        <a khButton variant="primary" routerLink="/">Find something</a>
+        <a khButton variant="primary" routerLink="/">Start shopping</a>
       </kh-empty-state>
     } @else {
       <kh-product-grid
@@ -52,8 +57,10 @@ import { AnalyticsEvents, AnalyticsService, ImageUrls, ToastService } from '@kla
       display: block;
     }
 
-    h1 {
-      font-size: var(--text-2xl);
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -110,11 +117,19 @@ export class AccountWishlistPage {
           item_name: product.name,
         });
       },
-      error: (error: unknown) => this.toasts.warning(this.cart.describeFailure(error)),
+      error: (error: unknown) => this.toasts.danger(this.cart.describeFailure(error)),
     });
   }
 
   protected remove(product: ProductCardView): void {
-    this.store.toggle(product.variantId);
+    this.store.toggle(product.variantId, {
+      onSettled: ({ removed, ok }) => {
+        if (!ok) {
+          this.toasts.danger('We could not update your wishlist. Please try again.');
+          return;
+        }
+        if (removed) this.toasts.success(`${product.name} was removed from your wishlist.`);
+      },
+    });
   }
 }
