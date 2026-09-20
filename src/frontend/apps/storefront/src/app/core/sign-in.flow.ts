@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { AddressBookStore, ProfileStore } from '@klarahome/data-access-account';
+import { AddressBookStore, NotificationInboxStore, ProfileStore } from '@klarahome/data-access-account';
 import { AuthService, SessionStore, SignInResponse, safeReturnUrl } from '@klarahome/data-access-auth';
 import { CartStore, CartSummaryStore } from '@klarahome/data-access-cart';
 import { WishlistStore } from '@klarahome/data-access-engagement';
@@ -37,6 +37,7 @@ export class SignInFlow {
   private readonly wishlist = inject(WishlistStore);
   private readonly profile = inject(ProfileStore);
   private readonly addresses = inject(AddressBookStore);
+  private readonly inbox = inject(NotificationInboxStore);
   private readonly toasts = inject(ToastService);
   private readonly analytics = inject(AnalyticsService);
   private readonly router = inject(Router);
@@ -72,6 +73,9 @@ export class SignInFlow {
     this.wishlist.load();
     this.profile.loadOnce();
     this.addresses.loadOnce();
+    // The badge only: the list behind it is fetched when the bell is opened, and a shopper who
+    // signs in and goes straight to a product page never pays for messages they did not ask to see.
+    this.inbox.refreshUnreadCount();
 
     void this.router.navigateByUrl(this.safeReturnUrl(returnUrl));
     return true;
@@ -90,6 +94,7 @@ export class SignInFlow {
       this.wishlist.clear();
       this.profile.clear();
       this.addresses.clear();
+      this.inbox.clear();
       this.toasts.success('You are signed out.');
       void this.router.navigateByUrl('/');
     });

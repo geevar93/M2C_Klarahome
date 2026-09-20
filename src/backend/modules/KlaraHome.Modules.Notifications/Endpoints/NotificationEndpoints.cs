@@ -57,7 +57,92 @@ internal static class StoreNotificationEndpoints
             .RequireRateLimiting(RateLimitPolicies.CartWrite)
             .Produces<PreferencesResponse>();
 
+        MapInbox(endpoints);
+
         return endpoints;
+    }
+
+    /// <summary>
+    /// The in-app inbox: what the platform has told this person inside the application.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A separate group from the preferences one because it is a different resource, not a
+    /// different verb on the same one — <c>/store/me/notifications</c> is the messages, and
+    /// <c>/store/me/notification-preferences</c> is what the person has chosen to receive.
+    /// </para>
+    /// <para>
+    /// Everything here is scoped to the caller inside the handler, from the token rather than from
+    /// a route parameter. There is no <c>{userId}</c> anywhere in this group and there must not be:
+    /// an inbox addressed by id is an inbox somebody can guess their way into.
+    /// </para>
+    /// </remarks>
+    /// <param name="endpoints">The versioned API group the module is handed.</param>
+    private static void MapInbox(IEndpointRouteBuilder endpoints)
+    {
+        var group = endpoints
+            .MapGroup("/store/me/notifications")
+            .WithTags("Notifications")
+            .RequireAuthorization();
+
+        group.MapGet("/", async (
+                bool? unreadOnly,
+                string? cursor,
+                int? size,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(
+                        new GetInboxQuery(unreadOnly ?? false, cursor, size),
+                        context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("storeNotificationsList")
+            .WithSummary("Returns this account's in-app messages, newest first, with the unread count.")
+            .Produces<InboxResponse>();
+
+        // Its own endpoint, and the cheapest one here: the header badge asks this on every page and
+        // has no use for the bodies a list would carry.
+        group.MapGet("/unread-count", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetUnreadCountQuery(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("storeNotificationsUnreadCount")
+            .WithSummary("Returns how many in-app messages this account has not read.")
+            .Produces<UnreadCountResponse>();
+
+        group.MapPost("/{id:guid}/read", async (Guid id, IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .SendAsync(new MarkNotificationReadCommand(id), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("storeNotificationMarkRead")
+            .WithSummary("Marks one in-app message as read.")
+            .RequireRateLimiting(RateLimitPolicies.CartWrite)
+            .Produces<InboxMessageResponse>();
+
+        group.MapPost("/read-all", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .SendAsync(new MarkAllNotificationsReadCommand(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("storeNotificationsMarkAllRead")
+            .WithSummary("Marks every unread in-app message as read, and says how many that was.")
+            .RequireRateLimiting(RateLimitPolicies.CartWrite)
+            .Produces<MarkAllReadResponse>();
     }
 }
 

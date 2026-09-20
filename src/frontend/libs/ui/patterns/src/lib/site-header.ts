@@ -83,6 +83,11 @@ import { NavItem, isInternalHref } from './navigation.model';
           </a>
         }
 
+        <!-- Projected rather than an input of its own: the bell owns a panel, a badge and three
+             outputs, and a header that took all of that as inputs would be a header that knows
+             what a notification is. -->
+        <ng-content select="[khHeaderBell]" />
+
         <a
           khButton
           variant="tertiary"

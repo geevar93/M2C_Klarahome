@@ -29,6 +29,22 @@
   (menuToggled)="shell.toggleNav()"
   (cartOpened)="shell.openCart()"
 >
+  <!--
+    Signed in only. A bell for somebody with no account is a control that can never have anything
+    behind it, and one that asks them to sign in to find out is worse.
+  -->
+  @if (shell.isAuthenticated()) {
+    <kh-notification-bell
+      khHeaderBell
+      [items]="shell.notificationPreview()"
+      [unreadCount]="shell.unreadNotificationCount()"
+      [loading]="shell.notificationsLoading()"
+      (panelOpened)="shell.loadNotifications()"
+      (opened)="shell.readNotification($event)"
+      (markAllRead)="shell.readAllNotifications()"
+    />
+  }
+
   <kh-search-entry
     khHeaderSearch
     inputId="kh-header-search"

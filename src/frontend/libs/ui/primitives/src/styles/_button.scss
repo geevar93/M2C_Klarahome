@@ -145,3 +145,15 @@
   padding-inline: 0;
   min-width: var(--touch-target-min);
 }
+
+// A <summary> carrying the button classes is the control of a `<details>` disclosure. Two things
+// it brings of its own have to go: the disclosure triangle, which no other button has, and the
+// `display: list-item` that would override the flex centring above.
+summary.kh-button {
+  display: inline-flex;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+}

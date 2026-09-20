@@ -200,10 +200,17 @@ export const appRoutes: Route[] = [
         data: { breadcrumb: 'Store credit', seo: { title: 'Store credit' } },
       },
       {
+        // The messages themselves. 'notifications' below is the preference centre, which is what
+        // the shopper *chooses*; this is what they have actually been told.
+        path: 'inbox',
+        loadComponent: () => import('./pages/account/inbox.page').then((m) => m.AccountInboxPage),
+        data: { breadcrumb: 'Notifications', seo: { title: 'Notifications' } },
+      },
+      {
         path: 'notifications',
         loadComponent: () =>
           import('./pages/account/notifications.page').then((m) => m.AccountNotificationsPage),
-        data: { breadcrumb: 'Notifications', seo: { title: 'Notifications' } },
+        data: { breadcrumb: 'Notification settings', seo: { title: 'Notification settings' } },
       },
     ],
   },

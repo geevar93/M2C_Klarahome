@@ -182,5 +182,87 @@ internal static class DefaultTemplates
             + "<p>It covers {{rowCount}} row(s) and can be downloaded from the admin console for "
             + "{{expiryHours}} hour(s): {{downloadUrl}}</p>",
             NotificationCategory.Vendor),
+
+        // The order, shipping and payment messages. In-app only, deliberately: this deployment has
+        // never sent a shopper an email about an order, and seeding an email template here would
+        // start doing so on the next deploy — a behaviour change nobody asked for, addressed to
+        // every customer at once. The channel a store adds next is a template an operator writes,
+        // which is the whole reason the wording lives in the database.
+        //
+        // The four shipping ones are NOT transactional, so the Shipping preference governs them.
+        // That is the point of the distinction: somebody who has turned off tracking chatter has
+        // turned off tracking chatter, and still gets told that their money moved.
+        new(
+            NotificationEvents.OrderPlaced,
+            NotificationChannel.InApp,
+            "Order {{orderNumber}} placed",
+            "We have your order {{orderNumber}} for {{total}}. We will tell you as each part of it "
+            + "is dispatched.",
+            NotificationCategory.Orders),
+
+        new(
+            NotificationEvents.OrderCancelled,
+            NotificationChannel.InApp,
+            "Part of order {{orderNumber}} was cancelled",
+            "{{cancelledTotal}} of order {{orderNumber}} has been cancelled. {{reason}} Anything "
+            + "already paid for it goes back to the way you paid.",
+            NotificationCategory.Orders),
+
+        new(
+            NotificationEvents.OrderShipped,
+            NotificationChannel.InApp,
+            "Order {{orderNumber}} is on its way",
+            "{{subOrderNumber}} has been handed to the courier. You can follow it from your orders "
+            + "page.",
+            NotificationCategory.Shipping,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.OrderOutForDelivery,
+            NotificationChannel.InApp,
+            "Order {{orderNumber}} is out for delivery",
+            "{{subOrderNumber}} is with the delivery agent and should reach you today.",
+            NotificationCategory.Shipping,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.OrderDelivered,
+            NotificationChannel.InApp,
+            "Order {{orderNumber}} was delivered",
+            "{{subOrderNumber}} has been delivered. If something is not right, you can start a "
+            + "return from your orders page.",
+            NotificationCategory.Shipping,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.OrderDeliveryFailed,
+            NotificationChannel.InApp,
+            "We could not deliver order {{orderNumber}}",
+            "A delivery attempt for {{subOrderNumber}} did not succeed. {{reason}} The courier will "
+            + "try again.",
+            NotificationCategory.Shipping,
+            IsTransactional: false),
+
+        new(
+            NotificationEvents.PaymentCaptured,
+            NotificationChannel.InApp,
+            "Payment received for order {{orderNumber}}",
+            "We have received {{amount}} for order {{orderNumber}}.",
+            NotificationCategory.Payments),
+
+        new(
+            NotificationEvents.PaymentFailed,
+            NotificationChannel.InApp,
+            "Payment for order {{orderNumber}} did not go through",
+            "{{reason}} The order is still held — you can try paying again from your orders page.",
+            NotificationCategory.Payments),
+
+        new(
+            NotificationEvents.RefundProcessed,
+            NotificationChannel.InApp,
+            "{{amount}} refunded for order {{orderNumber}}",
+            "{{amount}} has gone back to the way you paid for order {{orderNumber}}. Banks usually "
+            + "take three to five working days to show it.",
+            NotificationCategory.Payments),
     ];
 }
