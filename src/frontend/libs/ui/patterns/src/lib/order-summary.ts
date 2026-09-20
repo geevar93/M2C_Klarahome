@@ -46,7 +46,14 @@ import { OrderSummaryView } from './commerce.model';
       }
 
       <div class="row total">
-        <dt>{{ summary().totalLabel }}</dt>
+        <dt>
+          {{ summary().totalLabel }}
+          <!-- Under the total, not among the rows above it: the rows are a sum, and the GST is
+               already inside every one of them. See taxIncluded on OrderSummaryView. -->
+          @if (summary().taxIncluded; as tax) {
+            <span class="note">Includes {{ tax | khMoney }} GST</span>
+          }
+        </dt>
         <dd>{{ summary().total | khMoney }}</dd>
       </div>
 
@@ -121,6 +128,14 @@ import { OrderSummaryView } from './commerce.model';
 
     .total dt {
       color: var(--color-text);
+    }
+
+    /* The total row is bold; the statement about what it contains is not. Quiet enough to read as
+       a footnote to the figure, still at the muted role's contrast rather than a lighter grey. */
+    .total .note {
+      margin-block-start: var(--space-1);
+      font-weight: var(--weight-regular);
+      color: var(--color-text-muted);
     }
 
     .payable dd {
