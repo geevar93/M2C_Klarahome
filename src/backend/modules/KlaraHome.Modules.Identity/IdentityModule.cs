@@ -154,12 +154,12 @@ public sealed class IdentityModule : IModule
         ArgumentNullException.ThrowIfNull(endpoints);
 
         var store = endpoints.MapGroup("/store");
-        store.MapAuthEndpoints("store", includeOtp: true);
+        store.MapAuthEndpoints("store", customerSurface: true);
         store.MapExternalAuthEndpoints();
         store.MapAccountEndpoints("store", includeAddresses: true);
 
         var admin = endpoints.MapGroup("/admin");
-        admin.MapAuthEndpoints("admin", includeOtp: false);
+        admin.MapAuthEndpoints("admin", customerSurface: false);
         admin.MapAccountEndpoints("admin", includeAddresses: false);
         admin.MapAdminIdentityEndpoints();
     }

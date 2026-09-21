@@ -76,9 +76,10 @@ export class AuthService {
   /**
    * Asks for a one-time code.
    *
-   * OTP is the storefront's primary sign-in: most Indian shoppers have a mobile number and no
-   * password, and the API creates the customer on first successful verification — so there is no
-   * separate "register with mobile" flow to keep in step with this one.
+   * Not yet wired into the storefront: it needs an SMS route, and until there is one a shopper
+   * proves their mobile number with a password ({@link signInWithMobile}). When it is switched on,
+   * the API signs in the account already registered to the number, or creates one on first
+   * successful verification.
    *
    * The answer says how long the code lasts and how many digits it has, and the screen is built
    * from that rather than from a constant: a deployment that shortens the code must not need a
@@ -97,37 +98,50 @@ export class AuthService {
   }
 
   /**
-   * Email and password.
+   * Email and password — the **only** way into the admin app.
    *
-   * The **only** way into the admin app, and one of two ways into the storefront. Which endpoint
-   * is called follows `surface`, exactly as `refresh` and `signOut` already do: the two issue
-   * different cookies with different lifetimes and different session policies, and a storefront
-   * login that minted a staff session would be the most serious defect this application could
-   * have.
+   * Admin-only, and it refuses to run anywhere else rather than quietly calling the other surface:
+   * the two issue different cookies with different lifetimes and different session policies, and a
+   * storefront login that minted a staff session would be the most serious defect this application
+   * could have. A shopper signs in with {@link signInWithMobile}.
    *
    * A response carrying a `challenge` instead of a token is not a failure — it is the second
    * factor being demanded, and `adopt` answers false so the caller shows the code step.
    */
   signIn(email: string, password: string): Observable<SignInResponse> {
-    const request =
-      this.surface === 'admin'
-        ? this.identity.adminAuthLogin({ email, password }, { skipAuth: true, silentErrors: true })
-        : this.identity.storeAuthLogin({ email, password }, { skipAuth: true, silentErrors: true });
+    if (this.surface !== 'admin') {
+      throw new Error('An email sign-in is the admin surface only; the storefront signs in with a mobile number.');
+    }
 
-    return request.pipe(tap((response) => this.adopt(response)));
+    return this.identity
+      .adminAuthLogin({ email, password }, { skipAuth: true, silentErrors: true })
+      .pipe(tap((response) => this.adopt(response)));
   }
 
   /**
-   * Creates an account with an email address and a password.
+   * Mobile number and password — the storefront's own sign-in.
+   *
+   * The mobile number is the shopper's account. A password proves it for now; once there is an SMS
+   * route the same account signs in with a one-time code instead ({@link requestOtp}), without
+   * anything about it changing.
+   */
+  signInWithMobile(mobile: string, password: string): Observable<SignInResponse> {
+    return this.identity
+      .storeAuthLogin({ mobile, password }, { skipAuth: true, silentErrors: true })
+      .pipe(tap((response) => this.adopt(response)));
+  }
+
+  /**
+   * Creates an account with a mobile number and a password. The email address is optional.
    *
    * The response is adopted the same way a sign-in is, because the API signs the new customer in —
    * making them type their password again immediately after choosing it is a step that exists only
    * to lose people.
    */
   register(body: {
-    email: string;
+    mobile: string;
     password: string;
-    mobile: string | null;
+    email: string | null;
     marketingConsent: boolean;
   }): Observable<SignInResponse> {
     return this.identity

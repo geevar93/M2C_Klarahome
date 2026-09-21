@@ -312,10 +312,10 @@ export class IdentityApiClient {
   }
 
   /**
-   * Signs in with an email address and a password. May answer with a two-factor challenge.
+   * Signs in with a mobile number and a password. May answer with a two-factor challenge.
    * `POST /api/v1/store/auth/login`
    */
-  storeAuthLogin(body: Models.LoginBody, options?: ApiRequestOptions): Observable<Models.SignInResponse> {
+  storeAuthLogin(body: Models.MobileLoginBody, options?: ApiRequestOptions): Observable<Models.SignInResponse> {
     return this.http.request<Models.SignInResponse>('POST', `${this.baseUrl}/api/v1/store/auth/login`, body, undefined, options);
   }
 
@@ -376,7 +376,7 @@ export class IdentityApiClient {
   }
 
   /**
-   * Registers a shopper with an email address and a password.
+   * Registers a shopper with a mobile number and a password.
    * `POST /api/v1/store/auth/register`
    */
   storeAuthRegister(body: Models.RegisterBody, options?: ApiRequestOptions): Observable<Models.SignInResponse> {

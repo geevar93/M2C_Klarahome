@@ -121,7 +121,7 @@ import { AuthLayout } from './auth.layout';
     } @else {
       <kh-auth-layout
         title="Reset your password"
-        lead="Tell us the email address on the account and we will send a link."
+        lead="Tell us the email address you added to your account and we will send a link."
       >
         @if (failure(); as message) {
           <kh-alert tone="danger" #errorAlert tabindex="-1">{{ message }}</kh-alert>
@@ -146,6 +146,15 @@ import { AuthLayout } from './auth.layout';
             {{ busy() ? 'Sending…' : 'Send the link' }}
           </button>
         </form>
+
+        <!--
+          An account is keyed on a mobile number and the email address is optional, so some
+          shoppers have nowhere to send a link. Resetting by SMS arrives with one-time codes; until
+          then the honest answer is a person.
+        -->
+        <p class="foot">
+          Signed up without an email address? Contact our support team and we will help you back in.
+        </p>
 
         <p class="foot">
           Remembered it?

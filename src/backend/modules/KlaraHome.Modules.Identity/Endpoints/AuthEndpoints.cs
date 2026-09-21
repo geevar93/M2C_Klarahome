@@ -21,17 +21,22 @@ internal sealed record OtpRequestBody(string Mobile);
 /// <param name="Code">The code.</param>
 internal sealed record OtpVerifyBody(string Mobile, string Code);
 
-/// <summary>The body of a password sign-in.</summary>
+/// <summary>The body of an admin password sign-in.</summary>
 /// <param name="Email">The email address.</param>
 /// <param name="Password">The password.</param>
 internal sealed record LoginBody(string Email, string Password);
 
+/// <summary>The body of a storefront password sign-in.</summary>
+/// <param name="Mobile">The mobile number.</param>
+/// <param name="Password">The password.</param>
+internal sealed record MobileLoginBody(string Mobile, string Password);
+
 /// <summary>The body of a shopper registration.</summary>
-/// <param name="Email">The email address.</param>
+/// <param name="Mobile">The mobile number the account is keyed on.</param>
 /// <param name="Password">The chosen password.</param>
-/// <param name="Mobile">An optional mobile number.</param>
+/// <param name="Email">An optional email address, for receipts and password reset.</param>
 /// <param name="MarketingConsent">Whether marketing was opted into. Unbundled from the sign-up.</param>
-internal sealed record RegisterBody(string Email, string Password, string? Mobile, bool MarketingConsent);
+internal sealed record RegisterBody(string Mobile, string Password, string? Email, bool MarketingConsent);
 
 /// <summary>The body of a password-reset request.</summary>
 /// <param name="Email">The email address.</param>
@@ -77,16 +82,16 @@ internal static class AuthEndpoints
     /// <c>storeAuthLogin</c> and <c>adminAuthLogin</c> than as one shared method
     /// (docs/04-api-specification.md §7).
     /// </param>
-    /// <param name="includeOtp">
-    /// Whether to map the mobile-OTP endpoints. The storefront has them because a shopper's primary
-    /// credential is their mobile number; the admin surface does not, because staff and vendor
-    /// users sign in with an email address and a mandatory second factor
-    /// (docs/07-security-compliance.md §1).
+    /// <param name="customerSurface">
+    /// Whether this is the storefront. A shopper's account is keyed on their mobile number, so the
+    /// storefront signs in with one — by password today, by one-time code once there is an SMS route —
+    /// and is the only surface with self-service registration. The admin surface signs in with an
+    /// email address and a mandatory second factor (docs/07-security-compliance.md §1).
     /// </param>
     public static IEndpointRouteBuilder MapAuthEndpoints(
         this IEndpointRouteBuilder surface,
         string namePrefix,
-        bool includeOtp)
+        bool customerSurface)
     {
         ArgumentNullException.ThrowIfNull(surface);
 
@@ -95,10 +100,15 @@ internal static class AuthEndpoints
             .WithTags("Identity")
             .AllowAnonymous();
 
-        if (includeOtp)
+        if (customerSurface)
         {
             MapOtp(group, namePrefix);
             MapRegistration(group, namePrefix);
+            MapMobileLogin(group, namePrefix);
+        }
+        else
+        {
+            MapEmailLogin(group, namePrefix);
         }
 
         MapPassword(group, namePrefix);
@@ -154,9 +164,9 @@ internal static class AuthEndpoints
                 HttpContext context) =>
             {
                 var command = new RegisterCustomerCommand(
-                    body.Email,
-                    body.Password,
                     body.Mobile,
+                    body.Password,
+                    body.Email,
                     body.MarketingConsent,
                     AuthCookies.DeviceOf(context));
 
@@ -164,13 +174,29 @@ internal static class AuthEndpoints
                 return AuthCookies.ToSignIn(result, context, options);
             })
             .WithName(namePrefix + "AuthRegister")
-            .WithSummary("Registers a shopper with an email address and a password.")
+            .WithSummary("Registers a shopper with a mobile number and a password.")
             .RequireRateLimiting(RateLimitPolicies.Auth)
             .Produces<SignInResponse>();
 
-    private static void MapPassword(IEndpointRouteBuilder group, string namePrefix)
-    {
-        group.MapPost("/login", async (
+    private static void MapMobileLogin(IEndpointRouteBuilder group, string namePrefix)
+        => group.MapPost("/login", async (
+                MobileLoginBody body,
+                IDispatcher dispatcher,
+                IOptions<AuthOptions> options,
+                HttpContext context) =>
+            {
+                var command = new MobilePasswordLoginCommand(body.Mobile, body.Password, AuthCookies.DeviceOf(context));
+                var result = await dispatcher.SendAsync(command, context.RequestAborted).ConfigureAwait(false);
+
+                return AuthCookies.ToSignIn(result, context, options);
+            })
+            .WithName(namePrefix + "AuthLogin")
+            .WithSummary("Signs in with a mobile number and a password. May answer with a two-factor challenge.")
+            .RequireRateLimiting(RateLimitPolicies.Auth)
+            .Produces<SignInResponse>();
+
+    private static void MapEmailLogin(IEndpointRouteBuilder group, string namePrefix)
+        => group.MapPost("/login", async (
                 LoginBody body,
                 IDispatcher dispatcher,
                 IOptions<AuthOptions> options,
@@ -186,6 +212,8 @@ internal static class AuthEndpoints
             .RequireRateLimiting(RateLimitPolicies.Auth)
             .Produces<SignInResponse>();
 
+    private static void MapPassword(IEndpointRouteBuilder group, string namePrefix)
+    {
         group.MapPost("/password/change", async (
                 ChangePasswordBody body,
                 IDispatcher dispatcher,

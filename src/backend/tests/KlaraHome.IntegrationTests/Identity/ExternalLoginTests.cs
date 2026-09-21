@@ -79,7 +79,7 @@ public sealed class ExternalLoginTests(KlaraHomeSchemaFixture fixture) : Identit
         using var registered = CreateClient();
         var response = await registered.PostAsJsonAsync(
             "/api/v1/store/auth/register",
-            new { email, password = "the-quiet-lamp-post-hums", mobile = (string?)null, marketingConsent = false },
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums", email, marketingConsent = false },
             Cancellation);
 
         response.EnsureSuccessStatusCode();
@@ -104,7 +104,7 @@ public sealed class ExternalLoginTests(KlaraHomeSchemaFixture fixture) : Identit
         using var registered = CreateClient();
         var response = await registered.PostAsJsonAsync(
             "/api/v1/store/auth/register",
-            new { email, password = "the-quiet-lamp-post-hums", mobile = (string?)null, marketingConsent = false },
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums", email, marketingConsent = false },
             Cancellation);
 
         response.EnsureSuccessStatusCode();

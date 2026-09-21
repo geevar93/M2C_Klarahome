@@ -114,8 +114,8 @@ internal sealed class User : AggregateRoot<Guid>, ITenantScoped, IAuditable, ISo
     public Guid? DeletedBy { get; private set; }
 
     /// <summary>
-    /// Registers a shopper. At least one identifier is required: the mobile number for the OTP
-    /// path, the email address for the password path, or both.
+    /// Registers a shopper. At least one identifier is required: the mobile number for the
+    /// storefront's own sign-in, the email address for an identity provider's, or both.
     /// </summary>
     /// <param name="mobile">The mobile number in E.164, or null.</param>
     /// <param name="email">The email address, lowercased, or null.</param>

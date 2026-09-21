@@ -169,19 +169,19 @@ internal sealed class PricingScenario(HttpClient admin, CancellationToken cancel
     {
         ArgumentNullException.ThrowIfNull(client);
 
-        var email = $"shopper-{Guid.NewGuid():N}@klarahome.test";
+        var mobile = "+919" + Random.Shared.Next(100_000_000, 999_999_999).ToString(CultureInfo.InvariantCulture);
         const string Password = "the-shopper-signs-in-here";
 
         await Rest.ReadAsync(
             await client.PostAsJsonAsync(
                 "/api/v1/store/auth/register",
-                new { email, password = Password, mobile = (string?)null, marketingConsent = false },
+                new { mobile, password = Password, email = (string?)null, marketingConsent = false },
                 cancellationToken),
             cancellationToken);
 
         // Sign in again rather than reading the registration's own token, so the session is attached
         // to the client by the same helper every other test uses.
-        var session = await Database.TestSignIn.SignInAsync(client, "store", email, Password, cancellationToken);
+        var session = await Database.TestSignIn.SignInWithMobileAsync(client, mobile, Password, cancellationToken);
 
         return session.UserId;
     }
