@@ -24,9 +24,9 @@ interface RecentEntry {
  *
  * **Prices are deliberately not stored.** A price kept for a week and rendered from storage is a
  * price the shop is not offering, which is worse than no rail at all — so what is remembered is
- * the identity of the product, and the rail links to the PDP where the price is current. That is
- * also why the cards it produces are marked unpurchasable: nothing here may be added to a basket
- * without the product page having been read.
+ * the identity of the product, and the rail links to the PDP where the price is current. Nothing
+ * here may be added to a basket without the product page having been read — the carousel never
+ * shows add-to-cart, so that holds without marking the cards unpurchasable.
  */
 @Injectable({ providedIn: 'root' })
 export class RecentlyViewedStore {
@@ -48,7 +48,9 @@ export class RecentlyViewedStore {
       image: this.images.sourceForImage({ fileId: entry.imageFileId }, entry.name),
       rating: null,
       ratingCount: 0,
-      isPurchasable: false,
+      // Stock is not known here, and false would render every card "Out of stock". The PDP says
+      // whether it can be bought.
+      isPurchasable: true,
       reference: entry.name,
     })),
   );
