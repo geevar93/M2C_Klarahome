@@ -11,7 +11,7 @@ import {
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
-import { email, formField, formGroup, required } from '@klarahome/util';
+import { formField, formGroup, mobile, normaliseMobile, required } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { SignInFlow } from '../../core/sign-in.flow';
@@ -21,18 +21,18 @@ import { SocialSignIn } from './social-sign-in';
 /**
  * Sign in — `/auth/login`.
  *
- * **The email address is the account.** That is a change from the original Step 7 design, which put
- * a mobile number and a one-time code first and the password behind a link. Mobile-OTP sign-in has
- * been withdrawn: it needs a DLT-registered SMS route this deployment does not have, and the
- * fallback that made it usable in development wrote one-time codes to the API log, which
- * `docs/07-security-compliance.md` §3 forbids outright in a deployed environment. The endpoints
- * behind it are switched off by the `identity.mobile-otp-login` flag rather than deleted, so the
- * day an SMS provider is paid for the capability returns without a deploy (ADR-014 decision 4).
+ * **The mobile number is the account.** Signing in with a one-time code is where this is going,
+ * but that needs a DLT-registered SMS route this deployment does not have yet, and the fallback that
+ * made it usable in development wrote codes to the API log, which `docs/07-security-compliance.md`
+ * §3 forbids outright in a deployed environment. Until there is one, a password proves the number.
+ * The code endpoints are switched off by the `identity.mobile-otp-login` flag rather than deleted,
+ * and because accounts are already keyed on the number, turning them on later changes this form and
+ * nothing about anybody's account (ADR-014 decision 4).
  *
- * What replaces it is the two routes above and below the divider: an identity provider, which
- * verifies the address on our behalf and asks the shopper for no new secret, and an email and a
- * password. Which providers appear is the server's decision, and on an unconfigured deployment it
- * is none of them — see {@link SocialSignIn}.
+ * Two routes, either side of the divider: an identity provider, which verifies an address on our
+ * behalf and asks the shopper for no new secret, and a mobile number and a password. Which providers
+ * appear is the server's decision, and on an unconfigured deployment it is none of them — see
+ * {@link SocialSignIn}.
  *
  * `/auth/otp` is still reachable from here, but only for a **second factor**: a password sign-in
  * that answers with a challenge instead of a session sends the shopper there to enter the code from
@@ -59,17 +59,20 @@ import { SocialSignIn } from './social-sign-in';
       <kh-social-sign-in [returnUrl]="returnUrl()" />
 
       <form (submit)="signIn($event)" novalidate>
-        <kh-field label="Email address" for="login-email" [error]="form.fields.email.error()">
+        <kh-field label="Mobile number" for="login-mobile" [error]="form.fields.mobile.error()">
           <input
             khControl
-            id="login-email"
-            type="email"
-            autocomplete="email"
+            khNumeric
+            id="login-mobile"
+            type="tel"
+            inputmode="numeric"
+            maxlength="13"
+            autocomplete="tel-national"
             autofocus
-            [khInvalid]="!!form.fields.email.error()"
-            [value]="form.fields.email.value()"
-            (input)="form.fields.email.set($any($event.target).value)"
-            (touched)="form.fields.email.markTouched()"
+            [khInvalid]="!!form.fields.mobile.error()"
+            [value]="form.fields.mobile.value()"
+            (input)="form.fields.mobile.set($any($event.target).value)"
+            (touched)="form.fields.mobile.markTouched()"
           />
         </kh-field>
 
@@ -177,7 +180,7 @@ export class LoginPage {
   private readonly submitted = signal(false);
 
   protected readonly form = formGroup(this.submitted, {
-    email: formField('', [required('Email address'), email()], this.submitted),
+    mobile: formField('', [required('Mobile number'), mobile], this.submitted),
     password: formField('', [required('Password')], this.submitted),
   });
 
@@ -195,11 +198,11 @@ export class LoginPage {
     event.preventDefault();
     if (!this.form.submit() || this.busy()) return;
 
-    const { email: address, password } = this.form.values();
+    const { mobile: number, password } = this.form.values();
     this.busy.set(true);
     this.failure.set(null);
 
-    this.auth.signIn(address, password).subscribe({
+    this.auth.signInWithMobile(normaliseMobile(number), password).subscribe({
       next: (response) => {
         this.busy.set(false);
         if (this.flow.complete(response, this.returnUrl() ?? null, 'password')) return;
@@ -216,13 +219,13 @@ export class LoginPage {
           return;
         }
 
-        this.failure.set('That email address and password do not match an account.');
+        this.failure.set('That mobile number and password do not match an account.');
       },
       error: (error: unknown) => {
         this.busy.set(false);
         // Deliberately the same message whichever half was wrong. Saying "no account with that
-        // email" is an account-enumeration oracle.
-        this.failure.set(describeError(error, 'That email address and password do not match an account.'));
+        // number" is an account-enumeration oracle.
+        this.failure.set(describeError(error, 'That mobile number and password do not match an account.'));
       },
     });
   }

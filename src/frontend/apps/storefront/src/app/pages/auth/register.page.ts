@@ -31,12 +31,14 @@ import { SocialSignIn } from './social-sign-in';
 /**
  * Create an account — `/auth/register`.
  *
- * Four fields, and each one earns its place: an email address because that is what the account is
- * keyed on, a password twice because there is no way back from a typo in one that is masked, and a
- * mobile number because a delivery partner needs to ring somebody. The number is optional here — it
- * is asked for again, and required, on the address the order is delivered to, and demanding it twice
- * on a signup form is how people leave. It is **only** a contact number now: mobile-OTP sign-in has
- * been withdrawn (see `LoginPage`), so nothing about the account is keyed on it.
+ * Four fields, and each one earns its place: a mobile number because that is what the account is
+ * keyed on and what the shopper signs in with (see `LoginPage`), a password twice because there is
+ * no way back from a typo in one that is masked, and an email address, optional, because it is
+ * where receipts go and the only way to reset a forgotten password until one-time codes arrive.
+ *
+ * The number is not verified here. Proving it takes an SMS, and the day there is an SMS route the
+ * password gives way to a one-time code for the same account rather than to a verification step
+ * bolted on to this form.
  *
  * **Marketing consent is opt-in and unticked.** A pre-ticked box is not consent under the DPDP Act,
  * and the API records when it was given (Step 7's `marketingConsentAt`).
@@ -69,26 +71,7 @@ import { SocialSignIn } from './social-sign-in';
       <kh-social-sign-in [returnUrl]="returnUrl()" />
 
       <form (submit)="submit($event)" novalidate>
-        <kh-field label="Email address" for="reg-email" [error]="form.fields.email.error()">
-          <input
-            khControl
-            id="reg-email"
-            type="email"
-            autocomplete="email"
-            [khInvalid]="!!form.fields.email.error()"
-            [value]="form.fields.email.value()"
-            (input)="form.fields.email.set($any($event.target).value)"
-            (touched)="form.fields.email.markTouched()"
-          />
-        </kh-field>
-
-        <kh-field
-          label="Mobile number"
-          for="reg-mobile"
-          [optional]="true"
-          hint="So a delivery partner can reach you."
-          [error]="form.fields.mobile.error()"
-        >
+        <kh-field label="Mobile number" for="reg-mobile" [error]="form.fields.mobile.error()">
           <input
             khControl
             khNumeric
@@ -101,6 +84,25 @@ import { SocialSignIn } from './social-sign-in';
             [value]="form.fields.mobile.value()"
             (input)="form.fields.mobile.set($any($event.target).value)"
             (touched)="form.fields.mobile.markTouched()"
+          />
+        </kh-field>
+
+        <kh-field
+          label="Email address"
+          for="reg-email"
+          [optional]="true"
+          hint="For your receipts, and to reset your password if you forget it."
+          [error]="form.fields.email.error()"
+        >
+          <input
+            khControl
+            id="reg-email"
+            type="email"
+            autocomplete="email"
+            [khInvalid]="!!form.fields.email.error()"
+            [value]="form.fields.email.value()"
+            (input)="form.fields.email.set($any($event.target).value)"
+            (touched)="form.fields.email.markTouched()"
           />
         </kh-field>
 
@@ -230,8 +232,8 @@ export class RegisterPage {
   );
 
   protected readonly form = formGroup(this.submitted, {
-    email: formField('', [required('Email address'), email()], this.submitted),
-    mobile: formField('', [mobile], this.submitted),
+    mobile: formField('', [required('Mobile number'), mobile], this.submitted),
+    email: formField('', [email()], this.submitted),
     password: this.password,
     // Compared against the password's own signal, so the message appears the moment the two stop
     // agreeing rather than on submit. The label matches the visible "Confirm password" label above
@@ -261,9 +263,9 @@ export class RegisterPage {
 
     this.auth
       .register({
-        email: values.email,
+        mobile: normaliseMobile(values.mobile),
         password: values.password,
-        mobile: values.mobile ? normaliseMobile(values.mobile) : null,
+        email: values.email.trim() || null,
         marketingConsent: this.consent(),
       })
       .subscribe({
@@ -273,7 +275,7 @@ export class RegisterPage {
         },
         error: (error: unknown) => {
           this.busy.set(false);
-          // The API's own words: it is the only thing that knows whether the address is taken or
+          // The API's own words: it is the only thing that knows whether the number is taken or
           // the password failed a policy, and either is something the customer must act on.
           this.failure.set(
             describeError(error, 'We could not create that account. Please check your details.'),

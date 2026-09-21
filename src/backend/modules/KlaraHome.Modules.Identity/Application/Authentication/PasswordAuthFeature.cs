@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentValidation;
 using KlaraHome.Infrastructure.Messaging;
 using KlaraHome.Modules.Identity.Application.Validation;
@@ -13,23 +14,30 @@ using Microsoft.Extensions.Options;
 
 namespace KlaraHome.Modules.Identity.Application.Authentication;
 
-/// <summary>Signs in with an email address and a password.</summary>
+/// <summary>Signs in with an email address and a password. The admin surface's sign-in.</summary>
 /// <param name="Email">The email address.</param>
 /// <param name="Password">The password.</param>
 /// <param name="Device">What the caller looks like, supplied by the endpoint.</param>
 internal sealed record PasswordLoginCommand(string Email, string Password, DeviceInfo Device)
     : ICommand<SignInResult>;
 
-/// <summary>Registers a shopper with an email address and a password.</summary>
-/// <param name="Email">The email address.</param>
+/// <summary>Signs in with a mobile number and a password. The storefront's sign-in.</summary>
+/// <param name="Mobile">The mobile number, in any form the validator can normalise to E.164.</param>
+/// <param name="Password">The password.</param>
+/// <param name="Device">What the caller looks like, supplied by the endpoint.</param>
+internal sealed record MobilePasswordLoginCommand(string Mobile, string Password, DeviceInfo Device)
+    : ICommand<SignInResult>;
+
+/// <summary>Registers a shopper with a mobile number and a password.</summary>
+/// <param name="Mobile">Their mobile number, which is what the account is keyed on.</param>
 /// <param name="Password">The chosen password.</param>
-/// <param name="Mobile">Their mobile number, which becomes the primary identifier once verified.</param>
+/// <param name="Email">An optional email address, for receipts and a self-service password reset.</param>
 /// <param name="MarketingConsent">Whether they opted in to marketing, unbundled from the sign-up.</param>
 /// <param name="Device">What the caller looks like.</param>
 internal sealed record RegisterCustomerCommand(
-    string Email,
+    string Mobile,
     string Password,
-    string? Mobile,
+    string? Email,
     bool MarketingConsent,
     DeviceInfo Device) : ICommand<SignInResult>;
 
@@ -82,6 +90,21 @@ internal sealed class PasswordLoginValidator : AbstractValidator<PasswordLoginCo
     }
 }
 
+/// <summary>Rules for a mobile-number sign-in.</summary>
+internal sealed class MobilePasswordLoginValidator : AbstractValidator<MobilePasswordLoginCommand>
+{
+    public MobilePasswordLoginValidator()
+    {
+        // The number's shape is checked, unlike the password's strength: a malformed number says
+        // nothing about whether any account exists, and it has to normalise before it can be found.
+        RuleFor(command => command.Mobile)
+            .Must(IndianMobile.IsValid)
+            .WithMessage("Enter a valid Indian mobile number.");
+
+        RuleFor(command => command.Password).NotEmpty().MaximumLength(256);
+    }
+}
+
 /// <summary>Rules for a shopper registration.</summary>
 internal sealed class RegisterCustomerValidator : AbstractValidator<RegisterCustomerCommand>
 {
@@ -89,17 +112,16 @@ internal sealed class RegisterCustomerValidator : AbstractValidator<RegisterCust
     {
         ArgumentNullException.ThrowIfNull(passwords);
 
-        RuleFor(command => command.Email)
-            .NotEmpty()
-            .MaximumLength(320)
-            .Matches(IdentityFormats.Email()).WithMessage("Enter a valid email address.");
+        RuleFor(command => command.Mobile)
+            .Must(IndianMobile.IsValid)
+            .WithMessage("Enter a valid Indian mobile number.");
 
         passwords.Apply(RuleFor(command => command.Password));
 
-        RuleFor(command => command.Mobile!)
-            .Must(IndianMobile.IsValid)
-            .When(command => !string.IsNullOrWhiteSpace(command.Mobile))
-            .WithMessage("Enter a valid Indian mobile number.");
+        RuleFor(command => command.Email!)
+            .MaximumLength(320)
+            .Matches(IdentityFormats.Email()).WithMessage("Enter a valid email address.")
+            .When(command => !string.IsNullOrWhiteSpace(command.Email));
     }
 }
 
@@ -124,17 +146,18 @@ internal sealed class ResetPasswordValidator : AbstractValidator<ResetPasswordCo
 }
 
 /// <summary>
-/// Signs a user in with an email address and a password.
+/// Checks a password against the account an identifier names, and signs that user in.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The same handler serves the storefront and the admin surface. There is no reason for two: the
-/// credential, the lockout, the audit entry and the second-factor rule are identical, and what
-/// differs — which permissions the token then carries — is decided by the user's roles.
+/// Shared by the email sign-in the admin surface uses and the mobile-number sign-in the storefront
+/// uses. The two differ only in which column the identifier is matched against: the credential, the
+/// lockout, the audit entry and the second-factor rule are identical, and what differs after that —
+/// which permissions the token carries — is decided by the user's roles.
 /// </para>
 /// <para>
 /// Every rejection returns the same error. A password verification is performed even when no
-/// account matched, so the response time does not answer "does this address exist here" for an
+/// account matched, so the response time does not answer "does this account exist here" for an
 /// attacker who is timing it (docs/07-security-compliance.md §3).
 /// </para>
 /// </remarks>
@@ -143,51 +166,57 @@ internal sealed class ResetPasswordValidator : AbstractValidator<ResetPasswordCo
 /// <param name="signIn">Completes the sign-in.</param>
 /// <param name="options">Lockout settings.</param>
 /// <param name="clock">The clock.</param>
-internal sealed class PasswordLoginCommandHandler(
+internal abstract class PasswordSignInHandler(
     IdentityDbContext context,
     PasswordHasher hasher,
     SignInCoordinator signIn,
     IOptions<AuthOptions> options,
-    IClock clock) : ICommandHandler<PasswordLoginCommand, SignInResult>
+    IClock clock)
 {
     /// <summary>
-    /// A valid Argon2id hash of a value nobody holds, so an unknown address costs the same work as
-    /// a known one. Computed once per process, from a random secret that is then discarded.
+    /// A valid Argon2id hash of a value nobody holds, so an unknown identifier costs the same work
+    /// as a known one. Computed once per handler, from a random secret that is then discarded.
     /// </summary>
     private readonly Lazy<string> _decoyHash = new(() => hasher.Hash(SecretHasher.NewOpaqueToken()));
 
-    public async Task<Result<SignInResult>> HandleAsync(
-        PasswordLoginCommand command,
+    /// <summary>Signs in the user <paramref name="match"/> finds, if the password is theirs.</summary>
+    /// <param name="identifier">The normalised identifier, as the failure log records it.</param>
+    /// <param name="match">Finds the account the identifier names.</param>
+    /// <param name="password">The password as typed.</param>
+    /// <param name="device">What the caller looks like.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    protected async Task<Result<SignInResult>> SignInAsync(
+        string identifier,
+        Expression<Func<User, bool>> match,
+        string password,
+        DeviceInfo device,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(command);
-
-        var email = command.Email.Trim().ToLowerInvariant();
         var now = clock.UtcNow;
 
         var user = await context.Users
-            .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken)
+            .FirstOrDefaultAsync(match, cancellationToken)
             .ConfigureAwait(false);
 
         if (user is null)
         {
-            hasher.Verify(command.Password, _decoyHash.Value, out _);
+            hasher.Verify(password, _decoyHash.Value, out _);
 
-            await signIn.RecordFailureAsync(email, null, "unknown-user", cancellationToken).ConfigureAwait(false);
+            await signIn.RecordFailureAsync(identifier, null, "unknown-user", cancellationToken).ConfigureAwait(false);
             return AuthErrors.InvalidCredentials();
         }
 
         if (user.IsLockedOut(now))
         {
             await signIn
-                .RecordFailureAsync(email, user.Id, "locked-out", cancellationToken)
+                .RecordFailureAsync(identifier, user.Id, "locked-out", cancellationToken)
                 .ConfigureAwait(false);
 
             return AuthErrors.LockedOut(user.LockedUntil!.Value);
         }
 
         if (user.Status != UserStatus.Active
-            || !hasher.Verify(command.Password, user.PasswordHash, out var needsRehash))
+            || !hasher.Verify(password, user.PasswordHash, out var needsRehash))
         {
             var lockout = options.Value.Lockout;
 
@@ -199,7 +228,7 @@ internal sealed class PasswordLoginCommandHandler(
 
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await signIn
-                .RecordFailureAsync(email, user.Id, "bad-password", cancellationToken)
+                .RecordFailureAsync(identifier, user.Id, "bad-password", cancellationToken)
                 .ConfigureAwait(false);
 
             return AuthErrors.InvalidCredentials();
@@ -210,16 +239,88 @@ internal sealed class PasswordLoginCommandHandler(
             // The password was correct and its hash is weaker than the current setting. This is the
             // only moment the plaintext is available, so it is the only moment the cost can be
             // raised without asking the user to do anything.
-            user.SetPasswordHash(hasher.Hash(command.Password));
+            user.SetPasswordHash(hasher.Hash(password));
         }
 
         return await signIn
-            .CompleteAsync(user, command.Device, secondFactorSatisfied: false, cancellationToken)
+            .CompleteAsync(user, device, secondFactorSatisfied: false, cancellationToken)
             .ConfigureAwait(false);
     }
 }
 
-/// <summary>Registers a shopper with an email address and a password.</summary>
+/// <summary>Signs a user in with an email address and a password.</summary>
+/// <param name="context">The Identity data context.</param>
+/// <param name="hasher">Verifies and re-hashes the password.</param>
+/// <param name="signIn">Completes the sign-in.</param>
+/// <param name="options">Lockout settings.</param>
+/// <param name="clock">The clock.</param>
+internal sealed class PasswordLoginCommandHandler(
+    IdentityDbContext context,
+    PasswordHasher hasher,
+    SignInCoordinator signIn,
+    IOptions<AuthOptions> options,
+    IClock clock)
+    : PasswordSignInHandler(context, hasher, signIn, options, clock),
+        ICommandHandler<PasswordLoginCommand, SignInResult>
+{
+    public Task<Result<SignInResult>> HandleAsync(
+        PasswordLoginCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var email = command.Email.Trim().ToLowerInvariant();
+
+        return SignInAsync(
+            email,
+            candidate => candidate.Email == email,
+            command.Password,
+            command.Device,
+            cancellationToken);
+    }
+}
+
+/// <summary>
+/// Signs a shopper in with a mobile number and a password.
+/// </summary>
+/// <remarks>
+/// The bridge to one-time codes, not a replacement for them. The mobile number is the account from
+/// registration onwards; until there is an SMS route (<see cref="IdentityFeatures.MobileOtpLogin"/>)
+/// a password is what proves the caller holds it, and the day codes are switched on the same
+/// account signs in with one instead, with nothing about the account having to change.
+/// </remarks>
+/// <param name="context">The Identity data context.</param>
+/// <param name="hasher">Verifies and re-hashes the password.</param>
+/// <param name="signIn">Completes the sign-in.</param>
+/// <param name="options">Lockout settings.</param>
+/// <param name="clock">The clock.</param>
+internal sealed class MobilePasswordLoginCommandHandler(
+    IdentityDbContext context,
+    PasswordHasher hasher,
+    SignInCoordinator signIn,
+    IOptions<AuthOptions> options,
+    IClock clock)
+    : PasswordSignInHandler(context, hasher, signIn, options, clock),
+        ICommandHandler<MobilePasswordLoginCommand, SignInResult>
+{
+    public Task<Result<SignInResult>> HandleAsync(
+        MobilePasswordLoginCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var mobile = IndianMobile.Normalize(command.Mobile);
+
+        return SignInAsync(
+            mobile,
+            candidate => candidate.Mobile == mobile,
+            command.Password,
+            command.Device,
+            cancellationToken);
+    }
+}
+
+/// <summary>Registers a shopper with a mobile number and a password.</summary>
 /// <param name="context">The Identity data context.</param>
 /// <param name="hasher">Hashes the chosen password.</param>
 /// <param name="signIn">Signs the new customer in.</param>
@@ -242,12 +343,12 @@ internal sealed class RegisterCustomerCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var email = command.Email.Trim().ToLowerInvariant();
-        var mobile = string.IsNullOrWhiteSpace(command.Mobile) ? null : IndianMobile.Normalize(command.Mobile);
+        var mobile = IndianMobile.Normalize(command.Mobile);
+        var email = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim().ToLowerInvariant();
 
         var taken = await context.Users
             .AnyAsync(
-                candidate => candidate.Email == email || (mobile != null && candidate.Mobile == mobile),
+                candidate => candidate.Mobile == mobile || (email != null && candidate.Email == email),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -259,7 +360,7 @@ internal sealed class RegisterCustomerCommandHandler(
             // would do anyway — unlike a login form, where the same leak costs nothing to hide.
             return Error.Conflict(
                 "IDENTITY_ACCOUNT_EXISTS",
-                "An account already exists for that email address or mobile number. Try signing in.");
+                "An account already exists for that mobile number or email address. Try signing in.");
         }
 
         var now = clock.UtcNow;
@@ -283,17 +384,20 @@ internal sealed class RegisterCustomerCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        // Registration succeeds either way. With email delivery off the address simply stays
-        // unverified, which is a state the account model already has and the storefront already
-        // shows — not a reason to refuse somebody an account.
-        var canVerify = await flags
+        // The mobile number stays unverified here. Proving it takes an SMS, and the day there is an
+        // SMS route one-time codes replace the password outright (IdentityFeatures.MobileOtpLogin).
+        //
+        // An email address, if one was given, gets its link. Registration succeeds either way: with
+        // email delivery off the address simply stays unverified, which is a state the account model
+        // already has and the storefront already shows — not a reason to refuse somebody an account.
+        var canVerify = email is not null && await flags
             .IsEnabledAsync(IdentityFeatures.EmailVerification, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (canVerify)
         {
             await otp
-                .IssueAsync(email, OtpChannel.Email, OtpPurpose.VerifyEmail, user.Id, cancellationToken)
+                .IssueAsync(email!, OtpChannel.Email, OtpPurpose.VerifyEmail, user.Id, cancellationToken)
                 .ConfigureAwait(false);
         }
 

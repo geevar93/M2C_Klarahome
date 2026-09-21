@@ -490,7 +490,7 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/store/auth/register",
-            new { email = NewEmail("weak"), password = "Password123", mobile = (string?)null, marketingConsent = false },
+            new { mobile = NewMobile(), password = "Password123", email = (string?)null, marketingConsent = false },
             Cancellation);
 
         Assert.Equal(HttpStatusCode.UnprocessableContent, response.StatusCode);
@@ -503,7 +503,90 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     }
 
     [Fact]
-    public async Task A_shopper_can_register_with_an_email_address_instead()
+    public async Task A_shopper_registers_with_a_mobile_number_and_signs_in_with_it()
+    {
+        SkipWithoutDocker();
+
+        using var client = CreateClient();
+        var mobile = NewMobile();
+        const string Password = "the-quiet-lamp-post-hums";
+
+        // Typed as a person types it: ten digits, no country code. The account is keyed on the
+        // normalised form, so signing in with either spelling finds the same one.
+        var registered = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/register",
+            new { mobile = mobile[3..], password = Password, email = (string?)null, marketingConsent = false },
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+
+        var body = await registered.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+        var user = body.GetProperty("user");
+        Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("accessToken").GetString()));
+        Assert.Equal(mobile, user.GetProperty("mobile").GetString());
+        Assert.Equal(JsonValueKind.Null, user.GetProperty("email").ValueKind);
+
+        // Nothing has proved the number yet: that takes an SMS, which is what one-time codes add.
+        Assert.False(user.GetProperty("mobileVerified").GetBoolean());
+
+        using var again = CreateClient();
+        var session = await TestSignIn.SignInWithMobileAsync(again, mobile, Password, Cancellation);
+
+        Assert.Equal(user.GetProperty("id").GetString(), session.UserId.ToString());
+    }
+
+    [Fact]
+    public async Task A_wrong_password_and_an_unknown_mobile_number_are_refused_alike()
+    {
+        SkipWithoutDocker();
+
+        using var client = CreateClient();
+        var mobile = NewMobile();
+
+        var registered = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/register",
+            new { mobile, password = "the-quiet-lamp-post-hums", email = (string?)null, marketingConsent = false },
+            Cancellation);
+
+        registered.EnsureSuccessStatusCode();
+
+        var wrongPassword = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/login",
+            new { mobile, password = "not-the-password-at-all" },
+            Cancellation);
+
+        var unknownNumber = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/login",
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums" },
+            Cancellation);
+
+        // The anti-enumeration rule: the login form must not answer "is this number registered".
+        foreach (var response in new[] { wrongPassword, unknownNumber })
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+            Assert.Equal("AUTH_INVALID_CREDENTIALS", problem.GetProperty("code").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task The_storefront_no_longer_signs_in_with_an_email_address()
+    {
+        SkipWithoutDocker();
+
+        using var client = CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/login",
+            new { email = NewEmail("old-habit"), password = "the-quiet-lamp-post-hums" },
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.UnprocessableContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_email_address_given_at_registration_is_sent_a_verification_link()
     {
         SkipWithoutDocker();
 
@@ -514,9 +597,9 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
             "/api/v1/store/auth/register",
             new
             {
-                email,
-                password = "the-quiet-lamp-post-hums",
                 mobile = NewMobile(),
+                password = "the-quiet-lamp-post-hums",
+                email,
                 marketingConsent = true,
             },
             Cancellation);
@@ -524,7 +607,7 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
-        Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("accessToken").GetString()));
+        Assert.Equal(email, body.GetProperty("user").GetProperty("email").GetString());
         Assert.False(body.GetProperty("user").GetProperty("emailVerified").GetBoolean());
 
         // A verification link is on its way, unbundled from the sign-up itself.
@@ -532,13 +615,13 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
     }
 
     [Fact]
-    public async Task An_email_address_already_in_use_is_refused_with_a_reason_the_person_can_act_on()
+    public async Task A_mobile_number_already_in_use_is_refused_with_a_reason_the_person_can_act_on()
     {
         SkipWithoutDocker();
 
         using var client = CreateClient();
-        var email = NewEmail("twice");
-        var body = new { email, password = "the-quiet-lamp-post-hums", mobile = (string?)null, marketingConsent = false };
+        var mobile = NewMobile();
+        var body = new { mobile, password = "the-quiet-lamp-post-hums", email = (string?)null, marketingConsent = false };
 
         var first = await client.PostAsJsonAsync("/api/v1/store/auth/register", body, Cancellation);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
@@ -548,6 +631,66 @@ public sealed class AuthenticationTests(KlaraHomeSchemaFixture fixture) : Identi
 
         var problem = await second.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
         Assert.Equal("IDENTITY_ACCOUNT_EXISTS", problem.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task An_email_address_already_in_use_is_refused_even_with_a_new_mobile_number()
+    {
+        SkipWithoutDocker();
+
+        using var client = CreateClient();
+        var email = NewEmail("twice");
+
+        var first = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/register",
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums", email, marketingConsent = false },
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/register",
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums", email, marketingConsent = false },
+            Cancellation);
+
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_shopper_registered_with_a_password_signs_in_to_the_same_account_once_codes_are_on()
+    {
+        SkipWithoutDocker();
+
+        // The point of keying registration on the mobile number: switching the storefront to
+        // one-time codes must not strand, duplicate or re-register anybody who signed up before.
+        using var client = CreateClient();
+        var mobile = NewMobile();
+
+        var registered = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/register",
+            new { mobile, password = "the-quiet-lamp-post-hums", email = (string?)null, marketingConsent = false },
+            Cancellation);
+
+        registered.EnsureSuccessStatusCode();
+        var existing = (await registered.Content.ReadFromJsonAsync<JsonElement>(Cancellation))
+            .GetProperty("user").GetProperty("id").GetString();
+
+        Features[IdentityFeatures.MobileOtpLogin] = true;
+
+        using var withCode = CreateClient();
+        await RequestOtpAsync(withCode, mobile);
+
+        var session = await TestSignIn.SignInWithOtpAsync(
+            withCode,
+            mobile,
+            Otp.Latest(mobile, OtpPurpose.Login),
+            Cancellation);
+
+        Assert.Equal(existing, session.UserId.ToString());
+
+        // And the code is what finally proves the number.
+        var me = await withCode.GetFromJsonAsync<JsonElement>("/api/v1/store/me", Cancellation);
+        Assert.True(me.GetProperty("user").GetProperty("mobileVerified").GetBoolean());
     }
 
     private static async Task RequestOtpAsync(HttpClient client, string mobile)

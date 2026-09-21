@@ -36,7 +36,9 @@ public static class TestSignIn
     public sealed record Session(string AccessToken, Guid UserId, IReadOnlyList<string> Permissions);
 
     /// <summary>
-    /// Signs in with an email and password, answering a two-factor challenge if one comes back.
+    /// Signs in with an email and password on the admin surface, answering a two-factor challenge if
+    /// one comes back. A storefront shopper signs in with a mobile number: see
+    /// <see cref="SignInWithMobileAsync"/>.
     /// </summary>
     /// <param name="client">The client to sign in and to attach the token to.</param>
     /// <param name="surface">The surface prefix: <c>store</c> or <c>admin</c>.</param>
@@ -66,6 +68,30 @@ public static class TestSignIn
             body = await AnswerTwoFactorAsync(client, surface, email, challenge, cancellationToken);
         }
 
+        return Attach(client, body);
+    }
+
+    /// <summary>Signs a shopper in on the storefront with a mobile number and a password.</summary>
+    /// <param name="client">The client to sign in and to attach the token to.</param>
+    /// <param name="mobile">The mobile number.</param>
+    /// <param name="password">The password.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<Session> SignInWithMobileAsync(
+        HttpClient client,
+        string mobile,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/store/auth/login",
+            new { mobile, password },
+            cancellationToken);
+
+        login.EnsureSuccessStatusCode();
+
+        var body = await login.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return Attach(client, body);
     }
 

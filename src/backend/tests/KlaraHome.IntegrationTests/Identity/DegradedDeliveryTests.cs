@@ -106,7 +106,7 @@ public sealed class DegradedDeliveryTests(KlaraHomeSchemaFixture fixture) : Iden
 
         var response = await client.PostAsJsonAsync(
             "/api/v1/store/auth/register",
-            new { email, password = "the-quiet-lamp-post-hums", mobile = (string?)null, marketingConsent = false },
+            new { mobile = NewMobile(), password = "the-quiet-lamp-post-hums", email, marketingConsent = false },
             Cancellation);
 
         // Refusing somebody an account because we cannot send them an email would be the wrong

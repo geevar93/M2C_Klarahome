@@ -1523,6 +1523,11 @@ export interface MetaResponse {
   serverTimeUtc: string;
 }
 
+export interface MobileLoginBody {
+  mobile: string;
+  password: string;
+}
+
 export interface ModeratedAnswerResponse {
   id: string;
   body: string;
@@ -3412,9 +3417,9 @@ export interface RefundReturnBody {
 }
 
 export interface RegisterBody {
-  email: string;
+  mobile: string;
   password: string;
-  mobile: string | null;
+  email: string | null;
   marketingConsent: boolean;
 }
 
