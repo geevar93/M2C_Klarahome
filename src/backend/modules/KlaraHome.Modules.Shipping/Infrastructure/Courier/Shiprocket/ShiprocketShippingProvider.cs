@@ -96,7 +96,8 @@ internal sealed partial class ShiprocketShippingProvider(
                 HttpMethod.Get,
                 query,
                 body: null,
-                cancellationToken)
+                cancellationToken,
+                serviceability: true)
             .ConfigureAwait(false);
 
         if (answered.IsFailure)
@@ -147,6 +148,66 @@ internal sealed partial class ShiprocketShippingProvider(
             MaxWeightGrams: null,
             city,
             state));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The same serviceability endpoint as above, asked with the real origin, weight and value and
+    /// read for its prices instead of its yes-or-no. Shiprocket answers both questions in one call,
+    /// so there is no separate rate route to keep in step with it.
+    /// </para>
+    /// <para>
+    /// The freight is taken without the cash-collection charge. Cash on delivery carries the store's
+    /// own handling fee in the pricing engine, and adding the courier's on top would charge the
+    /// shopper twice for the same thing.
+    /// </para>
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<CourierRate>>> QuoteRatesAsync(
+        CourierRateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var query =
+            $"{ShiprocketRoutes.Serviceability}?pickup_postcode={request.OriginPincode}"
+            + $"&delivery_postcode={request.DestinationPincode}"
+            + $"&weight={ShiprocketWire.ToKilograms(Math.Max(request.WeightGrams, 1)).ToString(CultureInfo.InvariantCulture)}"
+            + $"&cod={(request.IsCod ? 1 : 0)}"
+            + $"&declared_value={Math.Max(request.DeclaredValue, 0m).ToString("0.##", CultureInfo.InvariantCulture)}";
+
+        var answered = await SendAsync<ShiprocketServiceabilityResponse>(
+                HttpMethod.Get,
+                query,
+                body: null,
+                cancellationToken,
+                serviceability: true)
+            .ConfigureAwait(false);
+
+        if (answered.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<CourierRate>>(answered.Error);
+        }
+
+        var data = answered.Value?.Data;
+        var recommended = data?.RecommendedCourierCompanyId;
+
+        IReadOnlyList<CourierRate> rates =
+        [
+            .. (data?.Couriers ?? [])
+                .Where(courier => courier.Blocked == 0)
+                .Select(courier => (Courier: courier, Freight: courier.FreightCharge ?? courier.Rate))
+                .Where(priced => priced.Freight is > 0m)
+                .Select(priced => new CourierRate(
+                    priced.Courier.CourierName ?? Name,
+                    priced.Courier.CourierCompanyId?.ToString(CultureInfo.InvariantCulture),
+                    priced.Freight!.Value,
+                    ParseDays(priced.Courier.EstimatedDeliveryDays),
+                    priced.Courier.Cod == 1,
+                    recommended is not null && priced.Courier.CourierCompanyId == recommended)),
+        ];
+
+        return Result.Success(rates);
     }
 
     /// <summary>What city and state a PIN code is, or nulls when the courier will not say.</summary>
@@ -530,14 +591,15 @@ internal sealed partial class ShiprocketShippingProvider(
         HttpMethod method,
         string path,
         object? body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool serviceability = false)
     {
         if (!IsConfigured)
         {
             return Result.Failure<TResponse?>(ShippingErrors.ProviderUnavailable);
         }
 
-        var first = await AttemptAsync<TResponse>(method, path, body, allowRefresh: true, cancellationToken)
+        var first = await AttemptAsync<TResponse>(method, path, body, allowRefresh: true, serviceability, cancellationToken)
             .ConfigureAwait(false);
 
         return first;
@@ -548,6 +610,7 @@ internal sealed partial class ShiprocketShippingProvider(
         string path,
         object? body,
         bool allowRefresh,
+        bool serviceability,
         CancellationToken cancellationToken)
     {
         var settings = options.CurrentValue;
@@ -558,7 +621,7 @@ internal sealed partial class ShiprocketShippingProvider(
             return Result.Failure<TResponse?>(token.Error);
         }
 
-        using var client = Client(settings);
+        using var client = Client(settings, serviceability);
         using var request = new HttpRequestMessage(method, path);
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Value);
@@ -578,7 +641,7 @@ internal sealed partial class ShiprocketShippingProvider(
             {
                 await TokenAsync(settings, forceRefresh: true, cancellationToken).ConfigureAwait(false);
 
-                return await AttemptAsync<TResponse>(method, path, body, allowRefresh: false, cancellationToken)
+                return await AttemptAsync<TResponse>(method, path, body, allowRefresh: false, serviceability, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -740,11 +803,16 @@ internal sealed partial class ShiprocketShippingProvider(
     /// <c>https://apiv2.shiprocket.in</c> get the same behaviour, and neither can move an endpoint
     /// by editing an environment variable.
     /// </remarks>
-    private HttpClient Client(ShippingOptions settings)
+    private HttpClient Client(ShippingOptions settings, bool serviceability = false)
     {
         var client = factory.CreateClient(ShiprocketHttp.ClientName);
 
-        client.BaseAddress = Origin(settings.BaseUrl);
+        // Shiprocket's sandbox answers serviceability and rates from a host of its own; production
+        // answers everything from one. Blank means the one host.
+        client.BaseAddress = Origin(
+            serviceability && !string.IsNullOrWhiteSpace(settings.ServiceabilityBaseUrl)
+                ? settings.ServiceabilityBaseUrl
+                : settings.BaseUrl);
         client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
 
         return client;

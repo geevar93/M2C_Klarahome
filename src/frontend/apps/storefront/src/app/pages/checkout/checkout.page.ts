@@ -582,14 +582,33 @@ export class CheckoutPage {
    * radio the shopper can change.
    */
   private loadDelivery(): void {
+    // What was saved, read before the fresh options replace it: the saved price is what the order
+    // total is built from, and a courier's live price can have moved since it was saved.
+    const saved = new Map(
+      (this.store.current()?.shipments ?? []).map((group) => [group.vendorId, group.options[0]?.amount]),
+    );
+
     this.store.loadShippingOptions().subscribe((groups) => {
+      // The saved choice where it is still offered, the cheapest where it is not (or none was made).
       const perVendor = groups.map((group) => ({
         vendorId: group.vendorId,
-        optionCode: group.selectedCode ?? this.cheapestOption(group.options) ?? '',
+        optionCode:
+          (group.options.some((option) => option.code === group.selectedCode) ? group.selectedCode : null) ??
+          this.cheapestOption(group.options) ??
+          '',
       }));
 
       if (perVendor.some((entry) => !entry.optionCode)) return;
-      if (groups.every((group) => group.selectedCode)) {
+
+      // Re-saved when the price of the saved choice has changed, so the total the shopper pays is
+      // today's quote rather than the one from whenever they last reached this step.
+      const upToDate = groups.every((group) => {
+        if (!group.selectedCode) return false;
+        const current = group.options.find((option) => option.code === group.selectedCode);
+        return current !== undefined && current.amount === saved.get(group.vendorId);
+      });
+
+      if (upToDate) {
         this.loadPayment();
         return;
       }

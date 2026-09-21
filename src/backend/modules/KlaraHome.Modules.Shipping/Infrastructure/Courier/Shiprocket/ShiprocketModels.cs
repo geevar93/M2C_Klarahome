@@ -113,8 +113,23 @@ internal sealed class ShiprocketCourierOption
     [JsonPropertyName("estimated_delivery_days")]
     public string? EstimatedDeliveryDays { get; set; }
 
-    /// <summary>What the aggregator would charge, in rupees.</summary>
+    /// <summary>What the aggregator would charge, in rupees, including any cash-collection charge.</summary>
     public decimal? Rate { get; set; }
+
+    /// <summary>The aggregator's id for the courier, which a booking can name to pin it.</summary>
+    [JsonPropertyName("courier_company_id")]
+    public long? CourierCompanyId { get; set; }
+
+    /// <summary>The freight alone, in rupees, without the cash-collection charge.</summary>
+    [JsonPropertyName("freight_charge")]
+    public decimal? FreightCharge { get; set; }
+
+    /// <summary>The cash-collection charge, in rupees, where cash was asked about.</summary>
+    [JsonPropertyName("cod_charges")]
+    public decimal? CodCharges { get; set; }
+
+    /// <summary>Non-zero where the aggregator has blocked this courier for the account.</summary>
+    public int Blocked { get; set; }
 
     /// <summary>Whether the courier will take a reverse pickup on this route.</summary>
     [JsonPropertyName("pickup_availability")]
@@ -127,6 +142,12 @@ internal sealed class ShiprocketServiceabilityData
     /// <summary>The couriers that serve the route.</summary>
     [JsonPropertyName("available_courier_companies")]
     public IReadOnlyList<ShiprocketCourierOption>? Couriers { get; set; }
+
+    /// <summary>
+    /// The courier the aggregator would assign itself, under the account's courier-priority rule.
+    /// </summary>
+    [JsonPropertyName("recommended_courier_company_id")]
+    public long? RecommendedCourierCompanyId { get; set; }
 }
 
 /// <summary>A serviceability answer.</summary>

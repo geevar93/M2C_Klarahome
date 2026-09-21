@@ -22,6 +22,7 @@ onward are written here as full files, at the step that raises them.
 | [019](ADR-019-postgresql-full-text-behind-a-search-engine-seam.md) | PostgreSQL full text answers queries, behind a seam a dedicated engine can take over | ✅ Accepted | Step 19 |
 | [020](ADR-020-materialised-collections-and-declared-block-types.md) | A rule-based collection is materialised, and a block type is a declared schema | ✅ Accepted | Step 20 |
 | [021](ADR-021-reporting-keeps-its-own-facts.md) | Reporting keeps its own facts; no materialised views and no rollups | ✅ Accepted | Step 21 |
+| [022](ADR-022-delivery-charge-from-the-courier-at-checkout.md) | The shopper's delivery charge is the courier's live price at checkout, with the rate card as fallback | ✅ Accepted | 2026-09-21 (unstepped) |
 
 > **Backlog:** ADR-001 – ADR-010 exist only as table rows. Expanding them into individual files
 > is in `../PARKING_LOT.md`; it is documentation debt, not a decision

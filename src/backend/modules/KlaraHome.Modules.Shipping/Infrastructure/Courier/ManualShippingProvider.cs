@@ -72,6 +72,16 @@ internal sealed class ManualShippingProvider : IShippingProvider
 
     /// <inheritdoc />
     /// <remarks>
+    /// There is no courier to ask, so there is no price. Reported as unavailable rather than as an
+    /// empty list, because empty means "nobody will carry it" and the caller would refuse the order.
+    /// </remarks>
+    public Task<Result<IReadOnlyList<CourierRate>>> QuoteRatesAsync(
+        CourierRateRequest request,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(Result.Failure<IReadOnlyList<CourierRate>>(ShippingErrors.ProviderUnavailable));
+
+    /// <inheritdoc />
+    /// <remarks>
     /// Accepts a booking only when the caller has supplied the courier's own air waybill in the
     /// reference. Inventing one would put a number on a label that no courier can scan.
     /// </remarks>

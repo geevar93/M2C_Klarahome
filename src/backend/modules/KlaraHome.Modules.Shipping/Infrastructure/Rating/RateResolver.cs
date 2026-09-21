@@ -23,10 +23,11 @@ internal sealed record RatedParcel(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The one place a delivery charge is decided, and it is deliberately not the same place a courier's
-/// price is read. What the customer pays comes from this rate card; what the platform pays comes from
-/// the aggregator; and keeping them apart is what makes the margin on delivery a fact rather than an
-/// assumption (docs/08-integrations.md §2).
+/// The platform's own tariff. It decides the delivery charge when <c>Shipping:ChargeSource</c> is
+/// <c>ratecard</c>, and whenever the courier's live price cannot be had under the default
+/// <c>aggregator</c> source (<see cref="Quoting.AggregatorChargeSource"/>). What the platform pays is
+/// always what the aggregator bills at booking, so the margin on delivery stays a fact rather than
+/// an assumption (docs/08-integrations.md §2).
 /// </para>
 /// <para>
 /// Selection is three decisions in order, and each one is a tie-break for the last. The zone is the
@@ -145,14 +146,18 @@ internal sealed class RateResolver(ShippingDbContext context, IOptions<ShippingO
     /// engine's, computed from this same inclusive amount, so the two cannot disagree about a total.
     /// </remarks>
     /// <param name="amountInclusive">The delivery charge, inclusive of tax.</param>
-    public decimal TaxInside(decimal amountInclusive)
-    {
-        var rate = options.Value.FreightGstRate;
+    public decimal TaxInside(decimal amountInclusive) => TaxInside(amountInclusive, options.Value.FreightGstRate);
 
-        return rate <= 0m
+    /// <summary>The tax inside a tax-inclusive delivery charge, at a given GST percentage.</summary>
+    /// <param name="amountInclusive">The delivery charge, inclusive of tax.</param>
+    /// <param name="ratePercent">The GST percentage on freight.</param>
+    public static decimal TaxInside(decimal amountInclusive, decimal ratePercent)
+        => ratePercent <= 0m
             ? 0m
-            : Math.Round(amountInclusive - (amountInclusive * 100m / (100m + rate)), 2, MidpointRounding.AwayFromZero);
-    }
+            : Math.Round(
+                amountInclusive - (amountInclusive * 100m / (100m + ratePercent)),
+                2,
+                MidpointRounding.AwayFromZero);
 
     /// <summary>
     /// The rule that prices this parcel on one service, or null when none does.

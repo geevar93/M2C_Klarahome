@@ -47,11 +47,15 @@ internal sealed partial class ShiprocketAllowedHostHandler(
         ArgumentNullException.ThrowIfNull(request);
 
         var host = request.RequestUri?.Host;
-        var allowed = AllowedHost(options.CurrentValue.BaseUrl);
+        var settings = options.CurrentValue;
+        var allowed = AllowedHost(settings.BaseUrl);
+        var serviceability = AllowedHost(settings.ServiceabilityBaseUrl);
 
         if (host is null
             || allowed is null
-            || !string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase))
+            || !(string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase)
+                 || (serviceability is not null
+                     && string.Equals(host, serviceability, StringComparison.OrdinalIgnoreCase))))
         {
             BlockedHost(logger, host ?? "<none>", allowed ?? "<unconfigured>");
 
