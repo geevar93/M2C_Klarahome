@@ -1,13 +1,12 @@
 using KlaraHome.Contracts.Shipping;
 using KlaraHome.Contracts.Vendors;
 using KlaraHome.Modules.Shipping.Domain;
-using KlaraHome.Modules.Shipping.Infrastructure.Rating;
 using KlaraHome.Modules.Shipping.Infrastructure.Serviceability;
 
 namespace KlaraHome.Modules.Shipping.Infrastructure.Quoting;
 
 /// <summary>
-/// What one seller's parcel may be sent by, priced from this platform's own rate card.
+/// What one seller's parcel may be sent by, and what it costs.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,9 +17,9 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Quoting;
 /// </para>
 /// <para>
 /// Three things have to be true for a service to be offered, and each rules out a different failure.
-/// The <b>destination must be servable</b>, or the parcel cannot be carried at all. The <b>rate card
-/// must cover it</b>, or the platform has no basis for a charge and inventing one would put a figure
-/// on an invoice nobody could justify. And for a cash parcel the <b>courier must handle cash</b> —
+/// The <b>destination must be servable</b>, or the parcel cannot be carried at all. The <b>price
+/// source must cover it</b> — the courier's live price or the rate card — or the platform has no
+/// basis for a charge and inventing one would put a figure on an invoice nobody could justify. And for a cash parcel the <b>courier must handle cash</b> —
 /// plenty of Indian PIN codes take a prepaid parcel and refuse a COD one, and offering it anyway is
 /// a delivery that fails at the door.
 /// </para>
@@ -32,16 +31,18 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Quoting;
 /// does.
 /// </para>
 /// <para>
-/// It reads the cache and never an aggregator. This runs on every basket render, which is the
-/// hottest path the storefront has.
+/// The gates read the serviceability cache and never an aggregator. The price comes from
+/// <see cref="IDeliveryChargeSource"/>, which <c>Shipping:ChargeSource</c> points at either the rate
+/// card or the courier's live price; only checkout's delivery step asks for a price, so a live call
+/// never reaches a product page or a basket render.
 /// </para>
 /// </remarks>
-/// <param name="rates">Chooses the zone and the rule, and prices the parcel.</param>
+/// <param name="charges">Prices the parcel, from the rate card or the courier.</param>
 /// <param name="serviceability">Answers whether the destination can be served, from the cache.</param>
 /// <param name="coverage">Answers whether this store delivers there at all.</param>
 /// <param name="vendors">Supplies each seller's dispatch SLA.</param>
 internal sealed class RatedShippingOptions(
-    RateResolver rates,
+    IDeliveryChargeSource charges,
     ServiceabilityService serviceability,
     DeliveryCoverageService coverage,
     IVendorDirectory vendors) : IShippingOptions
@@ -83,29 +84,30 @@ internal sealed class RatedShippingOptions(
             return [];
         }
 
-        var priced = await rates
-            .RateAsync(
-                request.VendorId,
-                request.DestinationStateId,
-                request.DestinationPincode,
-                Math.Max(request.WeightGrams, 0),
-                request.ItemsTotal,
-                request.IsCod,
+        var priced = await charges
+            .PriceAsync(
+                new DeliveryChargeRequest(
+                    request.VendorId,
+                    request.DestinationStateId,
+                    request.DestinationPincode,
+                    Math.Max(request.WeightGrams, 0),
+                    request.ItemsTotal,
+                    request.IsCod),
                 cancellationToken)
             .ConfigureAwait(false);
 
         return
         [
-            .. priced.Select(parcel => new ShippingOption(
-                CodeFor(parcel.Rate.Method),
-                NameFor(parcel.Rate.Method),
-                answer.Courier,
-                parcel.Amount,
-                parcel.TaxAmount,
+            .. priced.Select(service => new ShippingOption(
+                CodeFor(service.Method),
+                NameFor(service.Method),
+                service.Carrier ?? answer.Courier,
+                service.Amount,
+                service.TaxAmount,
                 seller.DispatchSlaHours,
-                PromisedMin(parcel, answer),
-                PromisedMax(parcel, answer),
-                parcel.Rate.IsCodAllowed && answer.CodOk)),
+                PromisedMin(service, answer),
+                PromisedMax(service, answer),
+                service.IsCodAllowed && answer.CodOk)),
         ];
     }
 
@@ -171,19 +173,19 @@ internal sealed class RatedShippingOptions(
             _ => "Standard delivery",
         };
 
-    private static int PromisedMin(RatedParcel parcel, ServiceabilityAnswer answer)
+    private static int PromisedMin(PricedService service, ServiceabilityAnswer answer)
         => answer.EtaDays is { } days && days > 0
-            ? Math.Min(parcel.Rate.EtaMinDays, days)
-            : parcel.Rate.EtaMinDays;
+            ? Math.Min(service.EtaMinDays, days)
+            : service.EtaMinDays;
 
-    private static int PromisedMax(RatedParcel parcel, ServiceabilityAnswer answer)
+    private static int PromisedMax(PricedService service, ServiceabilityAnswer answer)
     {
         var promised = answer.EtaDays is { } days && days > 0
-            ? Math.Min(parcel.Rate.EtaMaxDays, days)
-            : parcel.Rate.EtaMaxDays;
+            ? Math.Min(service.EtaMaxDays, days)
+            : service.EtaMaxDays;
 
         // The window never inverts, whichever estimate won. A promise of "four to three days" would
         // render as nonsense on a checkout screen.
-        return Math.Max(promised, PromisedMin(parcel, answer));
+        return Math.Max(promised, PromisedMin(service, answer));
     }
 }

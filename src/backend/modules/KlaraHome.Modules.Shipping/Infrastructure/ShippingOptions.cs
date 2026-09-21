@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using KlaraHome.Modules.Shipping.Infrastructure.Quoting;
 
 namespace KlaraHome.Modules.Shipping.Infrastructure;
 
@@ -80,6 +81,18 @@ internal sealed class ShippingOptions
     /// <summary>The API root. Configurable so a sandbox or a proxy can be pointed at.</summary>
     public string BaseUrl { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Where serviceability and rate questions go, when the aggregator answers them from a host of
+    /// their own. Blank means <see cref="BaseUrl"/>.
+    /// </summary>
+    /// <remarks>
+    /// Shiprocket's sandbox splits in two: sign-in and bookings on <c>api-sandbox.shiprocket.in</c>,
+    /// serviceability and rates on <c>serviceability-sandbox.shiprocket.in</c>, both taking the token
+    /// the first one issues. Production answers everything from <c>apiv2.shiprocket.in</c> and leaves
+    /// this blank. Like <see cref="BaseUrl"/> it is also the outbound allow-list, and must be https.
+    /// </remarks>
+    public string ServiceabilityBaseUrl { get; set; } = string.Empty;
+
     /// <summary>How long the aggregator has to answer before a call is abandoned, in seconds.</summary>
     [Range(1, 120)]
     public int TimeoutSeconds { get; set; } = 20;
@@ -117,6 +130,58 @@ internal sealed class ShippingOptions
     /// </remarks>
     [Range(0, 100)]
     public decimal FreightGstRate { get; set; } = 18m;
+
+    /// <summary>
+    /// Where the delivery charge a shopper pays comes from, by its key.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>aggregator</c> (the default): the configured courier is asked for its live price at
+    /// checkout and it is passed on at cost. Whenever it cannot answer — no courier configured,
+    /// the seller has no pickup address, the call fails or runs past
+    /// <see cref="LiveRateTimeoutMilliseconds"/> — the rate card answers instead, so a courier
+    /// outage never stops a checkout.
+    /// </para>
+    /// <para>
+    /// <c>ratecard</c>: the platform's own zones and bands alone, and the aggregator is never asked.
+    /// Blank or unknown means <c>aggregator</c>, which already degrades to the rate card by itself.
+    /// </para>
+    /// </remarks>
+    [StringLength(32)]
+    public string ChargeSource { get; set; } = DeliveryChargeSources.Aggregator;
+
+    /// <summary>How long checkout waits for a courier's live price before using the rate card, in milliseconds.</summary>
+    [Range(250, 20_000)]
+    public int LiveRateTimeoutMilliseconds { get; set; } = 3_000;
+
+    /// <summary>How long a live price is reused for the same route and parcel, in seconds.</summary>
+    /// <remarks>
+    /// Long enough that the price shown when delivery options load is the price recorded when one is
+    /// chosen a moment later; short enough that a courier's tariff change reaches the next shopper.
+    /// Zero turns the reuse off.
+    /// </remarks>
+    [Range(0, 3_600)]
+    public int LiveRateCacheSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Whether the aggregator's quoted freight already includes GST.
+    /// </summary>
+    /// <remarks>
+    /// False adds <see cref="FreightGstRate"/> on top, so the shopper pays what the courier will
+    /// actually bill. <b>To be confirmed against a sandbox invoice</b> before going live: getting it
+    /// wrong either over-charges every shopper by the tax or absorbs it on every parcel.
+    /// </remarks>
+    public bool AggregatorRatesIncludeTax { get; set; }
+
+    /// <summary>
+    /// The weight a parcel is priced on when its products carry no weight, in grams.
+    /// </summary>
+    /// <remarks>
+    /// Half a kilogram, which is the smallest slab Indian couriers bill. A product without a weight is
+    /// a catalogue gap, and pricing it as weightless would quote a figure no courier charges.
+    /// </remarks>
+    [Range(1, 500_000)]
+    public int DefaultParcelWeightGrams { get; set; } = 500;
 
     /// <summary>How long a cached serviceability answer stays usable, in hours.</summary>
     /// <remarks>

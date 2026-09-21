@@ -99,6 +99,30 @@ internal sealed class FakeShippingProvider : IShippingProvider
             State: reachable ? "Telangana" : null)));
     }
 
+    /// <summary>
+    /// What the courier quotes for any route. Null — the default — answers "could not ask".
+    /// </summary>
+    /// <remarks>
+    /// Null by default so the checkout falls back to the rate card and every existing assertion about
+    /// a delivery charge keeps meaning the rate card. A test of live pricing sets it.
+    /// </remarks>
+    public IReadOnlyList<CourierRate>? LiveRates { get; set; }
+
+    /// <summary>Every live rate request this courier was asked, in order.</summary>
+    public ConcurrentQueue<CourierRateRequest> RateRequests { get; } = new();
+
+    /// <inheritdoc />
+    public Task<Result<IReadOnlyList<CourierRate>>> QuoteRatesAsync(
+        CourierRateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        RateRequests.Enqueue(request);
+
+        return Task.FromResult(LiveRates is { } rates
+            ? Result.Success(rates)
+            : Result.Failure<IReadOnlyList<CourierRate>>(ShippingErrors.ProviderUnavailable));
+    }
+
     /// <inheritdoc />
     public Task<Result<CourierBooking>> CreateShipmentAsync(
         CourierBookingRequest request,

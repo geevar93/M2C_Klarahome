@@ -421,6 +421,13 @@ services:
       Shipping__ApiSecret: ${SHIPPING_API_SECRET:-}
       Shipping__WebhookSecret: ${SHIPPING_WEBHOOK_SECRET:-}
       Shipping__BaseUrl: ${SHIPPING_BASE_URL:-}
+      Shipping__ServiceabilityBaseUrl: ${SHIPPING_SERVICEABILITY_BASE_URL:-}
+      # What the shopper pays for delivery: `aggregator` passes the courier's live checkout quote on
+      # at cost and falls back to the rate card whenever it cannot be had; `ratecard` never asks.
+      # Whether Shiprocket's quoted freight already includes GST is to be confirmed against a
+      # sandbox invoice - false adds Shipping__FreightGstRate on top.
+      Shipping__ChargeSource: ${SHIPPING_CHARGE_SOURCE:-aggregator}
+      Shipping__AggregatorRatesIncludeTax: ${SHIPPING_RATES_INCLUDE_TAX:-false}
       # The three shipping loops run in the worker and nowhere else, for the same reason the payment
       # ones do. The webhook endpoint itself is served here - it only stores and answers.
       Shipping__EventProcessorEnabled: "false"
@@ -613,6 +620,7 @@ services:
       Shipping__ApiSecret: ${SHIPPING_API_SECRET:-}
       Shipping__WebhookSecret: ${SHIPPING_WEBHOOK_SECRET:-}
       Shipping__BaseUrl: ${SHIPPING_BASE_URL:-}
+      Shipping__ServiceabilityBaseUrl: ${SHIPPING_SERVICEABILITY_BASE_URL:-}
       Shipping__EventProcessorEnabled: "true"
       Shipping__TrackingPollEnabled: "true"
       Shipping__ServiceabilityRefreshEnabled: "true"

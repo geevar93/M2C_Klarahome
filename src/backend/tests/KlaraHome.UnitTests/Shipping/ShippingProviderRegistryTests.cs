@@ -107,6 +107,11 @@ public sealed class ShippingProviderRegistryTests
             CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public Task<Result<IReadOnlyList<CourierRate>>> QuoteRatesAsync(
+            CourierRateRequest request,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public Task<Result<CourierBooking>> CreateShipmentAsync(
             CourierBookingRequest request,
             CancellationToken cancellationToken = default)

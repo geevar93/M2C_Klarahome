@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace KlaraHome.Modules.Shipping;
 
@@ -38,8 +39,9 @@ namespace KlaraHome.Modules.Shipping;
 /// </para>
 /// <para>
 /// Four properties hold whatever else changes. <b>The customer's price and the platform's cost are
-/// separate figures</b>, from the rate card and the aggregator respectively, and both land on the
-/// parcel so the margin on delivery is a query. <b>Serviceability is never asked on a request
+/// separate figures</b> — the price fixed at checkout (the courier's live quote or the rate card,
+/// per <c>Shipping:ChargeSource</c>), the cost what the aggregator bills at booking — and both land
+/// on the parcel so the margin on delivery is a query. <b>Serviceability is never asked on a request
 /// path</b>: a product page and a checkout read a cached table, and a nightly job is what keeps it
 /// current. <b>Tracking is webhook-first with a polling fallback</b>, because a webhook is a
 /// courtesy and not a guarantee. And <b>every movement of a sub-order goes back through the ordering
@@ -102,6 +104,14 @@ public sealed class ShippingModule : IModule
         // Where this store is willing to deliver, which is a different question from what a courier
         // will carry and is answered from a settings row rather than a cache (ADR-018).
         services.AddScoped<DeliveryCoverageService>();
+
+        // Where the shopper's delivery charge comes from - the courier's live price or the rate
+        // card - chosen by `Shipping:ChargeSource`. Each source is registered under its key, so the
+        // aggregator source can take the rate card as its fallback and a third source is one more
+        // keyed line; the unkeyed interface is what everything else asks.
+        services.AddKeyedScoped<IDeliveryChargeSource, RateCardChargeSource>(DeliveryChargeSources.RateCard);
+        services.AddKeyedScoped<IDeliveryChargeSource, AggregatorChargeSource>(DeliveryChargeSources.Aggregator);
+        services.AddScoped(ChargeSourceFor);
 
         // The seam Cart declared at Step 13. Registered unconditionally, so it replaces the
         // free-standard-delivery quoter that module registers with TryAdd.
@@ -174,6 +184,20 @@ public sealed class ShippingModule : IModule
         services.AddSingleton<IShippingProvider, ManualShippingProvider>();
         services.AddSingleton<ShippingProviderRegistry>();
     }
+
+    /// <summary>The delivery-charge source <c>Shipping:ChargeSource</c> names.</summary>
+    /// <remarks>
+    /// Blank or unknown is the aggregator source, which is safe as a default: with no courier
+    /// configured it answers from the rate card, exactly as <c>ratecard</c> would.
+    /// </remarks>
+    private static IDeliveryChargeSource ChargeSourceFor(IServiceProvider provider)
+        => provider.GetRequiredKeyedService<IDeliveryChargeSource>(
+            string.Equals(
+                provider.GetRequiredService<IOptions<ShippingOptions>>().Value.ChargeSource,
+                DeliveryChargeSources.RateCard,
+                StringComparison.OrdinalIgnoreCase)
+                ? DeliveryChargeSources.RateCard
+                : DeliveryChargeSources.Aggregator);
 
     /// <summary>
     /// Subscribes to the two facts about an order that concern parcels.

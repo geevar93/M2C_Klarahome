@@ -160,7 +160,7 @@ other store policy.
 | Concern | Approach |
 |---|---|
 | Serviceability | Cached per (pincode, courier) with a TTL; refreshed nightly; PDP and checkout both read the cache, never the live API on the hot path |
-| Rate selection | Our own `shipping_rates` table decides what the **customer** pays; the aggregator decides what **we** pay. Both are recorded on the shipment for margin reporting |
+| Rate selection | **ADR-022.** `Shipping:ChargeSource=aggregator` (default): the courier's live quote for seller-pickup-PIN → destination-PIN is what the **customer** pays, at cost, asked at checkout's delivery step with a 3 s timeout; our own `shipping_rates` table is the fallback whenever the courier cannot answer, and the sole source under `ratecard`. What **we** pay is still what the aggregator bills at booking. Both are recorded for margin reporting |
 | Label & manifest | PDFs stored in object storage, printed from admin |
 | Tracking | Webhook-first; a polling fallback job every 30 minutes for shipments with no update in 24 h |
 | NDR | Ingested as a dedicated queue in admin with re-attempt / reschedule / RTO actions |

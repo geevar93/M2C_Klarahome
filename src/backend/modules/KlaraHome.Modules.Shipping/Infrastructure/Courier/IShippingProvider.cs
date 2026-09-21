@@ -61,6 +61,39 @@ internal sealed record CourierServiceability(
     string? City = null,
     string? State = null);
 
+/// <summary>A route to be priced by the courier itself.</summary>
+/// <param name="OriginPincode">Where the parcel is collected from: the seller's pickup address.</param>
+/// <param name="DestinationPincode">Where it is going.</param>
+/// <param name="WeightGrams">The weight it will be priced on.</param>
+/// <param name="DeclaredValue">What the goods are worth, which some couriers price insurance on.</param>
+/// <param name="IsCod">Whether cash will be collected, which rules out couriers that will not.</param>
+internal sealed record CourierRateRequest(
+    string OriginPincode,
+    string DestinationPincode,
+    int WeightGrams,
+    decimal DeclaredValue,
+    bool IsCod);
+
+/// <summary>What one courier would charge to carry a parcel on a route.</summary>
+/// <param name="Courier">The courier's name, as the aggregator spells it.</param>
+/// <param name="CourierId">The aggregator's id for that courier, where it has one.</param>
+/// <param name="Freight">
+/// The freight charge, excluding any cash-collection charge. Whether tax is inside it is the
+/// aggregator's convention, and <c>Shipping:AggregatorRatesIncludeTax</c> records which.
+/// </param>
+/// <param name="EtaDays">Days in transit, as the courier estimates, or null where it does not say.</param>
+/// <param name="CodOk">Whether this courier will collect cash on this route.</param>
+/// <param name="IsRecommended">
+/// Whether the aggregator would pick this courier itself when a parcel is booked without naming one.
+/// </param>
+internal sealed record CourierRate(
+    string Courier,
+    string? CourierId,
+    decimal Freight,
+    int? EtaDays,
+    bool CodOk,
+    bool IsRecommended);
+
 /// <summary>An address a parcel leaves from or goes to, in the shape a courier API wants it.</summary>
 /// <param name="Name">Who is asked for at the door.</param>
 /// <param name="Phone">The number the courier rings.</param>
@@ -234,6 +267,26 @@ internal interface IShippingProvider
         string? pickupPincode,
         int weightGrams,
         bool isCod,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks what each courier would charge to carry a parcel on a route, right now.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The live half of pricing delivery, used when <c>Shipping:ChargeSource</c> is
+    /// <c>aggregator</c>: checkout asks this and passes the courier's price on at cost. A failure
+    /// means "could not ask" and the caller falls back to the rate card; an empty success means
+    /// "asked, and nobody will carry it", which is an answer and must not be papered over.
+    /// </para>
+    /// <para>
+    /// An adapter with no rate API returns <see cref="Application.ShippingErrors.ProviderUnavailable"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="request">The route and the parcel.</param>
+    /// <param name="cancellationToken">Cancellation token. The caller bounds this call tightly.</param>
+    Task<Result<IReadOnlyList<CourierRate>>> QuoteRatesAsync(
+        CourierRateRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>Books a consignment and gets an air waybill for it.</summary>
