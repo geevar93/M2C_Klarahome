@@ -304,6 +304,27 @@ internal sealed class Shipment : AggregateRoot<Guid>, ITenantScoped, IVendorScop
     public DateTimeOffset? CancelledAt { get; private set; }
 
     /// <summary>
+    /// When its order was cancelled while the courier still held a booking we could not withdraw.
+    /// </summary>
+    /// <remarks>
+    /// The parcel stays in its booked state until the courier confirms the cancellation, because
+    /// marking it cancelled here while the courier still expects it is how a driver arrives for a
+    /// parcel nobody will hand over. The retry sweep works from this, and a successful move to
+    /// <see cref="ShipmentStatus.Cancelled"/> — by the sweep or by a person — clears it.
+    /// </remarks>
+    public DateTimeOffset? CourierCancellationRequestedAt { get; private set; }
+
+    /// <summary>
+    /// When its order was cancelled after the courier had collected it, so the parcel must come back.
+    /// </summary>
+    /// <remarks>
+    /// Kept after the return is under way rather than cleared, because it is also the operations
+    /// queue's filter: a cancelled order's parcel stays visible until it is back with the seller, and
+    /// one the courier delivered anyway stays visible for somebody to deal with.
+    /// </remarks>
+    public DateTimeOffset? ReturnRequestedAt { get; private set; }
+
+    /// <summary>
     /// When this platform last heard anything about it.
     /// </summary>
     /// <remarks>
@@ -342,6 +363,17 @@ internal sealed class Shipment : AggregateRoot<Guid>, ITenantScoped, IVendorScop
 
     /// <summary>Whether cash is to be collected at the door.</summary>
     public bool IsCod => CodAmount is > 0m;
+
+    /// <summary>
+    /// Whether a cancelled order's parcel is at a failed delivery and the courier has yet to be told
+    /// to bring it back — the only point at which a courier accepts that instruction.
+    /// </summary>
+    public bool AwaitsReturnInstruction
+        => ReturnRequestedAt is not null && Status == ShipmentStatus.Exception;
+
+    /// <summary>Whether the courier still has to be told that this parcel is off.</summary>
+    public bool AwaitsCourierCancellation
+        => CourierCancellationRequestedAt is not null && Status != ShipmentStatus.Cancelled;
 
     /// <summary>Opens a parcel for a confirmed seller's part. Nothing has been booked yet.</summary>
     /// <param name="orderId">The order.</param>
@@ -622,6 +654,7 @@ internal sealed class Shipment : AggregateRoot<Guid>, ITenantScoped, IVendorScop
 
             case ShipmentStatus.Cancelled:
                 CancelledAt ??= at;
+                CourierCancellationRequestedAt = null;
                 break;
 
             case ShipmentStatus.Exception:
@@ -634,6 +667,21 @@ internal sealed class Shipment : AggregateRoot<Guid>, ITenantScoped, IVendorScop
 
         return true;
     }
+
+    /// <summary>
+    /// Records that the order is cancelled and the courier has yet to accept the cancellation.
+    /// </summary>
+    /// <param name="at">When the cancellation was first attempted. A retry keeps the first instant.</param>
+    public void AwaitCourierCancellation(DateTimeOffset at) => CourierCancellationRequestedAt ??= at;
+
+    /// <summary>Records that the order is cancelled and the collected parcel must come back.</summary>
+    /// <param name="at">When. A repeat keeps the first instant.</param>
+    public void RequestReturn(DateTimeOffset at) => ReturnRequestedAt ??= at;
+
+    /// <summary>
+    /// Stops waiting on the courier: the parcel has moved past the point where it can be cancelled.
+    /// </summary>
+    public void AbandonCourierCancellation() => CourierCancellationRequestedAt = null;
 
     /// <summary>Records that this platform has heard from the courier, whatever they said.</summary>
     /// <param name="at">When.</param>

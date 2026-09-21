@@ -281,6 +281,60 @@ public sealed class PaymentLifecycleTests
     /// with a name that never looked at it — and it would collide with the check constraint that
     /// refuses a self-approval.
     /// </remarks>
+    [Theory]
+    [InlineData(1_200, "Approved")]
+    [InlineData(9_000, "Requested")]
+    public void A_refund_held_for_a_return_waits_and_its_release_restores_the_threshold(
+        decimal amount,
+        string afterRelease)
+    {
+        var refund = Refund.Raise(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            amount,
+            "INR",
+            "Cancelled after dispatch.",
+            $"cancel:{amount}",
+            initiatedBy: null,
+            approvalThreshold: 5000m,
+            Now);
+
+        refund.HoldForReturn();
+
+        // Held regardless of the threshold: under it would otherwise have been approved on raising.
+        Assert.True(refund.IsHeldForReturn);
+        Assert.Equal(RefundStatus.Requested, refund.Status);
+        Assert.Null(refund.ApprovedAt);
+
+        Assert.True(refund.ReleaseAfterReturn(Now.AddDays(4)));
+
+        // Under the threshold it is approved by the release; over it, it still needs its signature.
+        Assert.False(refund.IsHeldForReturn);
+        Assert.Equal(afterRelease, refund.Status.ToString());
+        Assert.False(refund.ReleaseAfterReturn(Now.AddDays(5)));
+    }
+
+    [Fact]
+    public void Approving_a_held_refund_by_hand_releases_it_early()
+    {
+        var refund = Refund.Raise(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            1_200m,
+            "INR",
+            "Cancelled after dispatch; the courier lost the parcel.",
+            "cancel:lost",
+            initiatedBy: null,
+            approvalThreshold: 5000m,
+            Now);
+
+        refund.HoldForReturn();
+
+        Assert.True(refund.Approve(Guid.NewGuid(), Now.AddDays(10)));
+        Assert.False(refund.IsHeldForReturn);
+        Assert.Equal(RefundStatus.Approved, refund.Status);
+    }
+
     [Fact]
     public void A_refund_under_the_threshold_names_no_approver()
     {

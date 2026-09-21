@@ -114,6 +114,17 @@ internal sealed class Refund : Entity<Guid>, ITenantScoped, IAuditable
     public string? FailureReason { get; private set; }
 
     /// <summary>
+    /// Whether it is waiting for the goods to come back before it may be sent.
+    /// </summary>
+    /// <remarks>
+    /// Set for an order cancelled after the courier collected the parcel. Refunding at once would let
+    /// the shopper keep the money and the goods if the courier delivered anyway, so the refund waits
+    /// in <see cref="RefundStatus.Requested"/> until Shipping reports the parcel back with the seller.
+    /// A person approving it releases it early — the answer when a courier loses the parcel.
+    /// </remarks>
+    public bool IsHeldForReturn { get; private set; }
+
+    /// <summary>
     /// The key this refund was raised under, unique per tenant.
     /// </summary>
     /// <remarks>
@@ -196,6 +207,48 @@ internal sealed class Refund : Entity<Guid>, ITenantScoped, IAuditable
         ReturnId = returnId;
     }
 
+    /// <summary>
+    /// Holds a just-raised refund until the goods are back, whatever the approval threshold said.
+    /// </summary>
+    public void HoldForReturn()
+    {
+        if (Status is not (RefundStatus.Requested or RefundStatus.Approved))
+        {
+            return;
+        }
+
+        IsHeldForReturn = true;
+        Status = RefundStatus.Requested;
+        ApprovedAt = null;
+    }
+
+    /// <summary>
+    /// Lets a held refund go now that the goods are back with the seller.
+    /// </summary>
+    /// <remarks>
+    /// One under the approval threshold is approved by the platform, as it would have been on raising;
+    /// one over it goes on waiting in the approvals queue for its second signature.
+    /// </remarks>
+    /// <param name="at">When the goods arrived back.</param>
+    /// <returns>Whether anything changed.</returns>
+    public bool ReleaseAfterReturn(DateTimeOffset at)
+    {
+        if (!IsHeldForReturn || Status != RefundStatus.Requested)
+        {
+            return false;
+        }
+
+        IsHeldForReturn = false;
+
+        if (!RequiresApproval)
+        {
+            Status = RefundStatus.Approved;
+            ApprovedAt = at;
+        }
+
+        return true;
+    }
+
     /// <summary>Asks the gateway to send it faster, where the rail supports it.</summary>
     /// <param name="speed">The speed.</param>
     public void SetSpeed(RefundSpeed speed) => Speed = speed;
@@ -221,6 +274,7 @@ internal sealed class Refund : Entity<Guid>, ITenantScoped, IAuditable
         Status = RefundStatus.Approved;
         ApprovedBy = approver;
         ApprovedAt = at;
+        IsHeldForReturn = false;
 
         return true;
     }
@@ -237,6 +291,7 @@ internal sealed class Refund : Entity<Guid>, ITenantScoped, IAuditable
 
         Status = RefundStatus.Rejected;
         RejectedReason = Clip(reason, 500);
+        IsHeldForReturn = false;
 
         return true;
     }

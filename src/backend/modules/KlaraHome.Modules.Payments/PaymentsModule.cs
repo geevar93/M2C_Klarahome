@@ -1,5 +1,6 @@
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Contracts.Payments;
+using KlaraHome.Contracts.Shipping;
 using KlaraHome.Infrastructure.Modules;
 using KlaraHome.Infrastructure.Options;
 using KlaraHome.Infrastructure.Persistence;
@@ -188,5 +189,8 @@ public sealed class PaymentsModule : IModule
 
         services.AddScoped<IIntegrationEventHandler<PaymentCapturedOnCancelledOrder>>(
             provider => provider.GetRequiredService<OrderLifecycleHandlers>());
+
+        // Releases a refund held for an order cancelled after dispatch, once its parcel is back.
+        services.AddScoped<IIntegrationEventHandler<ShipmentTrackingUpdated>, ShippingLifecycleHandlers>();
     }
 }

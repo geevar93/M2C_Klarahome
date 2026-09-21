@@ -27,6 +27,8 @@ export interface ShipmentFilters {
   readonly awb?: string;
   /** Free text across the order number, the recipient and the AWB. */
   readonly q?: string;
+  /** Only parcels of orders cancelled after pickup that are not yet back with the seller. */
+  readonly returnRequested?: boolean;
 }
 
 export interface NdrFilters {
@@ -102,6 +104,7 @@ export class FulfilmentService {
             subOrderId: current.subOrderId,
             awb: current.awb,
             q: current.q,
+            returnRequested: current.returnRequested,
             cursor: cursor ?? undefined,
             size,
           })

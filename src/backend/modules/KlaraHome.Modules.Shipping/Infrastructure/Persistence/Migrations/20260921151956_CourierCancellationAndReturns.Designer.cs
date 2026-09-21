@@ -3,6 +3,7 @@ using System;
 using KlaraHome.Modules.Shipping.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KlaraHome.Modules.Shipping.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShippingDbContext))]
-    partial class ShippingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921151956_CourierCancellationAndReturns")]
+    partial class CourierCancellationAndReturns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

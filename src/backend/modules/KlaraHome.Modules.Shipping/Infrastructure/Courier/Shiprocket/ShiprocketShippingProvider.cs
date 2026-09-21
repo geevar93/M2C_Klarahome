@@ -423,12 +423,30 @@ internal sealed partial class ShiprocketShippingProvider(
     {
         var cancelled = await SendAsync<JsonElement>(
                 HttpMethod.Post,
-                ShiprocketRoutes.CancelOrder,
+                ShiprocketRoutes.CancelShipments,
                 new { awbs = new[] { awb } },
                 cancellationToken)
             .ConfigureAwait(false);
 
         return cancelled.IsFailure ? Result.Failure(cancelled.Error) : Result.Success();
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> ReturnToOriginAsync(
+        string awb,
+        string? remark,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(awb);
+
+        var returned = await SendAsync<JsonElement>(
+                HttpMethod.Post,
+                ShiprocketRoutes.Ndr + Uri.EscapeDataString(awb) + ShiprocketRoutes.NdrActionSuffix,
+                new { action = "return", comments = remark ?? "Order cancelled; return to seller." },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return returned.IsFailure ? Result.Failure(returned.Error) : Result.Success();
     }
 
     /// <inheritdoc />

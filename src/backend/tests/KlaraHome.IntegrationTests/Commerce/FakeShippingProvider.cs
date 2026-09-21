@@ -73,6 +73,15 @@ internal sealed class FakeShippingProvider : IShippingProvider
     /// <summary>Air waybills it was told to cancel.</summary>
     public List<string> Cancellations { get; } = [];
 
+    /// <summary>Whether cancellations should fail, so the retry of an unreachable courier is reachable.</summary>
+    public bool FailCancellations { get; set; }
+
+    /// <summary>Air waybills it was told to bring back to the seller.</summary>
+    public List<string> Returns { get; } = [];
+
+    /// <summary>Whether return instructions should fail, so their retry is reachable.</summary>
+    public bool FailReturns { get; set; }
+
     /// <inheritdoc />
     public Task<Result<CourierServiceability>> CheckServiceabilityAsync(
         string pincode,
@@ -276,9 +285,33 @@ internal sealed class FakeShippingProvider : IShippingProvider
         string awb,
         CancellationToken cancellationToken = default)
     {
+        if (!IsConfigured || FailCancellations)
+        {
+            return Task.FromResult(Result.Failure(ShippingErrors.ProviderUnavailable));
+        }
+
         lock (Cancellations)
         {
             Cancellations.Add(awb);
+        }
+
+        return Task.FromResult(Result.Success());
+    }
+
+    /// <inheritdoc />
+    public Task<Result> ReturnToOriginAsync(
+        string awb,
+        string? remark,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured || FailReturns)
+        {
+            return Task.FromResult(Result.Failure(ShippingErrors.ProviderUnavailable));
+        }
+
+        lock (Returns)
+        {
+            Returns.Add(awb);
         }
 
         return Task.FromResult(Result.Success());

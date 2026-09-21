@@ -120,6 +120,9 @@ import { tableDateTime, tableMoney } from '../../core/format';
         } @else {
           <span class="note">Not booked</span>
         }
+        @if (row.returnRequestedAt) {
+          <kh-badge tone="warning">Return requested</kh-badge>
+        }
       </ng-template>
     </kh-data-table>
 
@@ -202,6 +205,15 @@ import { tableDateTime, tableMoney } from '../../core/format';
             <dt>Status</dt>
             <dd><kh-status-badge [status]="parcel.status" /></dd>
           </div>
+          @if (parcel.returnRequestedAt) {
+            <div>
+              <dt>Return requested</dt>
+              <dd>
+                {{ when(parcel.returnRequestedAt) }} — the order was cancelled after pickup. The courier is told to
+                bring it back at the next failed delivery attempt.
+              </dd>
+            </div>
+          }
           <div>
             <dt>Courier</dt>
             <dd>{{ parcel.courier ?? '—' }} ({{ parcel.provider }})</dd>
@@ -601,6 +613,12 @@ export class ShipmentsPage {
         { value: 'Cancelled', label: 'Cancelled' },
       ],
     },
+    {
+      key: 'followUp',
+      label: 'Follow-up',
+      kind: 'select',
+      options: [{ value: 'return', label: 'Cancelled after pickup, not back yet' }],
+    },
   ];
 
   protected readonly bulkActions = computed(() => [
@@ -626,7 +644,11 @@ export class ShipmentsPage {
 
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
-    const filters: ShipmentFilters = { status: values['status'], q: values['q'] };
+    const filters: ShipmentFilters = {
+      status: values['status'],
+      q: values['q'],
+      returnRequested: values['followUp'] === 'return' ? true : undefined,
+    };
     this.list.setFilters(filters);
   }
 

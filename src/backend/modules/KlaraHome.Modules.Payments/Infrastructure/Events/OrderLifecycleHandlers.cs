@@ -183,9 +183,19 @@ internal sealed partial class OrderLifecycleHandlers(
 
         raised.Value.AttachCause(integrationEvent.SubOrderId, returnId: null);
 
-        // Sends only if the amount was under the approval threshold; anything above it waits in the
-        // approvals queue for a second pair of eyes, which is the whole point of the threshold.
-        await refunds.SendAsync(payment, raised.Value, cancellationToken).ConfigureAwait(false);
+        if (integrationEvent.WasDispatched)
+        {
+            // The courier has the goods. The refund is owed, but it waits for them to come back:
+            // ShippingLifecycleHandlers releases it when the parcel reaches the seller again.
+            raised.Value.HoldForReturn();
+            RefundHeld(logger, integrationEvent.SubOrderNumber, amount);
+        }
+        else
+        {
+            // Sends only if the amount was under the approval threshold; anything above it waits in
+            // the approvals queue for a second pair of eyes, which is the whole point of the threshold.
+            await refunds.SendAsync(payment, raised.Value, cancellationToken).ConfigureAwait(false);
+        }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -335,6 +345,11 @@ internal sealed partial class OrderLifecycleHandlers(
         string subOrderNumber,
         decimal amount,
         RefundStatus status);
+
+    [LoggerMessage(EventId = 1614, Level = LogLevel.Information,
+        Message = "The refund of {Amount} for sub-order {SubOrderNumber} is held until its parcel is back "
+                  + "with the seller: the order was cancelled after the courier collected it.")]
+    private static partial void RefundHeld(ILogger logger, string subOrderNumber, decimal amount);
 
     [LoggerMessage(EventId = 1612, Level = LogLevel.Error,
         Message = "No refund was raised for cancelled sub-order {SubOrderNumber}: {Detail}")]

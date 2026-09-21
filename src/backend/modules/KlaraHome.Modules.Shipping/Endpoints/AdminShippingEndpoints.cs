@@ -421,19 +421,30 @@ internal static class AdminShippingEndpoints
                 string? q,
                 string? cursor,
                 int? size,
+                bool? returnRequested,
                 IDispatcher dispatcher,
                 HttpContext context) =>
             {
                 var result = await dispatcher
                     .QueryAsync(
-                        new ListShipmentsQuery(status, vendorId, orderId, subOrderId, awb, q, cursor, size),
+                        new ListShipmentsQuery(
+                            status,
+                            vendorId,
+                            orderId,
+                            subOrderId,
+                            awb,
+                            q,
+                            cursor,
+                            size,
+                            returnRequested),
                         context.RequestAborted)
                     .ConfigureAwait(false);
 
                 return result.ToOk(context);
             })
             .WithName("adminListShipments")
-            .WithSummary("Parcels, newest first, filtered by status, seller, order or air waybill.")
+            .WithSummary("Parcels, newest first, filtered by status, seller, order or air waybill, or "
+                         + "to cancelled orders' parcels that still have to come back.")
             .RequirePermission(ShippingPermissions.ShipmentRead)
             .Produces<PagedResult<ShipmentSummaryResponse>>();
 

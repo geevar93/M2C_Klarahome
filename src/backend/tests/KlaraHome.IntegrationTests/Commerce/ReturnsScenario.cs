@@ -40,6 +40,21 @@ internal sealed record DeliveredOrder(
     Guid ShipmentId,
     string CustomerMobile);
 
+/// <summary>An order placed and paid (unless cash on delivery), not yet packed or shipped.</summary>
+/// <param name="OrderId">The order.</param>
+/// <param name="OrderNumber">Its number.</param>
+/// <param name="SubOrderId">The seller's part.</param>
+/// <param name="SubOrderNumber">Its number.</param>
+/// <param name="OrderLineId">The line the shopper bought.</param>
+/// <param name="CustomerMobile">The shopper's mobile, to sign back in as them.</param>
+internal sealed record PaidOrder(
+    Guid OrderId,
+    string OrderNumber,
+    Guid SubOrderId,
+    string SubOrderNumber,
+    Guid OrderLineId,
+    string CustomerMobile);
+
 /// <summary>
 /// Builds the seller, the catalogue and the delivered order that every Step 17 test stands on, and
 /// drives the returns surface itself.
@@ -116,6 +131,30 @@ internal sealed class ReturnsScenario(
     /// <param name="quantity">How many units.</param>
     /// <param name="paymentMethod"><c>prepaid</c> or <c>cod</c>.</param>
     public async Task<DeliveredOrder> DeliveredOrderAsync(
+        ReturnableCatalogue catalogue,
+        int quantity = 1,
+        string paymentMethod = "prepaid")
+    {
+        var paid = await PaidOrderAsync(catalogue, quantity, paymentMethod);
+
+        var shipmentId = await DeliverAsync(paid.SubOrderId);
+
+        return new DeliveredOrder(
+            paid.OrderId,
+            paid.OrderNumber,
+            paid.SubOrderId,
+            paid.SubOrderNumber,
+            paid.OrderLineId,
+            quantity,
+            shipmentId,
+            paid.CustomerMobile);
+    }
+
+    /// <summary>Places and pays for (unless cash on delivery) an order for one listing, and stops there.</summary>
+    /// <param name="catalogue">What is being bought.</param>
+    /// <param name="quantity">How many units.</param>
+    /// <param name="paymentMethod"><c>prepaid</c> or <c>cod</c>.</param>
+    public async Task<PaidOrder> PaidOrderAsync(
         ReturnableCatalogue catalogue,
         int quantity = 1,
         string paymentMethod = "prepaid")
@@ -204,16 +243,12 @@ internal sealed class ReturnsScenario(
         var subOrderNumber = subOrder.GetProperty("subOrderNumber").GetString()!;
         var orderLineId = subOrder.GetProperty("lines")[0].GetProperty("id").GetGuid();
 
-        var shipmentId = await DeliverAsync(subOrderId);
-
-        return new DeliveredOrder(
+        return new PaidOrder(
             orderId,
             order.GetProperty("orderNumber").GetString()!,
             subOrderId,
             subOrderNumber,
             orderLineId,
-            quantity,
-            shipmentId,
             mobile);
     }
 
@@ -401,6 +436,10 @@ internal sealed class ReturnsScenario(
         // and for the OTP destination it dispatches to, and Otp.Latest looks it up by that
         // normalised form.
         var mobile = $"+919{Random.Shared.NextInt64(100_000_000, 999_999_999).ToString(CultureInfo.InvariantCulture)}";
+
+        // Off by default, as CommerceTestBase.SignedInShopperAsync explains; switched on here too so
+        // this helper does not depend on a test having signed somebody in the other way first.
+        factory.Features[Modules.Identity.Infrastructure.IdentityFeatures.MobileOtpLogin] = true;
 
         var start = await client.PostAsJsonAsync(
             "/api/v1/store/auth/otp/request",

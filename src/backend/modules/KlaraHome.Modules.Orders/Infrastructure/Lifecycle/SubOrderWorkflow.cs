@@ -209,6 +209,15 @@ internal sealed class SubOrderWorkflow(
             return Result.Failure(OrdersErrors.UnknownLine);
         }
 
+        var wasDispatched = from >= SubOrderStatus.Shipped;
+
+        if (wasDispatched
+            && requested is not null
+            && subOrder.Lines.Any(line => line.QuantityLive > requested.GetValueOrDefault(line.Id)))
+        {
+            return Result.Failure(OrdersErrors.PartialCancellationAfterDispatch);
+        }
+
         var wasConfirmed = SubOrderLifecycle.HasCommittedStock(from);
         var now = clock.UtcNow;
 
@@ -266,7 +275,16 @@ internal sealed class SubOrderWorkflow(
 
         var derived = order.Rederive(now);
 
-        events.Cancelled(order, subOrder, initiator, reason, isPartial, wasConfirmed, cancelledTotal, cancelled);
+        events.Cancelled(
+            order,
+            subOrder,
+            initiator,
+            reason,
+            isPartial,
+            wasConfirmed,
+            wasDispatched,
+            cancelledTotal,
+            cancelled);
 
         if (!isPartial)
         {

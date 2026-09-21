@@ -3409,6 +3409,7 @@ export interface RefundResponse {
   approvedAt: string | null;
   completedAt: string | null;
   failureReason: string | null;
+  isHeldForReturn: boolean;
 }
 
 export interface RefundReturnBody {
@@ -4162,6 +4163,7 @@ export interface ShipmentResponse {
   deliveredAt: string | null;
   lastTrackedAt: string | null;
   deliveryAttempts: number;
+  returnRequestedAt: string | null;
   lines: ShipmentLineResponse[];
   tracking: TrackingEventResponse[];
 }
@@ -4180,6 +4182,7 @@ export interface ShipmentSummaryResponse {
   currencyCode: string;
   expectedDeliveryAt: string | null;
   createdAt: string;
+  returnRequestedAt: string | null;
 }
 
 export interface ShippingOptionResponse {

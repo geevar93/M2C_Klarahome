@@ -141,6 +141,12 @@ public sealed class ShippingProviderRegistryTests
             CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public Task<Result> ReturnToOriginAsync(
+            string awb,
+            string? remark,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
         public Task<Result<CourierTracking>> TrackAsync(string awb, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 

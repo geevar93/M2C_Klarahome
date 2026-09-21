@@ -105,6 +105,12 @@ public sealed record SubOrderConfirmed(
 /// against the cart, which Orders releases directly; one cancelled afterwards has already had them
 /// committed out of stock, and only a restock puts them back.
 /// </para>
+/// <para>
+/// <see cref="WasDispatched"/> marks a cancellation made after the courier collected the parcel,
+/// which only Operations may make and only for the whole seller's part. The goods are then on a van
+/// rather than on a shelf: Shipping has the courier send them back, and Payments holds the refund
+/// until they arrive. Defaulted, so an event written before it existed reads as not dispatched.
+/// </para>
 /// </remarks>
 /// <param name="OrderId">The order.</param>
 /// <param name="OrderNumber">Its number.</param>
@@ -119,6 +125,7 @@ public sealed record SubOrderConfirmed(
 /// <param name="CancelledTotal">What is coming off the bill, inclusive of tax.</param>
 /// <param name="CurrencyCode">ISO 4217 code the amount is in.</param>
 /// <param name="Lines">The units this cancellation covers.</param>
+/// <param name="WasDispatched">Whether the courier already had the parcel when it was cancelled.</param>
 public sealed record SubOrderCancelled(
     Guid OrderId,
     string OrderNumber,
@@ -132,7 +139,8 @@ public sealed record SubOrderCancelled(
     bool WasConfirmed,
     decimal CancelledTotal,
     string CurrencyCode,
-    IReadOnlyList<OrderLineFact> Lines) : IntegrationEvent;
+    IReadOnlyList<OrderLineFact> Lines,
+    bool WasDispatched = false) : IntegrationEvent;
 
 /// <summary>
 /// A seller's part of an order moved to a new state.

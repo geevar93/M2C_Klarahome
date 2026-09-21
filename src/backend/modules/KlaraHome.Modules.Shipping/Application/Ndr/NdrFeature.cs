@@ -111,13 +111,13 @@ internal sealed class ListNdrQueryHandler(
 /// <summary>Works one report.</summary>
 /// <param name="context">The Shipping data context.</param>
 /// <param name="providers">Tells the courier what was decided.</param>
-/// <param name="workflow">Moves the parcel when the decision is to send it back.</param>
+/// <param name="returns">Tells the courier to send the parcel back, and moves it.</param>
 /// <param name="scope">Records who decided.</param>
 /// <param name="clock">The sanctioned clock.</param>
 internal sealed class ActionNdrCommandHandler(
     ShippingDbContext context,
     ShippingProviderRegistry providers,
-    ShipmentWorkflow workflow,
+    Infrastructure.Fulfilment.CourierReturns returns,
     ShippingScope scope,
     IClock clock) : ICommandHandler<ActionNdrCommand, NdrResponse>
 {
@@ -168,21 +168,21 @@ internal sealed class ActionNdrCommandHandler(
         // to the courier, and the parcel's own state does not change until they scan something.
         if (action == NdrAction.ReturnToOrigin)
         {
-            var scan = new CourierScan(
-                $"ndr:{record.Id:N}:rto",
-                ShipmentStatus.RtoInitiated,
-                "Return to origin",
-                Location: null,
-                command.Remark ?? "Returned to the seller after failed delivery attempts.",
-                NdrReason: null,
-                now,
-                Raw: null);
+            // Decided first, so the report carries the operator's name rather than the platform's:
+            // the return below closes any report still open, and this one no longer is. Nothing is
+            // saved if the courier refuses, so a refusal leaves the report open to try again.
+            record.Decide(action, command.Remark, command.RescheduledFor, scope.ActorId, now);
 
-            var applied = await workflow.ApplyScanAsync(shipment, scan, cancellationToken).ConfigureAwait(false);
+            var sent = await returns
+                .SendAsync(
+                    shipment,
+                    command.Remark ?? "Returned to the seller after failed delivery attempts.",
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-            if (applied.IsFailure)
+            if (sent.IsFailure)
             {
-                return Result.Failure<NdrResponse>(applied.Error);
+                return Result.Failure<NdrResponse>(sent.Error);
             }
         }
         else if (shipment.IsBooked && action is NdrAction.Reattempt or NdrAction.Rescheduled)

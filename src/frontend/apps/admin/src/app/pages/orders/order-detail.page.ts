@@ -353,10 +353,18 @@ interface CancelDraft {
       (closed)="cancelling.set(null)"
     >
       @if (cancelling(); as part) {
-        <p class="hint">
-          {{ part.subOrderNumber }} — leave the quantities as they are to cancel the whole part, or reduce
-          them to cancel some of it. Stock is released and any payment refunded by the platform, in one step.
-        </p>
+        @if (part.status === 'Shipped') {
+          <p class="hint">
+            {{ part.subOrderNumber }} — the courier already has this parcel, so the whole part is cancelled and the
+            parcel is sent back to the seller at its next failed delivery attempt. Any payment is refunded once
+            the parcel is back with the seller, not now.
+          </p>
+        } @else {
+          <p class="hint">
+            {{ part.subOrderNumber }} — leave the quantities as they are to cancel the whole part, or reduce
+            them to cancel some of it. Stock is released and any payment refunded by the platform, in one step.
+          </p>
+        }
 
         <table>
           <thead>
@@ -406,7 +414,11 @@ interface CancelDraft {
     <kh-confirm-dialog
       [open]="confirmCancel()"
       heading="Cancel these items"
-      message="Stock goes back, any payment is refunded, and the customer is told. This cannot be undone."
+      [message]="
+        cancelling()?.status === 'Shipped'
+          ? 'The parcel is sent back to the seller, any payment is refunded once it arrives, and the customer is told. This cannot be undone.'
+          : 'Stock goes back, any payment is refunded, and the customer is told. This cannot be undone.'
+      "
       confirmLabel="Cancel them"
       [confirmPhrase]="cancelling()?.subOrderNumber ?? null"
       [requireReason]="true"

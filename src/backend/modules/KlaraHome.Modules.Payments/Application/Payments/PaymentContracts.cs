@@ -79,6 +79,7 @@ internal sealed record PaymentAttemptResponse(
 /// <param name="ApprovedAt">When.</param>
 /// <param name="CompletedAt">When the gateway confirmed the money had gone.</param>
 /// <param name="FailureReason">Why the gateway refused it, or why approval was withheld.</param>
+/// <param name="IsHeldForReturn">Whether it is waiting for a cancelled order's parcel to come back.</param>
 internal sealed record RefundResponse(
     Guid Id,
     Guid PaymentId,
@@ -97,7 +98,8 @@ internal sealed record RefundResponse(
     Guid? ApprovedBy,
     DateTimeOffset? ApprovedAt,
     DateTimeOffset? CompletedAt,
-    string? FailureReason);
+    string? FailureReason,
+    bool IsHeldForReturn);
 
 /// <summary>One collection in full, with everything that has happened to it.</summary>
 /// <param name="Payment">The collection.</param>
@@ -393,7 +395,8 @@ internal static class PaymentProjection
             refund.ApprovedBy,
             refund.ApprovedAt,
             refund.CompletedAt,
-            refund.FailureReason ?? refund.RejectedReason);
+            refund.FailureReason ?? refund.RejectedReason,
+            refund.IsHeldForReturn);
     }
 
     /// <summary>

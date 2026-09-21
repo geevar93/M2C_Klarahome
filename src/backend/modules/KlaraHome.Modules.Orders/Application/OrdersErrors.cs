@@ -59,6 +59,16 @@ internal static class OrdersErrors
     public static Error NothingToCancel { get; } =
         Error.Validation("ORDER_NOTHING_TO_CANCEL", "There is nothing left to cancel on this order.");
 
+    /// <summary>Operations tried to cancel part of a sub-order the courier already has.</summary>
+    /// <remarks>
+    /// A parcel on a van comes back whole or not at all. Cancelling some of its units would refund
+    /// them while the courier delivered them anyway.
+    /// </remarks>
+    public static Error PartialCancellationAfterDispatch { get; } =
+        Error.Validation(
+            "ORDER_PARTIAL_CANCELLATION_AFTER_DISPATCH",
+            "Once the courier has the parcel, the whole seller's part has to be cancelled; part of a parcel cannot be recalled.");
+
     /// <summary>Operations cancelled something after dispatch without saying why.</summary>
     public static Error CancellationReasonRequired { get; } =
         Error.Validation(

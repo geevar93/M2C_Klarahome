@@ -104,6 +104,7 @@ internal sealed class OrdersEventPublisher(
     /// <param name="reason">Why.</param>
     /// <param name="isPartial">Whether some of the sub-order survives.</param>
     /// <param name="wasConfirmed">Whether the stock behind it had already been committed.</param>
+    /// <param name="wasDispatched">Whether the courier already had the parcel.</param>
     /// <param name="cancelledTotal">What is coming off the bill.</param>
     /// <param name="lines">The units this cancellation covers.</param>
     public void Cancelled(
@@ -113,6 +114,7 @@ internal sealed class OrdersEventPublisher(
         string? reason,
         bool isPartial,
         bool wasConfirmed,
+        bool wasDispatched,
         decimal cancelledTotal,
         IReadOnlyList<OrderLineFact> lines)
     {
@@ -132,7 +134,8 @@ internal sealed class OrdersEventPublisher(
             wasConfirmed,
             cancelledTotal,
             subOrder.CurrencyCode,
-            lines));
+            lines,
+            wasDispatched));
     }
 
     /// <summary>A tax invoice was raised.</summary>

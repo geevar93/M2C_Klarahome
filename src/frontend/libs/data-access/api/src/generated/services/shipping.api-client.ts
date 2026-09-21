@@ -46,6 +46,7 @@ export interface AdminListShipmentsQuery {
   q?: string;
   cursor?: string;
   size?: number;
+  returnRequested?: boolean;
 }
 
 /** Query string for `adminListShippingRates`. */
@@ -203,7 +204,7 @@ export class ShippingApiClient {
   }
 
   /**
-   * Parcels, newest first, filtered by status, seller, order or air waybill.
+   * Parcels, newest first, filtered by status, seller, order or air waybill, or to cancelled orders' parcels that still have to come back.
    * `GET /api/v1/admin/shipments`
    */
   adminListShipments(query?: AdminListShipmentsQuery, options?: ApiRequestOptions): Observable<Models.PagedResultOfShipmentSummaryResponse> {

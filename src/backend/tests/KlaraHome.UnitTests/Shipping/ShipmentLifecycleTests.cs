@@ -136,6 +136,25 @@ public sealed class ShipmentLifecycleTests
     }
 
     [Fact]
+    public void A_parcel_waiting_on_its_courier_stops_waiting_once_it_is_cancelled()
+    {
+        var shipment = Booked();
+
+        shipment.AwaitCourierCancellation(Now);
+        shipment.AwaitCourierCancellation(Now.AddMinutes(5));
+
+        // A retry keeps the first instant: the sweep works oldest first, and the oldest is the one
+        // closest to a driver arriving.
+        Assert.True(shipment.AwaitsCourierCancellation);
+        Assert.Equal(Now, shipment.CourierCancellationRequestedAt);
+
+        Assert.True(shipment.Advance(ShipmentStatus.Cancelled, Now.AddMinutes(10), "The order was cancelled."));
+
+        Assert.False(shipment.AwaitsCourierCancellation);
+        Assert.Null(shipment.CourierCancellationRequestedAt);
+    }
+
+    [Fact]
     public void The_chargeable_weight_is_the_greater_of_dead_and_volumetric()
     {
         var shipment = Drafted();

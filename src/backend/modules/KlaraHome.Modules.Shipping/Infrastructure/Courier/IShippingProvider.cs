@@ -338,6 +338,22 @@ internal interface IShippingProvider
         string awb,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Tells the courier to bring a parcel back to the seller instead of trying to deliver it again.
+    /// </summary>
+    /// <remarks>
+    /// Aggregators accept this only as the answer to a failed delivery attempt — there is no call
+    /// that recalls a parcel in transit — so callers make it while the parcel is in
+    /// <see cref="Domain.ShipmentStatus.Exception"/>.
+    /// </remarks>
+    /// <param name="awb">The air waybill.</param>
+    /// <param name="remark">Why, for the courier's record.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<Result> ReturnToOriginAsync(
+        string awb,
+        string? remark,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Re-reads a consignment from the courier. The polling fallback for a lost webhook.</summary>
     /// <param name="awb">The air waybill.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

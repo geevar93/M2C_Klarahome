@@ -35,6 +35,7 @@ internal sealed record ParcelDimensions(decimal LengthCm, decimal WidthCm, decim
 /// <param name="Q">Search an order or sub-order number.</param>
 /// <param name="Cursor">Keyset cursor from a previous page.</param>
 /// <param name="Size">How many to return.</param>
+/// <param name="ReturnRequested">Only cancelled orders' parcels that still have to come back.</param>
 internal sealed record ListShipmentsQuery(
     string? Status,
     Guid? VendorId,
@@ -43,7 +44,8 @@ internal sealed record ListShipmentsQuery(
     string? Awb,
     string? Q,
     string? Cursor,
-    int? Size) : IQuery<PagedResult<ShipmentSummaryResponse>>;
+    int? Size,
+    bool? ReturnRequested = null) : IQuery<PagedResult<ShipmentSummaryResponse>>;
 
 /// <summary>Reads one parcel in full, with everywhere it has been.</summary>
 /// <param name="ShipmentId">The consignment.</param>
@@ -225,6 +227,14 @@ internal sealed class ListShipmentsQueryHandler(
         if (query.SubOrderId is { } subOrderId)
         {
             rows = rows.Where(shipment => shipment.SubOrderId == subOrderId);
+        }
+
+        // The operations queue for orders cancelled after the courier collected them: every such
+        // parcel until it is back with the seller, including one the courier delivered anyway.
+        if (query.ReturnRequested is true)
+        {
+            rows = rows.Where(shipment => shipment.ReturnRequestedAt != null
+                                          && shipment.Status != ShipmentStatus.RtoDelivered);
         }
 
         if (!string.IsNullOrWhiteSpace(query.Awb))

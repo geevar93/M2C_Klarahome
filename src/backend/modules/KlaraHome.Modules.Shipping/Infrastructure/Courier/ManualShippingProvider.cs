@@ -156,6 +156,14 @@ internal sealed class ManualShippingProvider : IShippingProvider
         => Task.FromResult(Result.Success());
 
     /// <inheritdoc />
+    /// <remarks>Nobody to tell; the operator who booked it by hand arranges the return by hand.</remarks>
+    public Task<Result> ReturnToOriginAsync(
+        string awb,
+        string? remark,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(Result.Success());
+
+    /// <inheritdoc />
     /// <remarks>
     /// There is nobody to ask. The failure is what stops the polling fallback from marking a
     /// hand-booked parcel as unreachable every half hour.

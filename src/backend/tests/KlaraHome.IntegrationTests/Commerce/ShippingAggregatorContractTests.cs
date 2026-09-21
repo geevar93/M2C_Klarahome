@@ -47,14 +47,14 @@ public sealed class ShippingAggregatorContractTests
         handler.Enqueue(HttpMethod.Post, "/v1/external/auth/login", HttpStatusCode.OK, """{"token":"T1"}""");
 
         // The API call with T1 is refused as stale.
-        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel", HttpStatusCode.Unauthorized, "{}");
+        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel/shipment/awbs", HttpStatusCode.Unauthorized, "{}");
 
         // The adapter refreshes: a second login, token "T2".
         handler.Enqueue(HttpMethod.Post, "/v1/external/auth/login", HttpStatusCode.OK, """{"token":"T2"}""");
 
         // The retry with T2 succeeds. Only one retry is attempted: a second 401 here would be left
         // to fail rather than looping.
-        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel", HttpStatusCode.OK, "{}");
+        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel/shipment/awbs", HttpStatusCode.OK, "{}");
 
         var options = new FixedShippingOptions(new ShippingOptions
         {
@@ -75,10 +75,10 @@ public sealed class ShippingAggregatorContractTests
 
         Assert.Equal(4, handler.RequestsSeen);
         Assert.Equal(2, handler.RequestsTo("/v1/external/auth/login"));
-        Assert.Equal(2, handler.RequestsTo("/v1/external/orders/cancel"));
+        Assert.Equal(2, handler.RequestsTo("/v1/external/orders/cancel/shipment/awbs"));
 
         // Both cancel attempts carried a bearer token, and the second carried the refreshed one.
-        Assert.Equal(["T1", "T2"], handler.BearerTokensSentTo("/v1/external/orders/cancel"));
+        Assert.Equal(["T1", "T2"], handler.BearerTokensSentTo("/v1/external/orders/cancel/shipment/awbs"));
     }
 
     /// <summary>A second, immediate 401 after the one retry is reported as a failure, not looped.</summary>
@@ -88,9 +88,9 @@ public sealed class ShippingAggregatorContractTests
         var handler = new ScriptedHandler();
 
         handler.Enqueue(HttpMethod.Post, "/v1/external/auth/login", HttpStatusCode.OK, """{"token":"T1"}""");
-        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel", HttpStatusCode.Unauthorized, "{}");
+        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel/shipment/awbs", HttpStatusCode.Unauthorized, "{}");
         handler.Enqueue(HttpMethod.Post, "/v1/external/auth/login", HttpStatusCode.OK, """{"token":"T2"}""");
-        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel", HttpStatusCode.Unauthorized, "{}");
+        handler.Enqueue(HttpMethod.Post, "/v1/external/orders/cancel/shipment/awbs", HttpStatusCode.Unauthorized, "{}");
 
         var options = new FixedShippingOptions(new ShippingOptions
         {

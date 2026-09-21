@@ -303,6 +303,14 @@ internal sealed class ShipmentConfiguration : IEntityTypeConfiguration<Shipment>
         // The polling fallback's own query: booked, unfinished, and quiet for too long.
         builder.HasIndex(shipment => new { shipment.TenantId, shipment.LastTrackedAt });
 
+        // The courier-cancellation retry sweep's query. Filtered: almost every parcel is never in it.
+        builder.HasIndex(shipment => shipment.CourierCancellationRequestedAt)
+            .HasFilter("courier_cancellation_requested_at IS NOT NULL");
+
+        // The returns follow-up: the retry sweep's query and the operations queue's filter.
+        builder.HasIndex(shipment => new { shipment.TenantId, shipment.ReturnRequestedAt })
+            .HasFilter("return_requested_at IS NOT NULL");
+
         builder.Ignore(shipment => shipment.DomainEvents);
         builder.Ignore(shipment => shipment.DeadWeightGrams);
         builder.Ignore(shipment => shipment.IsBooked);

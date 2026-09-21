@@ -142,6 +142,9 @@ internal sealed record ShipmentLineResponse(
 /// <param name="CurrencyCode">ISO 4217 code the amounts are in.</param>
 /// <param name="ExpectedDeliveryAt">The courier's promise.</param>
 /// <param name="CreatedAt">When the parcel was opened.</param>
+/// <param name="ReturnRequestedAt">
+/// When its order was cancelled after the courier collected it, so it has to come back.
+/// </param>
 internal sealed record ShipmentSummaryResponse(
     Guid Id,
     string OrderNumber,
@@ -155,7 +158,8 @@ internal sealed record ShipmentSummaryResponse(
     decimal? CodAmount,
     string CurrencyCode,
     DateTimeOffset? ExpectedDeliveryAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ReturnRequestedAt);
 
 /// <summary>One scan on a parcel.</summary>
 /// <param name="Status">What this platform decided it means.</param>
@@ -224,6 +228,9 @@ internal sealed record ShipmentLabelResponse(
 /// <param name="DeliveredAt">When it arrived.</param>
 /// <param name="LastTrackedAt">When this platform last heard about it.</param>
 /// <param name="DeliveryAttempts">How many attempts the courier has reported.</param>
+/// <param name="ReturnRequestedAt">
+/// When its order was cancelled after the courier collected it, so it has to come back.
+/// </param>
 /// <param name="Lines">What is in it.</param>
 /// <param name="Tracking">Where it has been, newest first.</param>
 internal sealed record ShipmentResponse(
@@ -261,6 +268,7 @@ internal sealed record ShipmentResponse(
     DateTimeOffset? DeliveredAt,
     DateTimeOffset? LastTrackedAt,
     int DeliveryAttempts,
+    DateTimeOffset? ReturnRequestedAt,
     IReadOnlyList<ShipmentLineResponse> Lines,
     IReadOnlyList<TrackingEventResponse> Tracking);
 
@@ -446,7 +454,8 @@ internal static class ShippingProjection
             shipment.CodAmount,
             shipment.CurrencyCode,
             shipment.ExpectedDeliveryAt,
-            shipment.CreatedAt);
+            shipment.CreatedAt,
+            shipment.ReturnRequestedAt);
     }
 
     /// <summary>Projects a parcel in full.</summary>
@@ -492,6 +501,7 @@ internal static class ShippingProjection
             shipment.DeliveredAt,
             shipment.LastTrackedAt,
             shipment.DeliveryAttempts,
+            shipment.ReturnRequestedAt,
             [
                 .. shipment.Lines.Select(line => new ShipmentLineResponse(
                     line.OrderLineId,

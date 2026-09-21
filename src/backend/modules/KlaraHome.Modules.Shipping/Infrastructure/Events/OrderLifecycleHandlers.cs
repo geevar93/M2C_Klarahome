@@ -1,8 +1,8 @@
 using KlaraHome.Contracts.Orders;
 using KlaraHome.Infrastructure.Persistence.Outbox;
 using KlaraHome.Modules.Shipping.Domain;
+using KlaraHome.Modules.Shipping.Infrastructure.Fulfilment;
 using KlaraHome.Modules.Shipping.Infrastructure.Persistence;
-using KlaraHome.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -25,9 +25,22 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Events;
 /// the parcel and the invoice. Booking happens when a human has put it on a scale.
 /// </para>
 /// <para>
-/// A cancellation withdraws a parcel that has not left. One that has is not withdrawn, because it is
-/// on a van: the ordering module only permits a post-dispatch cancellation by Operations, and what
-/// follows it is a return, which is Step 17's.
+/// A cancellation withdraws a parcel that has not left. One that has is on a van: the ordering
+/// module only permits that cancellation by Operations and only for the whole seller's part, and
+/// <see cref="CourierReturns"/> marks the parcel to come back and tells the courier as soon as the
+/// courier will take the instruction.
+/// </para>
+/// <para>
+/// A booked parcel is withdrawn through <see cref="CourierCancellation"/>, which tells the courier
+/// before changing our record. The order is still <c>Packed</c> while its parcel sits labelled and
+/// waiting for a pickup, so a shopper can cancel it then — and a courier nobody told still sends a
+/// driver and still charges the freight.
+/// </para>
+/// <para>
+/// A partial cancellation withdraws only the parcels that hold a cancelled line, and then
+/// <see cref="PackingQueue"/> opens a fresh draft for what is still owed. A booked parcel cannot be
+/// edited — its waybill carries the old weight, value and, on a cash order, the old amount to
+/// collect — so it is cancelled and rebooked rather than left to go out wrong.
 /// </para>
 /// <para>
 /// Delivery is at-least-once, so both handlers are idempotent: a redelivered confirmation finds the
@@ -37,13 +50,17 @@ namespace KlaraHome.Modules.Shipping.Infrastructure.Events;
 /// <param name="context">The Shipping data context.</param>
 /// <param name="orders">Reads the destination and the lines, over the contract.</param>
 /// <param name="options">Supplies the automatic-draft switch.</param>
-/// <param name="clock">The sanctioned clock.</param>
+/// <param name="couriers">Withdraws a parcel, telling its courier first.</param>
+/// <param name="packing">Reopens a parcel for what a partial cancellation left.</param>
+/// <param name="returns">Brings back a parcel the courier had already collected.</param>
 /// <param name="logger">Reports what was opened and what was withdrawn.</param>
 internal sealed partial class OrderLifecycleHandlers(
     ShippingDbContext context,
     IOrderFulfilment orders,
     IOptions<ShippingOptions> options,
-    IClock clock,
+    CourierCancellation couriers,
+    PackingQueue packing,
+    CourierReturns returns,
     ILogger<OrderLifecycleHandlers> logger)
     : IIntegrationEventHandler<SubOrderConfirmed>,
         IIntegrationEventHandler<SubOrderCancelled>
@@ -119,6 +136,11 @@ internal sealed partial class OrderLifecycleHandlers(
     }
 
     /// <summary>Withdraws a parcel that was never handed over.</summary>
+    /// <remarks>
+    /// A courier that cannot be reached does not fail the event. The parcel is marked and left booked
+    /// for the retry sweep, because throwing here would hold back every other handler of the
+    /// cancellation — the shopper's refund among them — until the courier answered.
+    /// </remarks>
     public async Task HandleAsync(SubOrderCancelled integrationEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(integrationEvent);
@@ -135,33 +157,73 @@ internal sealed partial class OrderLifecycleHandlers(
             return;
         }
 
-        var now = clock.UtcNow;
         var withdrawn = 0;
+        var pending = 0;
+        var recalled = 0;
+
+        // On a partial cancellation, only the parcels carrying a cancelled line are affected: another
+        // seller's box is not in this sub-order, and a parcel of this one that holds none of the
+        // cancelled units is still exactly right.
+        var cancelledLines = integrationEvent.Lines
+            .Select(line => line.OrderLineId)
+            .ToHashSet();
 
         foreach (var shipment in shipments)
         {
-            // A partial cancellation leaves a parcel to send. The lines are left alone rather than
-            // recomputed here: what is still going out is decided by the packer, who is the only one
-            // who knows what is already in the box.
-            if (integrationEvent.IsPartial && shipment.Status != ShipmentStatus.Draft)
+            if (integrationEvent.IsPartial
+                && !shipment.Lines.Any(line => cancelledLines.Contains(line.OrderLineId)))
             {
                 continue;
             }
 
-            if (shipment.Advance(ShipmentStatus.Cancelled, now, integrationEvent.Reason))
+            var outcome = await couriers
+                .WithdrawAsync(shipment, integrationEvent.Reason, cancellationToken)
+                .ConfigureAwait(false);
+
+            switch (outcome)
             {
-                withdrawn++;
+                case CourierWithdrawal.Withdrawn:
+                    withdrawn++;
+                    break;
+
+                case CourierWithdrawal.Pending:
+                    pending++;
+                    break;
+
+                // Already collected. Only a whole seller's part may be cancelled after dispatch, so
+                // everything in this parcel is unwanted and all of it comes back.
+                case CourierWithdrawal.NotWithdrawable when !integrationEvent.IsPartial:
+                    if (await returns.RequestAsync(shipment, integrationEvent.Reason, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        recalled++;
+                    }
+
+                    break;
+
+                default:
+                    break;
             }
         }
 
-        if (withdrawn == 0)
+        if (withdrawn > 0 || pending > 0 || recalled > 0)
         {
-            return;
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (withdrawn > 0)
+        {
+            Withdrawn(logger, integrationEvent.SubOrderNumber, withdrawn);
+        }
 
-        Withdrawn(logger, integrationEvent.SubOrderNumber, withdrawn);
+        // Committed first, because the packer counts what other parcels hold from the database. Run
+        // on every partial cancellation rather than only after a withdrawal here, so a redelivery
+        // after a crash between the two commits still reopens the parcel.
+        if (integrationEvent.IsPartial
+            && await packing.ReopenAsync(integrationEvent.SubOrderId, cancellationToken).ConfigureAwait(false))
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     [LoggerMessage(EventId = 1770, Level = LogLevel.Information,

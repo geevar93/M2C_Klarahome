@@ -57,8 +57,26 @@ internal static class ShiprocketRoutes
     /// <summary>Produces the handover sheet.</summary>
     public const string GenerateManifest = Prefix + "manifests/generate";
 
-    /// <summary>Cancels a consignment the courier has not collected.</summary>
-    public const string CancelOrder = Prefix + "orders/cancel";
+    /// <summary>
+    /// Cancels consignments the courier has not collected, by air waybill.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>orders/cancel</c>: that route takes Shiprocket's own order ids, and posting waybills to
+    /// it cancels nothing.
+    /// </remarks>
+    public const string CancelShipments = Prefix + "orders/cancel/shipment/awbs";
+
+    /// <summary>
+    /// Answers a failed delivery attempt, for one air waybill: <c>ndr/{awb}/action</c>.
+    /// </summary>
+    /// <remarks>
+    /// The waybill is escaped and appended by the caller, followed by <see cref="NdrActionSuffix"/>.
+    /// A <c>return</c> action is the only way the API sends a parcel back to the seller.
+    /// </remarks>
+    public const string Ndr = Prefix + "ndr/";
+
+    /// <summary>What follows the waybill in <see cref="Ndr"/>.</summary>
+    public const string NdrActionSuffix = "/action";
 
     /// <summary>Reads everything the courier currently says about one air waybill.</summary>
     public const string Track = Prefix + "courier/track/awb/";

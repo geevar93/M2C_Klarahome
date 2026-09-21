@@ -245,6 +245,26 @@ internal sealed class ShippingOptions
     public int TrackingPollBatchSize { get; set; } = 50;
 
     /// <summary>
+    /// Whether the sweep that retries a courier cancellation runs in this host. Off in the API, on
+    /// in the worker.
+    /// </summary>
+    public bool CourierCancellationRetryEnabled { get; set; }
+
+    /// <summary>
+    /// How often a cancelled order's still-booked parcel is offered to its courier again, in minutes.
+    /// </summary>
+    /// <remarks>
+    /// Short, because the retry is racing a pickup: every pass that fails is another chance for a
+    /// driver to arrive for a parcel the seller will not hand over.
+    /// </remarks>
+    [Range(1, 1440)]
+    public int CourierCancellationRetryIntervalMinutes { get; set; } = 5;
+
+    /// <summary>How many waiting parcels one pass retries.</summary>
+    [Range(1, 500)]
+    public int CourierCancellationRetryBatchSize { get; set; } = 50;
+
+    /// <summary>
     /// Whether a confirmed seller's part opens a draft consignment by itself.
     /// </summary>
     /// <remarks>

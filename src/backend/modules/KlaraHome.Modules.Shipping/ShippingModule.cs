@@ -98,6 +98,9 @@ public sealed class ShippingModule : IModule
         services.AddScoped<ShipmentBooker>();
         services.AddScoped<CourierEventProcessor>();
         services.AddScoped<TrackingSynchroniser>();
+        services.AddScoped<CourierCancellation>();
+        services.AddScoped<PackingQueue>();
+        services.AddScoped<CourierReturns>();
         services.AddScoped<RateResolver>();
         services.AddScoped<ServiceabilityService>();
 
@@ -126,11 +129,12 @@ public sealed class ShippingModule : IModule
 
         services.AddDataSeeder<ShippingRateCardSeeder>();
 
-        // All three off in the API and on in the worker, exactly as the outbox dispatcher, the
+        // All four off in the API and on in the worker, exactly as the outbox dispatcher, the
         // notification dispatcher and every sweeper before them.
         services.AddHostedService<CourierEventWorker>();
         services.AddHostedService<TrackingPollWorker>();
         services.AddHostedService<ServiceabilityRefreshWorker>();
+        services.AddHostedService<CourierCancellationWorker>();
     }
 
     /// <inheritdoc />
