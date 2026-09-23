@@ -87,7 +87,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       <kh-skeleton height="16rem" />
     } @else if (user(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (isLockedOut(current)) {

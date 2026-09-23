@@ -73,7 +73,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
     </kh-page-header>
 
     @if (error(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -187,7 +187,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
             label="Code"
             for="attribute-code"
             [optional]="true"
-            hint="How the API names it. Left blank, it is made from the name. It cannot be changed later."
+            hint="How it's identified internally. Left blank, it is made from the name. It cannot be changed later."
           >
             <input
               khControl
@@ -262,8 +262,8 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
             <fieldset>
               <legend>Options</legend>
               <p class="hint">
-                The values this attribute can take. An option already used by a product cannot be removed —
-                the API will say so.
+                The values this attribute can take. An option already used by a product can't be removed —
+                you'll see a message if you try.
               </p>
 
               @for (option of options(); track $index; let index = $index) {

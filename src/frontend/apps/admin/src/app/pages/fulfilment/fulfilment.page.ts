@@ -9,12 +9,13 @@ import {
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { Modal, PageHeader, StatusBadge } from '@klarahome/ui-admin';
+import { Modal, PageHeader, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import { SUB_ORDER_STATUS_VOCAB, statusLabel, statusTooltip } from '../orders/order-vocabulary';
 
 /** One line being packed, and how many of it actually went in the box. */
 interface PackLine {
@@ -52,10 +53,10 @@ interface PackLine {
  */
 @Component({
   selector: 'kh-fulfilment-page',
-  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
+  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton],
   template: `
     <kh-page-header
-      heading="Fulfilment"
+      heading="To pack"
       description="What has to leave the building today, and the steps that get it there."
     >
       <button khButton type="button" [disabled]="pickLoading()" (click)="loadPickList()">
@@ -65,7 +66,7 @@ interface PackLine {
     </kh-page-header>
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <section class="panel">
@@ -93,11 +94,14 @@ interface PackLine {
       } @else if (pickList().length === 0) {
         <p class="hint">Nothing is waiting to be picked.</p>
       } @else {
-        <table>
+        <!-- Cards on a phone (kh-cards, _base.scss): a picker walks the shelves with the phone in
+             one hand, and a seven-column table that scrolls sideways is not a pick list there.
+             The item leads because it is what they are looking for; the SKU is what they check. -->
+        <table class="kh-cards">
           <thead>
             <tr>
-              <th scope="col">SKU</th>
               <th scope="col">Item</th>
+              <th scope="col">SKU</th>
               <th scope="col" class="numeric">Qty</th>
               <th scope="col">Order</th>
               <th scope="col">Shelf</th>
@@ -108,13 +112,13 @@ interface PackLine {
           <tbody>
             @for (line of pickList(); track line.shipmentId + line.sku) {
               <tr [class.overdue]="isOverdue(line)">
-                <td>{{ line.sku }}</td>
-                <td>{{ line.name }}</td>
-                <td class="numeric">{{ line.quantity }}</td>
-                <td>{{ line.subOrderNumber }}</td>
-                <td>{{ line.warehouseName ?? 'Not allocated' }}</td>
-                <td>{{ line.destinationPincode }}</td>
-                <td>{{ when(line.dispatchDueAt) }}</td>
+                <td class="kh-cards-title">{{ line.name }}</td>
+                <td data-label="SKU">{{ line.sku }}</td>
+                <td class="numeric" data-label="Qty">{{ line.quantity }}</td>
+                <td data-label="Order">{{ line.subOrderNumber }}</td>
+                <td data-label="Shelf">{{ line.warehouseName ?? 'Not allocated' }}</td>
+                <td data-label="To">{{ line.destinationPincode }}</td>
+                <td data-label="Due">{{ when(line.dispatchDueAt) }}</td>
               </tr>
             }
           </tbody>
@@ -137,7 +141,7 @@ interface PackLine {
       @if (queue.loading() && queue.rows().length === 0) {
         <kh-skeleton height="10rem" />
       } @else {
-        <table>
+        <table class="kh-cards">
           <thead>
             <tr>
               <th scope="col">Part</th>
@@ -151,20 +155,24 @@ interface PackLine {
           <tbody>
             @for (part of queue.rows(); track part.id) {
               <tr>
-                <td>
+                <td class="kh-cards-title">
                   {{ part.subOrderNumber }}
                   <span class="note">{{ money(part.netTotal, part.currencyCode) }}</span>
                 </td>
-                <td>{{ part.vendorName ?? '—' }}</td>
-                <td><kh-status-badge [status]="part.status" /></td>
-                <td class="numeric">{{ part.lines.length }}</td>
-                <td>
+                <td data-label="Seller">{{ part.vendorName ?? '—' }}</td>
+                <td data-label="Status">
+                  <kh-badge [tone]="tone(part.status)" [title]="statusTooltip(part.status)">
+                    {{ statusLabelFor(part.status) }}
+                  </kh-badge>
+                </td>
+                <td class="numeric" data-label="Items">{{ part.lines.length }}</td>
+                <td data-label="Dispatch due">
                   {{ when(part.dispatchDueAt) }}
                   @if (part.dispatchDueAt && isPast(part.dispatchDueAt)) {
                     <kh-badge tone="danger">Overdue</kh-badge>
                   }
                 </td>
-                <td>
+                <td class="action">
                   <button
                     khButton
                     type="button"
@@ -219,7 +227,7 @@ interface PackLine {
         <ol class="steps">
           <li [class.done]="shipment() !== null">1. What is in the box</li>
           <li [class.done]="weighed()">2. Weight and size</li>
-          <li [class.done]="booked()">3. Waybill</li>
+          <li [class.done]="booked()">3. Tracking number</li>
           <li>4. Hand over</li>
         </ol>
 
@@ -265,7 +273,7 @@ interface PackLine {
           <p class="hint">
             Parcel {{ parcel.id }} · {{ parcel.status }}
             @if (parcel.awb; as awb) {
-              · waybill {{ awb }} with {{ parcel.courier }}
+              · tracking number {{ awb }} with {{ parcel.courier }}
             }
           </p>
 
@@ -332,10 +340,9 @@ interface PackLine {
             </fieldset>
           } @else if (!booked()) {
             <fieldset>
-              <legend>Waybill</legend>
+              <legend>Tracking number</legend>
               <p class="hint">
-                Ask the courier for one, or type in a number from their own book if this deployment has no
-                logistics account.
+                Get a tracking number from the courier, or type one in by hand if you booked it another way.
               </p>
 
               <kh-field
@@ -353,7 +360,7 @@ interface PackLine {
                 />
               </kh-field>
 
-              <kh-field label="Waybill typed by hand" for="pack-awb" [optional]="true">
+              <kh-field label="Tracking number, typed by hand" for="pack-awb" [optional]="true">
                 <input
                   khControl
                   id="pack-awb"
@@ -387,7 +394,7 @@ interface PackLine {
           </button>
         } @else if (!booked()) {
           <button khButton type="button" variant="primary" [disabled]="busy()" (click)="book()">
-            Get a waybill
+            Get a tracking number
           </button>
         } @else {
           <button khButton type="button" [disabled]="busy()" (click)="printLabel()">Print the label</button>
@@ -418,12 +425,25 @@ interface PackLine {
       background: var(--color-surface-raised);
     }
 
+    /* Wraps: on a phone the heading, its hint and the warehouse select stack rather than share a
+       390px line three ways. */
     .panel-head {
       display: flex;
-      gap: var(--space-3);
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-3);
       align-items: baseline;
       justify-content: space-between;
       margin-block-end: var(--space-3);
+    }
+
+    .panel-head h2 {
+      flex: 1 1 100%;
+    }
+
+    @media (min-width: 768px) {
+      .panel-head h2 {
+        flex: none;
+      }
     }
 
     .panel h2 {
@@ -443,9 +463,41 @@ interface PackLine {
     }
 
     table {
-      inline-size: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
+    }
+
+    /* On a card the Pack button is the whole width and the last thing on it: the one action,
+       under the thumb. From \`md\` it is a cell again. */
+    .action {
+      display: block;
+      padding-block-start: var(--space-2);
+    }
+
+    .action button[khButton] {
+      inline-size: 100%;
+    }
+
+    @media (min-width: 768px) {
+      table {
+        display: block;
+        overflow-x: auto;
+        inline-size: 100%;
+      }
+
+      .action {
+        display: table-cell;
+      }
+
+      .action button[khButton] {
+        inline-size: auto;
+      }
+    }
+
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     th,
@@ -579,6 +631,18 @@ export class FulfilmentPage {
 
   protected when(value: string | null): string {
     return tableDateTime(value) || '—';
+  }
+
+  protected tone(status: string) {
+    return toneFor(status);
+  }
+
+  protected statusLabelFor(status: string): string {
+    return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected statusTooltip(status: string): string {
+    return statusTooltip(SUB_ORDER_STATUS_VOCAB, status);
   }
 
   protected isPast(value: string): boolean {
@@ -757,14 +821,14 @@ export class FulfilmentPage {
         next: (updated) => {
           this.busy.set(false);
           this.shipment.set(updated);
-          this.toasts.success(updated.awb ? `Waybill ${updated.awb}.` : 'Booked.');
+          this.toasts.success(updated.awb ? `Tracking number ${updated.awb}.` : 'Booked.');
         },
         error: (error: unknown) => {
           this.busy.set(false);
           this.actionError.set(
             describeError(
               error,
-              'No waybill could be got. Type one in from the courier’s own book to carry on.',
+              'Couldn’t get a tracking number. You can type one in from the courier’s paperwork.',
             ),
           );
         },

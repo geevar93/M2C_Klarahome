@@ -42,8 +42,16 @@ export const PROMOTION_APPLICATIONS: readonly Choice<PromotionApplication>[] = [
 
 /** Whether this promotion tolerates another one on the same basket. */
 export const STACKING_MODES: readonly Choice<StackingMode>[] = [
-  { value: 'Exclusive', label: 'On its own', hint: 'Nothing else applies alongside it.' },
-  { value: 'Stackable', label: 'Alongside others', hint: 'Applied in priority order.' },
+  {
+    value: 'Exclusive',
+    label: "Can't be combined",
+    hint: "Can't be combined with other discounts — if another one would also apply, only one wins.",
+  },
+  {
+    value: 'Stackable',
+    label: 'Can be combined',
+    hint: 'Can be combined with other discounts on the same order, applied in priority order.',
+  },
 ];
 
 /** What a price list is for. `Scheduled` is the one whose window is load-bearing. */

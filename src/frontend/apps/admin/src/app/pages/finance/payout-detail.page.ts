@@ -90,7 +90,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
       <kh-skeleton height="18rem" />
     } @else if (batch(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (!current.provider) {
@@ -236,7 +236,7 @@ export class PayoutDetailPage {
   protected readonly pendingMessage = computed(() => {
     switch (this.pending()) {
       case 'Approved':
-        return 'You are recording your agreement that these payments should be made. Whoever created the run cannot approve it, and the API will refuse it if that is you.';
+        return 'You are recording your agreement that these payments should be made. Someone other than the person who created this run must approve it.';
       case 'Processing':
         return 'The run is handed to the payout provider and money leaves. Individual payments can still fail; the run reports what actually settled.';
       case 'Cancelled':

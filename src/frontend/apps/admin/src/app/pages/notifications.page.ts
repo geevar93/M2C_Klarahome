@@ -54,7 +54,7 @@ import { tableDateTime } from '../core/format';
   ],
   template: `
     <kh-page-header
-      heading="Notifications"
+      heading="Message log"
       description="Every message the platform has tried to send. Retry anything that failed."
     />
 

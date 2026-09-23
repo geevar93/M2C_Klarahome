@@ -10,12 +10,19 @@ import {
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
-import { ConfirmDialog, Modal, PageHeader, StatusBadge, toneFor } from '@klarahome/ui-admin';
+import { ConfirmDialog, Modal, PageHeader, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import {
+  ORDER_STATUS_VOCAB,
+  PAYMENT_STATUS_VOCAB,
+  SUB_ORDER_STATUS_VOCAB,
+  statusLabel,
+  statusTooltip,
+} from './order-vocabulary';
 
 /** A line being cancelled, and how much of it. */
 interface CancelDraft {
@@ -65,7 +72,6 @@ interface CancelDraft {
     Modal,
     PageHeader,
     Skeleton,
-    StatusBadge,
     RouterLink,
   ],
   template: `
@@ -75,8 +81,12 @@ interface CancelDraft {
       [description]="subtitle()"
     >
       @if (order(); as current) {
-        <kh-status-badge [status]="current.status" />
-        <kh-status-badge [status]="current.paymentStatus" />
+        <kh-badge [tone]="tone(current.status)" [title]="orderStatusTooltip(current.status)">
+          {{ orderStatusLabel(current.status) }}
+        </kh-badge>
+        <kh-badge [tone]="tone(current.paymentStatus)" [title]="paymentStatusTooltip(current.paymentStatus)">
+          {{ paymentStatusLabel(current.paymentStatus) }}
+        </kh-badge>
       }
     </kh-page-header>
 
@@ -85,7 +95,7 @@ interface CancelDraft {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -111,7 +121,9 @@ interface CancelDraft {
                     }
                   </p>
                 </div>
-                <kh-status-badge [status]="part.status" />
+                <kh-badge [tone]="tone(part.status)" [title]="partStatusTooltip(part.status)">
+                  {{ partStatusLabel(part.status) }}
+                </kh-badge>
               </header>
 
               <table>
@@ -159,7 +171,7 @@ interface CancelDraft {
                     [disabled]="busy()"
                     (click)="transition(part, next)"
                   >
-                    Mark {{ next }}
+                    {{ transitionButtonLabel(next) }}
                   </button>
                 }
 
@@ -196,7 +208,7 @@ interface CancelDraft {
                     [disabled]="busy()"
                     (click)="issueInvoice(part)"
                   >
-                    Raise the invoice
+                    Create the invoice
                   </button>
                 }
               </div>
@@ -478,9 +490,17 @@ interface CancelDraft {
     }
 
     table {
+      display: block;
+      overflow-x: auto;
       inline-size: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
+    }
+
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     th,
@@ -601,6 +621,50 @@ export class OrderDetailPage {
 
   protected tone(status: string) {
     return toneFor(status);
+  }
+
+  protected orderStatusLabel(status: string): string {
+    return statusLabel(ORDER_STATUS_VOCAB, status);
+  }
+
+  protected orderStatusTooltip(status: string): string {
+    return statusTooltip(ORDER_STATUS_VOCAB, status);
+  }
+
+  protected partStatusLabel(status: string): string {
+    return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected partStatusTooltip(status: string): string {
+    return statusTooltip(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected paymentStatusLabel(status: string): string {
+    return statusLabel(PAYMENT_STATUS_VOCAB, status);
+  }
+
+  protected paymentStatusTooltip(status: string): string {
+    return PAYMENT_STATUS_VOCAB[status]?.tooltip ?? '';
+  }
+
+  /** A plain verb per `SubOrderStatus` a seller's share can be moved to. */
+  protected transitionButtonLabel(next: string): string {
+    switch (next) {
+      case 'Confirmed':
+        return 'Mark as paid';
+      case 'Processing':
+        return 'Accept order';
+      case 'Packed':
+        return 'Mark as packed';
+      case 'Shipped':
+        return 'Mark as shipped';
+      case 'Delivered':
+        return 'Mark as delivered';
+      case 'Cancelled':
+        return 'Cancel';
+      default:
+        return `Mark as ${statusLabel(SUB_ORDER_STATUS_VOCAB, next).toLowerCase()}`;
+    }
   }
 
   protected money(amount: number, currency: string): string {

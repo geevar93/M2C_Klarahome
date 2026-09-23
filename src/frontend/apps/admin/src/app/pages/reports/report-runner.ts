@@ -180,6 +180,12 @@ const CHARTABLE_ROWS = 60;
       flex: 1 1 9rem;
     }
 
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
+    }
+
     .chart {
       margin-block-end: var(--space-4);
       padding: var(--space-4);

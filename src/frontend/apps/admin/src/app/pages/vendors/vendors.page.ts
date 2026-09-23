@@ -146,7 +146,7 @@ import { BUSINESS_TYPES, VENDOR_STATUSES } from './vendor-vocabulary';
         />
       </kh-field>
 
-      <kh-field label="Constitution" for="vendor-type">
+      <kh-field label="Business type" for="vendor-type">
         <select
           khControl
           id="vendor-type"

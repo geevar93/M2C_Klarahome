@@ -22,14 +22,34 @@ export interface AdminNavItem {
   /** An internal router path. Every admin destination is internal; there are no outbound links. */
   readonly path: string;
   readonly icon?: string;
-  /** A count worth showing next to the label — parcels awaiting dispatch, returns to grade. */
-  readonly badge?: number | null;
+  /**
+   * A count worth showing next to the label — parcels awaiting dispatch, returns to grade. A
+   * string is a count the app has already capped (`50+`); zero and null show nothing.
+   */
+  readonly badge?: number | string | null;
 }
 
 /** A labelled group of destinations. A section with no visible items is not rendered at all. */
 export interface AdminNavSection {
   readonly label: string;
   readonly items: readonly AdminNavItem[];
+}
+
+/**
+ * One of the five doors: a top-level destination in the tab bar and the rail.
+ *
+ * `path` is where the door opens — the first screen behind it that the session can reach, or a
+ * landing page for a hub too broad for a row of tabs. `sections` are the groups behind it, and the
+ * sub-nav draws them as a row of secondary tabs. A hub with no sections is not rendered.
+ */
+export interface AdminNavHub {
+  readonly key: string;
+  readonly label: string;
+  readonly icon?: string;
+  readonly path: string;
+  readonly sections: readonly AdminNavSection[];
+  /** Everything waiting behind this door, added up. Zero and null show nothing. */
+  readonly badge?: number | string | null;
 }
 
 // -------------------------------------------------------------------------------------------------

@@ -16,7 +16,7 @@ import {
   EntityPicker,
   Modal,
   PageHeader,
-  StatusBadge,
+  toneFor,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map, of } from 'rxjs';
@@ -25,6 +25,7 @@ import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import { RETURN_STATUS_VOCAB, statusLabel } from '../orders/order-vocabulary';
 
 /** One line being inspected: what came back, how much of it is good, and where it goes. */
 interface QcDraft {
@@ -88,7 +89,6 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     Modal,
     PageHeader,
     Skeleton,
-    StatusBadge,
   ],
   template: `
     <kh-page-header
@@ -97,7 +97,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       [description]="subtitle()"
     >
       @if (rma(); as current) {
-        <kh-status-badge [status]="current.status" />
+        <kh-badge [tone]="tone(current.status)" [title]="statusTooltip(current.status)">
+          {{ statusLabelFor(current.status) }}
+        </kh-badge>
       }
     </kh-page-header>
 
@@ -106,7 +108,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -151,10 +153,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
 
           <section class="panel">
             <h2>What can be done now</h2>
-            <p class="hint">
-              These come from the API's own transition table, so what is offered here is exactly what it will
-              accept.
-            </p>
+            <p class="hint">Only the actions this return can move to next are shown.</p>
 
             <div class="actions">
               @if (can('Approved')) {
@@ -361,7 +360,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
               }
               @if (current.pickupAwb; as awb) {
                 <div>
-                  <dt>Pickup waybill</dt>
+                  <dt>Pickup tracking number</dt>
                   <dd>{{ awb }}</dd>
                 </div>
               }
@@ -459,8 +458,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       (closed)="schedulingPickup.set(false)"
     >
       <p class="hint">
-        A reverse shipment, which is an ordinary one with its addresses inverted. Leave the date blank to let
-        the courier choose the next available slot.
+        Leave the date blank to let the courier choose the next available slot.
       </p>
 
       <kh-field label="Collect on" for="pickup-date" [optional]="true">
@@ -723,9 +721,17 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     }
 
     table {
+      display: block;
+      overflow-x: auto;
       inline-size: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
+    }
+
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     th,
@@ -881,9 +887,21 @@ export class ReturnDetailPage {
     return tableDateTime(value) || '—';
   }
 
-  /** Whether the API's own transition table allows this edge from where the return is now. */
+  /** Whether the return can move to this status next. */
   protected can(status: string): boolean {
     return this.rma()?.nextStatuses.includes(status) ?? false;
+  }
+
+  protected tone(status: string) {
+    return toneFor(status);
+  }
+
+  protected statusLabelFor(status: string): string {
+    return statusLabel(RETURN_STATUS_VOCAB, status);
+  }
+
+  protected statusTooltip(status: string): string {
+    return RETURN_STATUS_VOCAB[status]?.tooltip ?? '';
   }
 
   protected approve(): void {

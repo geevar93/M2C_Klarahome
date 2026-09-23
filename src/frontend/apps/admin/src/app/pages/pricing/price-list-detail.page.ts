@@ -86,7 +86,7 @@ interface DraftItem {
           }
 
           @if (actionError(); as message) {
-            <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+            <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
           }
 
           <kh-data-table
@@ -176,8 +176,8 @@ interface DraftItem {
           <section class="panel">
             <h2>What does a listing actually sell for?</h2>
             <p class="hint">
-              Asks the pricing engine, across every list. The answer names the list that won, which is not
-              always this one.
+              Checks every price list and shows what a shopper would actually pay. The answer names the list
+              that won, which is not always this one.
             </p>
 
             <div class="row">
@@ -292,6 +292,12 @@ interface DraftItem {
 
     .row > kh-field {
       flex: 1 1 7rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .actions {

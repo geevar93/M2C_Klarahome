@@ -174,7 +174,7 @@ interface ConditionDraft {
               <kh-entity-picker
                 label="Product"
                 inputId="pin-product"
-                hint="Search by name or SKU, or paste a product id."
+                hint="Search by product name or SKU."
                 [search]="productSearch"
                 (chose)="pinProductId.set($event?.id ?? '')"
               />
@@ -522,6 +522,12 @@ interface ConditionDraft {
 
     .row > kh-field {
       flex: 1 1 8rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .actions {

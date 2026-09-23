@@ -1,12 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DashboardService, DashboardTile } from '@klarahome/data-access-admin';
-import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
+import { SessionStore } from '@klarahome/data-access-auth';
 import { KpiCard, PageHeader } from '@klarahome/ui-admin';
 import { Alert, Button, EmptyState } from '@klarahome/ui-primitives';
 
 import { visibleSections } from '../core/navigation';
-import { describeError } from '../core/describe-error';
+import { QueueCountsStore } from '../core/queue-counts.store';
 
 /**
  * What is waiting for you.
@@ -24,25 +23,18 @@ import { describeError } from '../core/describe-error';
  * A user whose account carries no permissions at all — freshly created, roles not yet assigned —
  * gets a page that says so rather than an empty grid. That is a real state on day one of a
  * deployment and it looks exactly like a broken screen if it is not named.
+ *
+ * **The queues come first, and nothing sits above them.** The header used to carry a row of
+ * quick-action buttons, which on a phone pushed the first tile below the fold; those now live
+ * behind "+ New" in the top bar (`core/quick-actions.ts`), reachable from every screen. The
+ * counts themselves come from `QueueCountsStore` — the same numbers the Orders and Products tabs
+ * wear as badges — and opening this page always refreshes them, because they are its content.
  */
 @Component({
   selector: 'kh-dashboard-page',
-  imports: [Alert, Button, EmptyState, HasPermission, KpiCard, PageHeader, RouterLink],
+  imports: [Alert, Button, EmptyState, KpiCard, PageHeader, RouterLink],
   template: `
-    <kh-page-header heading="Dashboard" [description]="greeting()">
-      <!-- The structural directive rather than a conditional block over the session: the control
-           is not in the DOM at all for a user without the permission, so it cannot be tabbed onto
-           or read out. The route behind it is guarded too — this hides it, the guard refuses it,
-           and the API enforces it. -->
-      <a
-        khButton
-        variant="secondary"
-        routerLink="/settings/audit-log"
-        *khHasPermission="'platform.audit.read'"
-      >
-        Audit log
-      </a>
-    </kh-page-header>
+    <kh-page-header heading="Dashboard" description="Here's what needs your attention today." />
 
     @if (failure(); as message) {
       <kh-alert tone="warning" heading="Some figures could not be loaded">{{ message }}</kh-alert>
@@ -84,31 +76,18 @@ import { describeError } from '../core/describe-error';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardPage {
-  private readonly dashboard = inject(DashboardService);
+  private readonly queues = inject(QueueCountsStore);
   private readonly session = inject(SessionStore);
 
-  protected readonly tiles = signal<readonly DashboardTile[]>([]);
-  protected readonly loading = signal(true);
-  protected readonly failure = signal<string | null>(null);
-
-  protected readonly greeting = computed(() => {
-    const name = this.session.session()?.displayName;
-    return name ? `Signed in as ${name}.` : null;
-  });
+  protected readonly tiles = this.queues.tiles;
+  protected readonly loading = this.queues.loading;
+  protected readonly failure = this.queues.failure;
 
   /** Whether anything at all is reachable — the difference between "all clear" and "no roles". */
   protected readonly hasAnyScreen = computed(() => visibleSections(this.session.session()).length > 1);
 
   constructor() {
-    this.dashboard.tiles().subscribe({
-      next: (tiles) => {
-        this.tiles.set(tiles);
-        this.loading.set(false);
-      },
-      error: (error: unknown) => {
-        this.failure.set(describeError(error, 'The dashboard figures could not be loaded.'));
-        this.loading.set(false);
-      },
-    });
+    // Always, not only when stale: the counts are this page's content.
+    this.queues.refresh(true);
   }
 }

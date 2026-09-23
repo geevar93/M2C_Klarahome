@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   Directive,
+  ElementRef,
   TemplateRef,
   computed,
   contentChildren,
@@ -59,6 +60,9 @@ export class CellTemplate {
  *    up deleting something else.
  *  - **Sorting is offered only where the API accepts it** (`DataTableColumn.sortKey`), because a
  *    header that produces a 400 is worse than a header that does not move.
+ *  - **Below 768px the rows are cards**, drawn from the same cells (see the styles). The first
+ *    column is the card's heading and the rest are captioned by their column label, so every
+ *    list in the back office reads on a phone without a card template per screen.
  */
 @Component({
   selector: 'kh-data-table',
@@ -70,51 +74,52 @@ export class CellTemplate {
       </div>
 
       <div class="toolbar-actions">
-        @if (exportMode() !== 'none') {
-          <button khButton type="button" size="sm" (click)="requestExport()">
-            <kh-icon name="download" size="sm" />
-            Export CSV
-          </button>
-        }
+        <ng-content select="[slot=actions]" />
 
-        @if (configurable()) {
-          <div class="chooser">
+        @if (exportMode() !== 'none' || configurable()) {
+          <!-- Export and the column chooser used to be two worded buttons beside the filters,
+               which on a phone was a third row of chrome above the first row of data. They are
+               one overflow menu now: tools, not tasks. A popover rather than a dialog, because it
+               changes what is on screen behind it, and trapping focus away from the table while
+               choosing that table's columns is the wrong model. Escape closes it. -->
+          <div class="tools">
             <button
               khButton
               type="button"
               size="sm"
-              [attr.aria-expanded]="chooserOpen()"
+              [iconOnly]="true"
+              aria-label="Table tools"
+              [attr.aria-expanded]="toolsOpen()"
               aria-haspopup="true"
-              (click)="chooserOpen.set(!chooserOpen())"
+              (click)="toolsOpen.set(!toolsOpen())"
             >
-              <kh-icon name="filter" size="sm" />
-              Columns
+              <kh-icon name="more" size="sm" />
             </button>
 
-            @if (chooserOpen()) {
-              <!-- A popover rather than a dialog: it changes what is on screen behind it, and
-                   trapping focus away from the table while choosing that table's columns is the
-                   wrong model. Escape closes it. -->
-              <div
-                class="chooser-panel"
-                role="group"
-                aria-label="Choose columns"
-                (keydown)="onChooserKeydown($event)"
-              >
-                @for (column of columns(); track column.key) {
-                  <kh-checkbox
-                    [label]="column.label"
-                    [checked]="isVisible(column.key)"
-                    [inputId]="'col-' + instanceId + '-' + column.key"
-                    (checkedChange)="toggleColumn(column.key, $event)"
-                  />
+            @if (toolsOpen()) {
+              <div class="tools-panel" role="group" aria-label="Table tools" (keydown)="onToolsKeydown($event)">
+                @if (exportMode() !== 'none') {
+                  <button khButton type="button" size="sm" variant="tertiary" class="tool" (click)="requestExport()">
+                    <kh-icon name="download" size="sm" />
+                    Export CSV
+                  </button>
+                }
+
+                @if (configurable()) {
+                  <p class="tools-heading">Columns</p>
+                  @for (column of columns(); track column.key) {
+                    <kh-checkbox
+                      [label]="column.label"
+                      [checked]="isVisible(column.key)"
+                      [inputId]="'col-' + instanceId + '-' + column.key"
+                      (checkedChange)="toggleColumn(column.key, $event)"
+                    />
+                  }
                 }
               </div>
             }
           </div>
         }
-
-        <ng-content select="[slot=actions]" />
       </div>
     </div>
 
@@ -209,8 +214,12 @@ export class CellTemplate {
                   </td>
                 }
 
-                @for (column of visibleColumns(); track column.key) {
-                  <td [class.numeric]="isNumeric(column)">
+                @for (column of visibleColumns(); track column.key; let first = $first) {
+                  <td
+                    [class.numeric]="isNumeric(column)"
+                    [class.title]="first"
+                    [attr.data-label]="first ? null : column.label"
+                  >
                     @if (cellTemplate(column.key); as template) {
                       <ng-container
                         [ngTemplateOutlet]="template"
@@ -283,37 +292,58 @@ export class CellTemplate {
       background: var(--color-surface-raised);
     }
 
+    /* Bottom-aligned, like the filter bar inside it: its fields carry a label above the control,
+       so centring would float Export and Columns half a label higher than the inputs beside them. */
     .toolbar {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-3);
-      align-items: center;
+      gap: var(--space-2);
+      /* Top-aligned on a phone so the tools button shares the search box's line rather than
+         dropping under the chips; bottom-aligned from \`md\`, where the fields beside it carry a
+         label above the control and centring would float the button half a label too high. */
+      align-items: flex-start;
       justify-content: space-between;
       padding: var(--space-3);
       border-block-end: 1px solid var(--color-border);
     }
 
     .toolbar-lead {
-      flex: 1 1 18rem;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
     .toolbar-actions {
       display: flex;
+      flex: none;
       flex-wrap: wrap;
       gap: var(--space-2);
       align-items: center;
+      justify-content: flex-end;
     }
 
-    .chooser {
+    @media (min-width: 768px) {
+      .toolbar {
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        align-items: flex-end;
+      }
+
+      .toolbar-lead {
+        flex: 1 1 18rem;
+      }
+    }
+
+    .tools {
       position: relative;
     }
 
-    .chooser-panel {
+    .tools-panel {
       position: absolute;
       inset-inline-end: 0;
       inset-block-start: calc(100% + var(--space-1));
       z-index: var(--z-header);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
       min-width: 14rem;
       max-height: 20rem;
       overflow-y: auto;
@@ -322,6 +352,19 @@ export class CellTemplate {
       border-radius: var(--radius-md);
       background: var(--color-surface-raised);
       box-shadow: var(--shadow-md);
+    }
+
+    .tool {
+      justify-content: flex-start;
+    }
+
+    .tools-heading {
+      margin: var(--space-2) 0 var(--space-1);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-muted);
     }
 
     .bulk-bar {
@@ -339,48 +382,79 @@ export class CellTemplate {
       font-weight: var(--weight-medium);
     }
 
-    /* The table is the one element in the admin allowed to scroll sideways: forty columns of
-       stock do not fold onto a tablet, and a squeezed table is unreadable long before it is
-       unusable. */
+    /* ---- Rows as cards (the base state), a table from 768px (admin UX phase 4) ----------------
+       A row of nine columns does not fold onto a phone; it scrolled sideways, and a swipe that
+       meant "next row" caught the table instead. Below \`md\` each row is a card: the first
+       column is its heading, and every other cell is a caption/value pair, the caption read from
+       the column's label. Nothing about the rows changes — same cells, same templates — only how
+       they are laid out, so a page needs no card template of its own. Sorting lives in the header
+       and the header is hidden here; a phone user sorts on the desktop, or filters. */
     .scroll {
-      overflow: auto;
-      max-height: 70vh;
+      display: block;
+      padding: var(--space-3);
     }
 
     table {
+      display: block;
       width: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
     }
 
-    th,
-    td {
-      padding: var(--space-2) var(--space-3);
-      text-align: start;
-      white-space: nowrap;
-      border-block-end: 1px solid var(--color-border);
+    thead {
+      display: none;
     }
 
-    thead th {
-      position: sticky;
-      inset-block-start: 0;
-      z-index: 1;
-      background: var(--color-surface);
-      font-weight: var(--weight-medium);
-      color: var(--color-text-muted);
+    tbody,
+    tr {
+      display: block;
+    }
+
+    tbody tr {
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-raised);
+    }
+
+    tbody tr + tr {
+      margin-block-start: var(--space-2);
     }
 
     tbody tr.selected {
       background: var(--color-primary-subtle);
     }
 
-    .numeric {
+    td {
+      display: flex;
+      gap: var(--space-3);
+      align-items: baseline;
+      justify-content: space-between;
+      padding: var(--space-1) 0;
       text-align: end;
+      white-space: normal;
+    }
+
+    td[data-label]::before {
+      content: attr(data-label);
+      flex: none;
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
+    td.title {
+      display: block;
+      padding-block-start: var(--space-2);
+      font-weight: var(--weight-medium);
+      text-align: start;
+    }
+
+    .numeric {
       font-variant-numeric: tabular-nums;
     }
 
     .select-cell {
-      width: var(--touch-target-min);
+      justify-content: flex-start;
     }
 
     .select-cell input {
@@ -388,6 +462,87 @@ export class CellTemplate {
       height: 1.125rem;
       accent-color: var(--color-primary);
       cursor: pointer;
+    }
+
+    .select-cell::after {
+      content: 'Select';
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
+    /* The table is the one element in the admin allowed to scroll sideways: forty columns of
+       stock do not fold onto a tablet, and a squeezed table is unreadable long before it is
+       unusable. Sideways only. A table capped at a viewport height scrolls inside a page that
+       also scrolls, and two scrollbars stacked on each other is the most common "the page feels
+       broken" report there is. The page is already paged, so letting the rows run the page's own
+       length costs nothing. */
+    @media (min-width: 768px) {
+      .scroll {
+        padding: 0;
+        overflow-x: auto;
+      }
+
+      table {
+        display: table;
+      }
+
+      thead {
+        display: table-header-group;
+      }
+
+      tbody {
+        display: table-row-group;
+      }
+
+      tr,
+      tbody tr {
+        display: table-row;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+      }
+
+      tbody tr + tr {
+        margin-block-start: 0;
+      }
+
+      tbody tr.selected {
+        background: var(--color-primary-subtle);
+      }
+
+      th,
+      td,
+      td.title {
+        display: table-cell;
+        padding: var(--space-2) var(--space-3);
+        text-align: start;
+        white-space: nowrap;
+        font-weight: inherit;
+        border-block-end: 1px solid var(--color-border);
+      }
+
+      td[data-label]::before,
+      .select-cell::after {
+        content: none;
+      }
+
+      thead th {
+        position: sticky;
+        inset-block-start: 0;
+        z-index: 1;
+        background: var(--color-surface);
+        font-weight: var(--weight-medium);
+        color: var(--color-text-muted);
+      }
+
+      .numeric {
+        text-align: end;
+      }
+
+      .select-cell {
+        width: var(--touch-target-min);
+      }
     }
 
     .sort {
@@ -402,11 +557,24 @@ export class CellTemplate {
       cursor: pointer;
     }
 
-    .empty {
+    td.empty {
+      display: block;
       padding: var(--space-10) var(--space-3);
       text-align: center;
       color: var(--color-text-muted);
       white-space: normal;
+    }
+
+    /* The empty row is a card with no border: a bordered box saying "nothing" is a box. */
+    tbody tr:has(> td.empty) {
+      border: 0;
+      background: none;
+    }
+
+    @media (min-width: 768px) {
+      td.empty {
+        display: table-cell;
+      }
     }
 
     .pager {
@@ -432,6 +600,9 @@ export class CellTemplate {
       gap: var(--space-2);
     }
   `,
+  host: {
+    '(document:click)': 'onDocumentClick($event)',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataTable<TRow> {
@@ -440,6 +611,14 @@ export class DataTable<TRow> {
   }
 
   private readonly storage = inject(BrowserStorage);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /** A click anywhere outside the tools menu closes it — a popover that only Escape closes is a trap for a mouse. */
+  protected onDocumentClick(event: Event): void {
+    if (!this.toolsOpen()) return;
+    const tools = this.host.nativeElement.querySelector('.tools');
+    if (tools && !tools.contains(event.target as Node)) this.toolsOpen.set(false);
+  }
 
   private static sequence = 0;
   /** Distinguishes this table's control ids from another table's on the same screen. */
@@ -496,7 +675,7 @@ export class DataTable<TRow> {
   private readonly cellTemplates = contentChildren(CellTemplate);
   private readonly selection = signal<ReadonlySet<string>>(new Set());
   private readonly hidden = signal<ReadonlySet<string>>(new Set());
-  protected readonly chooserOpen = signal(false);
+  protected readonly toolsOpen = signal(false);
 
   protected readonly visibleColumns = computed(() =>
     this.columns().filter((column) => !this.hidden().has(column.key)),
@@ -562,10 +741,10 @@ export class DataTable<TRow> {
     if (storageKey) this.storage.setJson(`kh.columns.${storageKey}`, [...next]);
   }
 
-  protected onChooserKeydown(event: KeyboardEvent): void {
+  protected onToolsKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.stopPropagation();
-      this.chooserOpen.set(false);
+      this.toolsOpen.set(false);
     }
   }
 
@@ -641,6 +820,7 @@ export class DataTable<TRow> {
   }
 
   protected requestExport(): void {
+    this.toolsOpen.set(false);
     if (this.exportMode() === 'server') {
       this.exportRequested.emit();
       return;

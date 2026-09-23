@@ -74,7 +74,7 @@ interface ZoneView {
   ],
   template: `
     <kh-page-header
-      heading="Shipping zones"
+      heading="Delivery zones & rates"
       description="Where a parcel can go, and what it costs to send it."
     >
       <button
@@ -369,7 +369,7 @@ interface ZoneView {
       >
         <kh-form-shell
           heading="Rate band"
-          description="A band is a weight range and a basket range. The engine picks the narrowest one that matches."
+          description="A band is a weight range and a basket range. The narrowest matching band is used."
           [summary]="rateSummary()"
           [saving]="saving()"
           [dirty]="rateForm.dirty()"
@@ -588,8 +588,15 @@ interface ZoneView {
 
     .row {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-3);
       align-items: flex-end;
+    }
+
+    /* A kh-field keeps its bottom margin, so a bottom-aligned button beside one would sit that
+       margin lower than the input. The same margin on the button lines their edges up. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .row > kh-field {

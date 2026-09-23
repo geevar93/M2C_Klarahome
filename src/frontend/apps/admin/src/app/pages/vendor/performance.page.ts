@@ -38,7 +38,7 @@ import { ReportRunner } from '../reports/report-runner';
   selector: 'kh-vendor-performance-page',
   imports: [Alert, Button, KpiCard, PageHeader, Rating, ReportRunner, RouterLink, Skeleton],
   template: `
-    <kh-page-header heading="How you are doing" description="Your sales, your money and your standing.">
+    <kh-page-header heading="Performance" description="Your sales, your money and your standing.">
       <a khButton routerLink="/ledger" variant="tertiary">Your ledger</a>
     </kh-page-header>
 

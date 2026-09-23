@@ -59,15 +59,64 @@ export const TRANSITION_LABELS: Readonly<Record<PageStatus, string>> = {
   Archived: 'Archive',
 };
 
-export const BANNER_PLACEMENTS: readonly Choice<BannerPlacement>[] = [
-  { value: 'AnnouncementBar', label: 'Announcement bar', hint: 'The strip above the header.' },
-  { value: 'HomeHero', label: 'Home hero' },
-  { value: 'HomeStrip', label: 'Home strip' },
-  { value: 'CategoryHeader', label: 'Category header' },
-  { value: 'ListingSidebar', label: 'Listing sidebar' },
-  { value: 'ProductStrip', label: 'Product page strip' },
-  { value: 'CartStrip', label: 'Cart strip' },
+/** A banner placement's choice, plus whether the storefront actually draws it yet. */
+export interface BannerPlacementChoice extends Choice<BannerPlacement> {
+  readonly rendered: boolean;
+}
+
+/**
+ * Where a banner can appear, and where the storefront actually draws it.
+ *
+ * All seven are kept here — a banner saved against one of the last four still needs a name and a
+ * placement column — but only the first three are drawn anywhere on the storefront today
+ * (`apps/storefront/src/app/app.ts` for the announcement bar, `apps/storefront/src/app/pages/home.page.ts`
+ * for the home hero and strip). `rendered: false` is what tells the create/edit screen to hide a
+ * placement from the picker while still showing existing banners a plain warning.
+ */
+export const BANNER_PLACEMENTS: readonly BannerPlacementChoice[] = [
+  {
+    value: 'AnnouncementBar',
+    label: 'Announcement bar',
+    hint: 'The thin strip across the very top of every page.',
+    rendered: true,
+  },
+  {
+    value: 'HomeHero',
+    label: 'Home hero',
+    hint: 'The large image at the top of the homepage, above the page sections.',
+    rendered: true,
+  },
+  {
+    value: 'HomeStrip',
+    label: 'Home strip',
+    hint: 'A row of banners further down the homepage.',
+    rendered: true,
+  },
+  {
+    value: 'CategoryHeader',
+    label: 'Category header',
+    hint: 'Not shown on the store yet.',
+    rendered: false,
+  },
+  {
+    value: 'ListingSidebar',
+    label: 'Listing sidebar',
+    hint: 'Not shown on the store yet.',
+    rendered: false,
+  },
+  {
+    value: 'ProductStrip',
+    label: 'Product page strip',
+    hint: 'Not shown on the store yet.',
+    rendered: false,
+  },
+  { value: 'CartStrip', label: 'Cart strip', hint: 'Not shown on the store yet.', rendered: false },
 ];
+
+/** The placements offered when creating or changing a banner — the ones shoppers can actually see. */
+export const VISIBLE_BANNER_PLACEMENTS: readonly BannerPlacementChoice[] = BANNER_PLACEMENTS.filter(
+  (choice) => choice.rendered,
+);
 
 export const BANNER_AUDIENCES: readonly Choice<BannerAudience>[] = [
   { value: 'None', label: 'Everybody' },
@@ -130,6 +179,19 @@ export const RULE_OPERATORS: readonly Choice<RuleOperator>[] = [
   { value: 'LessThan', label: 'is less than' },
   { value: 'AtMost', label: 'is at most' },
 ];
+
+/**
+ * Friendly names for block field identifiers the schema sends as camelCase, applied before
+ * `humanise()` so a shopkeeper reads "Button link" rather than "Cta href".
+ */
+export const FIELD_LABEL_OVERRIDES: Readonly<Record<string, string>> = {
+  ctaHref: 'Button link',
+  ctaLabel: 'Button text',
+  imageFileId: 'Image',
+  mobileImageFileId: 'Image on phones',
+  href: 'Link',
+  imageAlt: 'Image description (for screen readers)',
+};
 
 export const COLLECTION_SORTS: readonly Choice<CollectionSort>[] = [
   { value: 'Newest', label: 'Newest first' },

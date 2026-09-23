@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import {
   IdentityAdminService,
   ImpersonationStore,
@@ -9,14 +10,15 @@ import {
 import { SessionStore } from '@klarahome/data-access-auth';
 import { AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
 import { ToastHost } from '@klarahome/ui-primitives';
-import { BrowserStorage } from '@klarahome/util';
+import { filter } from 'rxjs';
 
-import { visibleSections } from './navigation';
+import { CreateSheet } from './create-sheet';
+import { visibleHubs, withQueueCounts } from './navigation';
 import { GlobalSearchPanel } from './global-search.panel';
+import { ProductQuickAdd } from './product-quick-add';
+import { QueueCountsStore } from './queue-counts.store';
+import { QuickAction, quickActionsFor } from './quick-actions';
 import { SignInFlow } from './sign-in.flow';
-
-/** Where the collapsed/expanded choice is remembered, per browser. */
-const RAIL_KEY = 'kh.admin.rail-collapsed';
 
 /**
  * Everything behind the sign-in screen.
@@ -25,28 +27,29 @@ const RAIL_KEY = 'kh.admin.rail-collapsed';
  * a shell that rendered its own navigation around a sign-in form would be a menu of links to
  * screens the visitor cannot open, and the identity in its top bar would have nobody to name.
  *
- * It owns the three pieces of state that belong to the whole back office and to no page — whether
- * the tablet drawer is open, whether the desktop rail is collapsed, and whether global search is
- * up — and nothing else. Everything a page needs, a page fetches.
+ * It owns the two pieces of state that belong to the whole back office and to no page — whether
+ * global search is up, and whether the "+ New" sheet is — and nothing else. Everything a page needs, a page fetches. The navigation
+ * itself holds no state any more: the five doors are always on screen and the tabs behind the
+ * open one follow the route, so there is no drawer to open and no rail to collapse.
  *
- * The **sections come off the session**, through the same declaration the route guards are built
- * from (`navigation.ts`), so the sidebar cannot offer a screen the guard will refuse.
+ * The **hubs come off the session**, through the same declaration the route guards are built
+ * from (`navigation.ts`), so the shell cannot offer a screen the guard will refuse. The counts on
+ * them come off `QueueCountsStore`, the same numbers the dashboard shows, refreshed on navigation
+ * at the store's own pace.
  */
 @Component({
   selector: 'kh-admin-layout',
-  imports: [AdminShell, GlobalSearchPanel, RouterOutlet, ToastHost],
+  imports: [AdminShell, CreateSheet, GlobalSearchPanel, ProductQuickAdd, RouterOutlet, ToastHost],
   template: `
     <kh-admin-shell
-      [sections]="sections()"
+      [hubs]="hubs()"
       [identity]="identity()"
-      [navOpen]="navOpen()"
-      [collapsed]="collapsed()"
       [showNotifications]="canReadNotifications()"
       [notificationCount]="notificationCount()"
+      [showCreate]="quickActions().length > 0"
+      (createOpened)="createOpen.set(true)"
       [impersonation]="impersonation()"
       [endingImpersonation]="endingImpersonation()"
-      (navToggled)="toggleNav()"
-      (navClosed)="navOpen.set(false)"
       (searchOpened)="searchOpen.set(true)"
       (signedOut)="signOut()"
       (impersonationExited)="endImpersonation()"
@@ -55,6 +58,15 @@ const RAIL_KEY = 'kh.admin.rail-collapsed';
     </kh-admin-shell>
 
     <kh-global-search [open]="searchOpen()" (closed)="searchOpen.set(false)" />
+
+    <kh-create-sheet
+      [open]="createOpen()"
+      [actions]="quickActions()"
+      (closed)="createOpen.set(false)"
+      (opened)="openQuickAction($event)"
+    />
+
+    <kh-product-quick-add [open]="productQuickAddOpen()" (closed)="productQuickAddOpen.set(false)" />
 
     <kh-toast-host />
   `,
@@ -70,14 +82,24 @@ export class ShellLayout {
   private readonly notifications = inject(NotificationCentreService);
   private readonly vendors = inject(VendorsAdminService);
   private readonly signInFlow = inject(SignInFlow);
-  private readonly storage = inject(BrowserStorage);
   private readonly router = inject(Router);
 
-  protected readonly navOpen = signal(false);
-  protected readonly searchOpen = signal(false);
-  protected readonly collapsed = signal(this.storage.getJson<boolean>(RAIL_KEY, false));
+  private readonly queues = inject(QueueCountsStore);
 
-  protected readonly sections = computed(() => visibleSections(this.session.session()));
+  protected readonly searchOpen = signal(false);
+  protected readonly createOpen = signal(false);
+  protected readonly productQuickAddOpen = signal(false);
+
+  /** A "+ New" entry with a sheet of its own: this sheet closes, that one opens. */
+  protected openQuickAction(action: QuickAction): void {
+    this.createOpen.set(false);
+    if (action.opens === 'product-quick-add') this.productQuickAddOpen.set(true);
+  }
+
+  protected readonly hubs = computed(() =>
+    withQueueCounts(visibleHubs(this.session.session()), this.queues.countsByPath()),
+  );
+  protected readonly quickActions = computed(() => quickActionsFor(this.session.session()));
   protected readonly notificationCount = this.notifications.attentionCount;
 
   protected readonly canReadNotifications = computed(() =>
@@ -174,31 +196,22 @@ export class ShellLayout {
       this.notifications.refreshAttentionCount().subscribe({ error: () => undefined });
     }
 
+    // The queue counts on the tabs: on entry, and then on each navigation once they have gone
+    // stale. The store decides what stale means; see `QueueCountsStore`.
+    this.queues.refresh(true);
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.queues.refresh());
+
     if (this.session.session()?.vendorId) {
       this.vendors.mine().subscribe({
         next: (vendor) => this.vendorName.set(vendor.displayName),
         error: () => undefined,
       });
     }
-  }
-
-  /**
-   * One button, two behaviours — and they are not a compromise.
-   *
-   * Below the sidebar's breakpoint there is no rail to collapse, so the control opens the drawer;
-   * above it there is no drawer, so it narrows the rail. The width is read at the moment of the
-   * press rather than tracked, because nothing else depends on it.
-   */
-  protected toggleNav(): void {
-    const isWide = globalThis.matchMedia?.('(min-width: 60.0625rem)').matches ?? true;
-    if (!isWide) {
-      this.navOpen.update((open) => !open);
-      return;
-    }
-
-    const next = !this.collapsed();
-    this.collapsed.set(next);
-    this.storage.setJson(RAIL_KEY, next);
   }
 
   protected onKeydown(event: KeyboardEvent): void {

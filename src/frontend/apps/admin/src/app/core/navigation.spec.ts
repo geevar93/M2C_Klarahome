@@ -1,6 +1,16 @@
 import { Session } from '@klarahome/data-access-auth';
 
-import { DESTINATIONS, adminRoutes, canReach, visibleSections } from './navigation';
+import {
+  DESTINATIONS,
+  HUBS,
+  NAV_SECTIONS,
+  SECTION_HUB,
+  adminRoutes,
+  canReach,
+  visibleHubs,
+  visibleSections,
+  withQueueCounts,
+} from './navigation';
 
 /**
  * The one piece of Step 26 that is cheaper to test than to reason about twice.
@@ -55,7 +65,7 @@ describe('Admin navigation rules', () => {
 
   it('drops a section entirely when none of its items is reachable', () => {
     const sections = visibleSections(session({ permissions: ['orders.order.read'] }));
-    expect(sections.map((entry) => entry.label)).toEqual(['Overview', 'Orders']);
+    expect(sections.map((entry) => entry.label)).toEqual(['Home', 'Orders']);
     expect(sections.find((entry) => entry.label === 'Orders')?.items.map((item) => item.path)).toEqual([
       '/orders',
     ]);
@@ -87,6 +97,72 @@ describe('Admin navigation rules', () => {
     for (const hidden of DESTINATIONS.filter((entry) => entry.hidden)) {
       expect(listed).not.toContain(`/${hidden.path}`);
     }
+  });
+
+  it('files every section behind exactly one of the five doors', () => {
+    for (const section of NAV_SECTIONS) {
+      expect(HUBS.map((hub) => hub.key)).toContain(SECTION_HUB[section]);
+    }
+    for (const destination of DESTINATIONS) {
+      expect(NAV_SECTIONS).toContain(destination.section);
+    }
+  });
+
+  it('drops a door with nothing reachable behind it', () => {
+    const support = visibleHubs(session({ permissions: ['identity.user.read', 'notifications.log.read'] }));
+    expect(support.map((hub) => hub.key)).toEqual(['home', 'more']);
+  });
+
+  it('opens each door on the first screen this session can reach', () => {
+    // A seller with no promotions permission: the Grow door must open on Price lists, not on a 403.
+    const seller = visibleHubs(session({ vendorId: 'v1', permissions: ['pricing.price-list.read'] }));
+    expect(seller.find((hub) => hub.key === 'grow')?.path).toBe('/price-lists');
+
+    // A platform admin with everything: the door opens on the hub's own first screen.
+    const everything = visibleHubs(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+    );
+    expect(everything.find((hub) => hub.key === 'orders')?.path).toBe('/orders');
+    expect(everything.find((hub) => hub.key === 'products')?.path).toBe('/catalog/products');
+  });
+
+  it('keeps More as a landing page however much is behind it', () => {
+    const everything = visibleHubs(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+    );
+    const more = everything.find((hub) => hub.key === 'more');
+    expect(more?.path).toBe('/more');
+    expect(more?.sections.map((section) => section.label)).toEqual(['Marketplace', 'Settings', 'System']);
+  });
+
+  it("puts a seller's own screens behind More, and the marketplace nowhere", () => {
+    const seller = visibleHubs(session({ vendorId: 'v1', permissions: ['orders.order.read'] }));
+    const more = seller.find((hub) => hub.key === 'more');
+    expect(more?.sections.map((section) => section.label)).toEqual(['Your business']);
+  });
+
+  it('counts the queues onto the tabs, and adds them up on the door', () => {
+    const everything = visibleHubs(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+    );
+    const counted = withQueueCounts(
+      everything,
+      new Map<string, number | string>([
+        ['/fulfilment', 8],
+        ['/returns', 3],
+        ['/catalog/moderation', '50+'],
+      ]),
+    );
+
+    const orders = counted.find((hub) => hub.key === 'orders');
+    const tabs = orders?.sections.flatMap((section) => section.items) ?? [];
+    expect(tabs.find((item) => item.path === '/fulfilment')?.badge).toBe(8);
+    expect(tabs.find((item) => item.path === '/orders')?.badge).toBeUndefined();
+    expect(orders?.badge).toBe(11);
+
+    // A capped tab caps the door: nobody counted past fifty, so the door must not claim to have.
+    expect(counted.find((hub) => hub.key === 'products')?.badge).toBe('50+');
+    expect(counted.find((hub) => hub.key === 'home')?.badge).toBe(0);
   });
 
   it('builds one guarded route per destination, and every route lazily', () => {

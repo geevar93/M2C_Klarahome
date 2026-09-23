@@ -188,6 +188,12 @@ interface RegionDraft {
       flex: 1 1 9rem;
     }
 
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .region > [khButton] {
+      margin-block-end: var(--space-4);
+    }
+
     .flags {
       display: flex;
       gap: var(--space-2);

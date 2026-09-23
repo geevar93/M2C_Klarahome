@@ -14,6 +14,7 @@ import {
 import { Alert } from '@klarahome/ui-primitives';
 
 import { tableDateTime, tableMoney } from '../../core/format';
+import { RETURN_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orders/order-vocabulary';
 
 /**
  * The returns queue.
@@ -120,7 +121,7 @@ export class ReturnsPage {
       key: 'status',
       label: 'Status',
       kind: 'badge',
-      value: (row) => row.status,
+      value: (row) => statusLabel(RETURN_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
     },
@@ -154,17 +155,7 @@ export class ReturnsPage {
       key: 'status',
       label: 'Status',
       kind: 'select',
-      options: [
-        { value: 'Requested', label: 'Awaiting a decision' },
-        { value: 'Approved', label: 'Approved' },
-        { value: 'PickupScheduled', label: 'Pickup arranged' },
-        { value: 'InTransit', label: 'On its way back' },
-        { value: 'Received', label: 'Received' },
-        { value: 'Inspected', label: 'Inspected' },
-        { value: 'Refunded', label: 'Refunded' },
-        { value: 'Rejected', label: 'Rejected' },
-        { value: 'Closed', label: 'Closed' },
-      ],
+      options: statusFilterOptions(RETURN_STATUS_VOCAB),
     },
     { key: 'from', label: 'Requested from', kind: 'date' },
     { key: 'to', label: 'Requested to', kind: 'date' },

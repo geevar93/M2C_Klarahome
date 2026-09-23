@@ -37,7 +37,7 @@ import { tableDateTime } from '../../core/format';
     />
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <section class="panel">
@@ -116,7 +116,7 @@ import { tableDateTime } from '../../core/format';
             </select>
           </kh-field>
 
-          <kh-field label="Note" for="adjustment-note" hint="Goes on the ledger row, and stays there.">
+          <kh-field label="Note" for="adjustment-note" hint="Goes on this history entry, and stays there.">
             <input
               khControl
               id="adjustment-note"
@@ -198,7 +198,7 @@ import { tableDateTime } from '../../core/format';
         <h2>What has happened to it</h2>
 
         @if (ledger()?.error(); as message) {
-          <kh-alert tone="danger" heading="The ledger could not be loaded">{{ message }}</kh-alert>
+          <kh-alert tone="danger" heading="Couldn't load the history">{{ message }}</kh-alert>
         }
 
         <table>
@@ -454,7 +454,7 @@ export class AdjustmentsPage {
   protected readonly writeOffMessage = computed(() => {
     const item = this.chosen();
     const change = Number(this.adjustForm.fields.change.value());
-    return `${Math.abs(change)} of ${item?.sku ?? 'this SKU'} comes off the shelf count. The ledger keeps the row; undoing it is another movement, not a delete.`;
+    return `${Math.abs(change)} of ${item?.sku ?? 'this SKU'} comes off the shelf count. This stays in the history; you can't undo it, but you can correct it with another movement.`;
   });
 
   protected reviewAdjust(): void {

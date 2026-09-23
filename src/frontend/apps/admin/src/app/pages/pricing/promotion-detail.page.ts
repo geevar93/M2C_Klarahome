@@ -171,7 +171,7 @@ const NEW = 'new';
             ></textarea>
           </kh-field>
 
-          <kh-field label="Mechanic" for="promo-type" [hint]="typeHint()">
+          <kh-field label="Discount type" for="promo-type" [hint]="typeHint()">
             <select khControl id="promo-type" [value]="type()" (change)="type.set($any($event.target).value)">
               @for (choice of types; track choice.value) {
                 <option [value]="choice.value">{{ choice.label }}</option>
@@ -539,7 +539,7 @@ const NEW = 'new';
             </div>
 
             <div class="row">
-              <kh-field label="Stacking" for="promo-stacking" [hint]="stackingHint()">
+              <kh-field label="Combine with other offers" for="promo-stacking" [hint]="stackingHint()">
                 <select
                   khControl
                   id="promo-stacking"
@@ -594,9 +594,9 @@ const NEW = 'new';
           <section class="panel">
             <h2>Try it on a basket</h2>
             <p class="hint">
-              Run through the same engine that prices a real checkout. Nothing is saved, and the promotion
-              does not have to exist yet — save it first only if you want the stored version tried rather than
-              what is on screen.
+              Prices a basket the same way a real checkout would. Nothing is saved, and the promotion does not
+              have to exist yet — save it first only if you want the stored version tried rather than what is
+              on screen.
             </p>
 
             @for (line of simulationLines(); track $index) {
@@ -673,7 +673,7 @@ const NEW = 'new';
                   }
                 </select>
               </kh-field>
-              <kh-field label="Place of supply" for="sim-state" [optional]="true">
+              <kh-field label="Delivery state" for="sim-state" [optional]="true">
                 <select
                   khControl
                   id="sim-state"
@@ -725,7 +725,7 @@ const NEW = 'new';
                 <kh-alert tone="warning" heading="The coupon did nothing">{{ rejection }}</kh-alert>
               }
 
-              <h3>What the engine considered</h3>
+              <h3>What was considered</h3>
               @if (result.promotions.length === 0) {
                 <p class="hint">No promotion matched this basket at all.</p>
               } @else {
@@ -847,6 +847,12 @@ const NEW = 'new';
 
     .row > kh-field {
       flex: 1 1 10rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .hint {
@@ -1194,7 +1200,7 @@ export class PromotionDetailPage implements HasUnsavedChanges {
         error: (error: unknown) => {
           this.simulating.set(false);
           this.quote.set(null);
-          this.simulationError.set(describeError(error, 'The engine refused this basket.'));
+          this.simulationError.set(describeError(error, 'This basket could not be priced.'));
         },
       });
   }

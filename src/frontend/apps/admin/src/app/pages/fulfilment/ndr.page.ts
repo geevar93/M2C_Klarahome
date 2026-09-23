@@ -71,7 +71,7 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
   imports: [HasPermission, Alert, Badge, Button, CellTemplate, Control, DataTable, Field, FilterBar, Modal, PageHeader],
   template: `
     <kh-page-header
-      heading="Failed deliveries"
+      heading="Delivery problems"
       description="Parcels the courier could not hand over. They will be sent back on their own if nobody decides otherwise."
     />
 
@@ -80,7 +80,7 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -106,7 +106,7 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
 
       <ng-template khCell="reason" let-row>
         <span class="reason">{{ row.reason || row.reasonCode }}</span>
-        <span class="note">attempt {{ row.attemptNumber }} · waybill {{ row.awb ?? 'unknown' }}</span>
+        <span class="note">attempt {{ row.attemptNumber }} · tracking number {{ row.awb ?? 'unknown' }}</span>
       </ng-template>
 
       <ng-template khCell="actions" let-row>
@@ -136,7 +136,7 @@ const ACTIONS: readonly { readonly value: NdrAction; readonly label: string; rea
     >
       @if (deciding(); as report) {
         <p class="hint">
-          {{ report.orderNumber }} · waybill {{ report.awb ?? 'unknown' }} · attempt
+          {{ report.orderNumber }} · tracking number {{ report.awb ?? 'unknown' }} · attempt
           {{ report.attemptNumber }}. The courier said: {{ report.reason || report.reasonCode }}.
         </p>
 

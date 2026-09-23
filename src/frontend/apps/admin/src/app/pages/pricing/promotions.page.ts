@@ -53,7 +53,7 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -161,7 +161,7 @@ export class PromotionsPage {
 
   protected readonly columns: readonly DataTableColumn<PromotionResponse>[] = [
     { key: 'name', label: 'Promotion', kind: 'custom' },
-    { key: 'type', label: 'Mechanic', value: (row) => row.type, width: '9rem' },
+    { key: 'type', label: 'Discount type', value: (row) => row.type, width: '9rem' },
     { key: 'appliesTo', label: 'Applies to', value: (row) => row.appliesTo, width: '8rem' },
     { key: 'value', label: 'Value', value: (row) => this.valueLabel(row), width: '8rem' },
     { key: 'state', label: 'State', kind: 'custom', width: '12rem' },
@@ -173,7 +173,12 @@ export class PromotionsPage {
       value: (row) => row.priority,
       hiddenByDefault: true,
     },
-    { key: 'stacking', label: 'Stacking', value: (row) => row.stacking, hiddenByDefault: true },
+    {
+      key: 'stacking',
+      label: 'Combine with other offers',
+      value: (row) => row.stacking,
+      hiddenByDefault: true,
+    },
     {
       key: 'minOrderValue',
       label: 'Minimum basket',
@@ -187,7 +192,7 @@ export class PromotionsPage {
   protected readonly filters: readonly FilterDefinition[] = [
     {
       key: 'type',
-      label: 'Mechanic',
+      label: 'Discount type',
       kind: 'select',
       options: PROMOTION_TYPES.map((entry) => ({ value: entry.value, label: entry.label })),
     },

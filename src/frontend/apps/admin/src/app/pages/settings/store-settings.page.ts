@@ -71,7 +71,7 @@ interface SettingField {
   template: `
     <kh-page-header
       heading="Store settings"
-      description="How this deployment behaves. Each section is validated by the API when it is saved."
+      description="Settings that control how your store looks and behaves."
     />
 
     @if (loadError(); as message) {
@@ -80,8 +80,8 @@ interface SettingField {
       <kh-skeleton height="20rem" />
     } @else {
       <p class="note">
-        Each section is saved on its own. The API validates every save and has the last word: a refusal
-        comes back against the section it concerns.
+        Each section saves separately, so you can update one part without touching the rest. If a
+        save is rejected, the problem is shown next to that section.
       </p>
 
       @for (section of sections(); track section.key) {

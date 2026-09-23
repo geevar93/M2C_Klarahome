@@ -97,7 +97,7 @@ import { tableDate } from '../../core/format';
           slot="filters"
           [filters]="filters"
           [values]="values()"
-          searchLabel="Search by HSN code"
+          searchLabel="Search by HSN code — the tax classification code for a product"
           (changed)="applyFilters($event)"
         />
 
@@ -126,11 +126,11 @@ import { tableDate } from '../../core/format';
       <aside class="panel">
         <h2>What rate applies?</h2>
         <p class="hint">
-          Asks the engine for one HSN code on one date, which is the only question with a single answer —
-          several rows can overlap while a change is being staged.
+          Looks up the rate for one HSN code on one date — the only question with a single answer, since
+          several rows can overlap while a rate change is being staged.
         </p>
 
-        <kh-field label="HSN code" for="resolve-hsn">
+        <kh-field label="HSN code" for="resolve-hsn" hint="Tax classification code for this product">
           <input
             khControl
             id="resolve-hsn"
@@ -195,7 +195,12 @@ import { tableDate } from '../../core/format';
           (cancelled)="drawerOpen.set(false)"
         >
           @if (!editing()) {
-            <kh-field label="HSN code" for="tax-hsn" [error]="form.fields.hsnCode.error()">
+            <kh-field
+              label="HSN code"
+              for="tax-hsn"
+              hint="Tax classification code for this product"
+              [error]="form.fields.hsnCode.error()"
+            >
               <input
                 khControl
                 id="tax-hsn"
@@ -355,10 +360,11 @@ import { tableDate } from '../../core/format';
     .row {
       display: flex;
       gap: var(--space-3);
+      flex-wrap: wrap;
     }
 
     .row > kh-field {
-      flex: 1;
+      flex: 1 1 10rem;
     }
 
     .answer {

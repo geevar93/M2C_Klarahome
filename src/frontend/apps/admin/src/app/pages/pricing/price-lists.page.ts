@@ -81,7 +81,7 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -292,10 +292,11 @@ import { PRICE_LIST_TYPES } from './promotion-vocabulary';
     .row {
       display: flex;
       gap: var(--space-3);
+      flex-wrap: wrap;
     }
 
     .row > kh-field {
-      flex: 1;
+      flex: 1 1 10rem;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

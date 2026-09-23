@@ -98,7 +98,7 @@ const WEEKDAYS = [
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -296,7 +296,11 @@ const WEEKDAYS = [
         </kh-field>
       }
 
-      <kh-field label="At (UTC hour)" for="schedule-hour" hint="0 to 23. UTC, not IST.">
+      <kh-field
+        label="Run at (India time shown, stored as UTC)"
+        for="schedule-hour"
+        [hint]="hourUtcHint()"
+      >
         <input
           khControl
           id="schedule-hour"
@@ -427,6 +431,7 @@ const WEEKDAYS = [
 
     .schedules li {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-3);
       align-items: center;
       justify-content: space-between;
@@ -469,6 +474,22 @@ export class ReportsPage {
   protected readonly dayOfWeek = signal('1');
   protected readonly dayOfMonth = signal('1');
   protected readonly hourUtc = signal('2');
+  /**
+   * The chosen UTC hour, translated to India time for display only.
+   *
+   * India is UTC+5:30, so a whole UTC hour lands on a half hour in IST — there is no whole-hour
+   * conversion to submit instead, and silently rounding would run the schedule at a different
+   * minute than what is shown. So the field still submits the UTC hour exactly as entered; this is
+   * supplementary text only.
+   */
+  protected readonly hourUtcHint = computed(() => {
+    const hour = clamp(Number(this.hourUtc()) || 0, 0, 23);
+    const totalMinutes = hour * 60 + 330; // +5:30
+    const istHour = Math.floor(totalMinutes / 60) % 24;
+    const istMinute = totalMinutes % 60;
+    const istLabel = `${String(istHour).padStart(2, '0')}:${String(istMinute).padStart(2, '0')}`;
+    return `0 to 23, in UTC — this is what gets saved. India time equivalent: ${istLabel} IST.`;
+  });
   protected readonly recipients = signal('');
   protected readonly scheduleActive = signal(true);
 

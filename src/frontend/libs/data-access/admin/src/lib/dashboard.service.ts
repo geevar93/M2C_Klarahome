@@ -14,7 +14,8 @@ export interface DashboardTile {
   readonly key: string;
   readonly label: string;
   readonly hint: string;
-  readonly value: number | null;
+  /** A count, or `"50+"` when the queue runs past one page; null when it could not be read. */
+  readonly value: number | string | null;
   readonly path: string;
 }
 
@@ -32,10 +33,13 @@ export interface DashboardTile {
  *    role-aware before anything is fetched, and a vendor sees their own four rather than the
  *    platform's nine — with the numbers themselves scoped to their seller by the API's vendor
  *    filter, not by anything here.
- *  - **A count is `page.total`, asked for with a page of one.** These endpoints page by keyset and
- *    `total` is explicitly nullable (`docs/04-api-specification.md` §1.1), so a tile shows an em
- *    dash where the server did not count. That is the honest rendering; a `0` would be a number
- *    somebody would act on.
+ *  - **A count is the rows on one full page, not `page.total`.** These endpoints page by keyset and
+ *    `total` is nullable (`docs/04-api-specification.md` §1.1) — in practice no endpoint fills it
+ *    in, so reading it left every tile a permanent em dash. Instead a tile asks for
+ *    {@link CountPage} rows and counts them; when a next cursor comes back there are more than
+ *    that, and the tile says `50+`. That is exact for a queue someone is expected to work down, and
+ *    honest past it. `50` is the smallest module page cap (Orders, Returns), so no endpoint
+ *    silently clamps the request to fewer and turns `50+` into a lie.
  *
  * Every request is silent and does not raise the loading bar: six parallel counts should not make
  * the whole application look busy, and a dashboard tile that fails is a missing number, not an
@@ -59,25 +63,25 @@ export class DashboardService {
 
     if (this.session.hasPermission('orders.order.read')) {
       sources.push(
-        this.orders.adminListSubOrders({ status: 'Confirmed', size: 1 }, quiet).pipe(
+        this.orders.adminListSubOrders({ status: 'Confirmed', size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'to-pack',
               'Awaiting packing',
               'Confirmed, not yet packed',
-              result.page.total,
+              countOf(result),
               '/fulfilment',
             ),
           ),
           catchError(() => of(null)),
         ),
-        this.orders.adminListSubOrders({ overdueOnly: true, size: 1 }, quiet).pipe(
+        this.orders.adminListSubOrders({ overdueOnly: true, size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'overdue',
               'Past dispatch due',
               'The seller has missed the cut-off',
-              result.page.total,
+              countOf(result),
               '/fulfilment',
             ),
           ),
@@ -88,13 +92,13 @@ export class DashboardService {
 
     if (this.session.hasPermission('returns.return.read')) {
       sources.push(
-        this.returns.adminListReturns({ status: 'Requested', size: 1 }, quiet).pipe(
+        this.returns.adminListReturns({ status: 'Requested', size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'returns',
               'Returns to decide',
               'Requested, awaiting a decision',
-              result.page.total,
+              countOf(result),
               '/returns',
             ),
           ),
@@ -105,13 +109,13 @@ export class DashboardService {
 
     if (this.session.hasPermission('catalog.product.moderate')) {
       sources.push(
-        this.catalog.adminProductModerationQueue({ status: 'Pending', size: 1 }, quiet).pipe(
+        this.catalog.adminProductModerationQueue({ status: 'Pending', size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'moderation',
               'Products to review',
               'Submitted by sellers',
-              result.page.total,
+              countOf(result),
               '/catalog/moderation',
             ),
           ),
@@ -122,9 +126,9 @@ export class DashboardService {
 
     if (this.session.hasPermission('vendors.vendor.approve')) {
       sources.push(
-        this.vendors.adminVendorsList({ status: 'UnderReview', size: 1 }, quiet).pipe(
+        this.vendors.adminVendorsList({ status: 'UnderReview', size: CountPage }, quiet).pipe(
           map((result) =>
-            tile('vendors', 'Sellers to approve', 'Applications under review', result.page.total, '/vendors'),
+            tile('vendors', 'Sellers to approve', 'Applications under review', countOf(result), '/vendors'),
           ),
           catchError(() => of(null)),
         ),
@@ -133,13 +137,13 @@ export class DashboardService {
 
     if (this.session.hasPermission('notifications.log.read')) {
       sources.push(
-        this.notifications.adminNotificationsList({ status: 'Failed', size: 1 }, quiet).pipe(
+        this.notifications.adminNotificationsList({ status: 'Failed', size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'notifications',
               'Messages that failed',
               'Email or SMS not delivered',
-              result.page.total,
+              countOf(result),
               '/notifications',
             ),
           ),
@@ -156,11 +160,22 @@ export class DashboardService {
   }
 }
 
+/** Rows asked for per tile. See the class notes for why it is this number. */
+const CountPage = 50;
+
+/** The rows on the page, or `50+` when the server says there is another page after it. */
+function countOf(result: {
+  readonly items: readonly unknown[];
+  readonly page: { readonly nextCursor?: string | null };
+}): number | string {
+  return result.page.nextCursor ? `${CountPage}+` : result.items.length;
+}
+
 function tile(
   key: string,
   label: string,
   hint: string,
-  value: number | null | undefined,
+  value: number | string | null | undefined,
   path: string,
 ): DashboardTile {
   return { key, label, hint, value: value ?? null, path };

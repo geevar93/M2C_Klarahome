@@ -99,7 +99,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
       <kh-skeleton height="24rem" />
     } @else if (vendor(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (readiness(); as state) {
@@ -154,7 +154,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
               />
             </kh-field>
 
-            <kh-field label="Constitution" for="vendor-business-type">
+            <kh-field label="Business type" for="vendor-business-type">
               <select
                 khControl
                 id="vendor-business-type"
@@ -519,6 +519,12 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
 
     .add-staff > kh-field {
       flex: 1 1 9rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .add-staff > [khButton] {
+      margin-block-end: var(--space-4);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

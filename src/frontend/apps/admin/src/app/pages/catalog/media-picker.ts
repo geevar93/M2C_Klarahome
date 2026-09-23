@@ -64,7 +64,7 @@ import { describeError } from '../../core/describe-error';
       </div>
 
       @if (failure(); as message) {
-        <kh-alert tone="danger" heading="That did not work">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (list.error(); as message) {

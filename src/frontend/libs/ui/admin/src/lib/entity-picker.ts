@@ -212,7 +212,7 @@ export class EntityPicker {
   readonly hint = input<string | null>(null);
   readonly error = input<string | null>(null);
   readonly optional = input(false);
-  readonly placeholder = input('Search, or paste an id');
+  readonly placeholder = input('Search by name');
 
   /**
    * How many characters before a search runs.

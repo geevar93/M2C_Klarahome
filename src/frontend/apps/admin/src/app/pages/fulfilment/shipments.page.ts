@@ -19,7 +19,6 @@ import {
   FilterDefinition,
   FilterValues,
   PageHeader,
-  StatusBadge,
   toneFor,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
@@ -27,6 +26,7 @@ import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orders/order-vocabulary';
 
 /**
  * Every parcel, and the courier's account of what happened to it.
@@ -63,7 +63,6 @@ import { tableDateTime, tableMoney } from '../../core/format';
     HasPermission,
     Icon,
     PageHeader,
-    StatusBadge,
     RouterLink,
   ],
   template: `
@@ -77,7 +76,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -104,7 +103,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
         slot="filters"
         [filters]="filters"
         [values]="values()"
-        searchLabel="Order number, recipient or waybill"
+        searchLabel="Order number, recipient or tracking number"
         (changed)="applyFilters($event)"
       />
 
@@ -145,7 +144,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
           <tr>
             <th scope="col">Received</th>
             <th scope="col">Courier</th>
-            <th scope="col">Waybill</th>
+            <th scope="col">Tracking number</th>
             <th scope="col">Event</th>
             <th scope="col">Why it failed</th>
             <th scope="col"><span class="sr-only">Actions</span></th>
@@ -200,7 +199,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
         <dl class="facts">
           <div>
             <dt>Status</dt>
-            <dd><kh-status-badge [status]="parcel.status" /></dd>
+            <dd>
+              <kh-badge [tone]="tone(parcel.status)" [title]="statusTooltip(parcel.status)">
+                {{ statusLabelFor(parcel.status) }}
+              </kh-badge>
+            </dd>
           </div>
           <div>
             <dt>Courier</dt>
@@ -296,7 +299,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
 
         <fieldset *khHasPermission="'shipping.shipment.manage'">
           <legend>Record a scan by hand</legend>
-          <p class="hint">For a waybill this deployment tracks itself — there is no webhook to wait for.</p>
+          <p class="hint">Use this when the courier does not send tracking updates automatically.</p>
           <div class="pair">
             <kh-field label="Status" for="tracking-status">
               <input
@@ -426,9 +429,17 @@ import { tableDateTime, tableMoney } from '../../core/format';
     }
 
     table {
+      display: block;
+      overflow-x: auto;
       inline-size: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
+    }
+
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     th,
@@ -557,11 +568,11 @@ export class ShipmentsPage {
       key: 'status',
       label: 'Status',
       kind: 'badge',
-      value: (row) => row.status,
+      value: (row) => statusLabel(SHIPMENT_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
     },
-    { key: 'awb', label: 'Waybill', kind: 'custom' },
+    { key: 'awb', label: 'Tracking number', kind: 'custom' },
     { key: 'destinationPincode', label: 'To', value: (row) => row.destinationPincode, width: '7rem' },
     { key: 'weightGrams', label: 'Weight', kind: 'number', value: (row) => `${row.weightGrams} g` },
     {
@@ -590,23 +601,14 @@ export class ShipmentsPage {
       key: 'status',
       label: 'Status',
       kind: 'select',
-      options: [
-        { value: 'Created', label: 'Packed, not booked' },
-        { value: 'Booked', label: 'Booked' },
-        { value: 'PickedUp', label: 'Picked up' },
-        { value: 'InTransit', label: 'In transit' },
-        { value: 'OutForDelivery', label: 'Out for delivery' },
-        { value: 'Delivered', label: 'Delivered' },
-        { value: 'Failed', label: 'Delivery failed' },
-        { value: 'Cancelled', label: 'Cancelled' },
-      ],
+      options: statusFilterOptions(SHIPMENT_STATUS_VOCAB),
     },
   ];
 
   protected readonly bulkActions = computed(() => [
     {
       key: 'manifest',
-      label: 'Create a handover manifest',
+      label: 'Create a pickup sheet',
       disabledReason: this.busy() ? 'Something else is still running.' : null,
     },
   ]);
@@ -622,6 +624,18 @@ export class ShipmentsPage {
 
   protected when(value: string | null): string {
     return tableDateTime(value) || '—';
+  }
+
+  protected tone(status: string) {
+    return toneFor(status);
+  }
+
+  protected statusLabelFor(status: string): string {
+    return statusLabel(SHIPMENT_STATUS_VOCAB, status);
+  }
+
+  protected statusTooltip(status: string): string {
+    return SHIPMENT_STATUS_VOCAB[status]?.tooltip ?? '';
   }
 
   protected applyFilters(values: FilterValues): void {

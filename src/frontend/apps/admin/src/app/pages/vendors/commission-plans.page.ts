@@ -138,7 +138,7 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       <aside class="panel">
         <h2>What would this cost a seller?</h2>
         <p class="hint">
-          Runs the resolver that freezes the rate onto an order line, so the answer here is the answer a
+          Locks in the commission rate for that order line, so the answer here is the answer a
           statement will carry — and it names the rule that matched.
         </p>
 
@@ -484,6 +484,12 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
 
     .row > kh-field {
       flex: 1 1 8rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .answer {

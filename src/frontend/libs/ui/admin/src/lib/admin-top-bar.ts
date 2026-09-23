@@ -22,7 +22,9 @@ export interface AdminIdentityView {
  * The bar across the top of the back office.
  *
  * It carries the three things that belong to the whole application rather than to a page: the way
- * into global search, the notifications centre, and who you are signed in as.
+ * into global search, the notifications centre, and who you are signed in as. There is no menu
+ * button: the primary navigation is the hub bar, which is always on screen (`AdminShell`), so
+ * there is nothing for a button to show.
  *
  * **The scope is stated, not implied.** A vendor user sees their seller's name next to their own,
  * permanently, because the single most dangerous confusion in a marketplace back office is not
@@ -37,20 +39,6 @@ export interface AdminIdentityView {
   selector: 'kh-admin-top-bar',
   imports: [Badge, Button, Icon, RouterLink],
   template: `
-    <button
-      khButton
-      type="button"
-      variant="tertiary"
-      size="sm"
-      [iconOnly]="true"
-      class="menu"
-      [attr.aria-label]="navOpen() ? 'Hide navigation' : 'Show navigation'"
-      [attr.aria-expanded]="navOpen()"
-      (click)="navToggled.emit()"
-    >
-      <kh-icon name="menu" />
-    </button>
-
     <a class="brand" routerLink="/">{{ title() }}</a>
 
     <!-- A button rather than an input: the search itself is a dialog with its own keyboard model
@@ -62,6 +50,22 @@ export interface AdminIdentityView {
     </button>
 
     <div class="spacer"></div>
+
+    <!-- The one way to make something new, from any screen. Icon-only on a phone, worded on a
+         desktop; the app decides whether this session has anything it may create. -->
+    @if (showCreate()) {
+      <button
+        khButton
+        variant="primary"
+        size="sm"
+        class="create"
+        aria-label="New: make something"
+        (click)="createOpened.emit()"
+      >
+        <kh-icon name="plus" size="sm" />
+        <span class="create-label">New</span>
+      </button>
+    }
 
     @if (showNotifications()) {
       <a
@@ -185,7 +189,8 @@ export interface AdminIdentityView {
        breakpoint, which must move with this one: below it the sidebar is a drawer and there is no
        room to also spell out the search box and the signed-in name. */
     .search-label,
-    kbd {
+    kbd,
+    .create-label {
       display: none;
     }
 
@@ -246,7 +251,8 @@ export interface AdminIdentityView {
        signed-in name; at and above it there is. */
     @media (min-width: 1024px) {
       .search-label,
-      kbd {
+      kbd,
+      .create-label {
         display: inline;
       }
 
@@ -270,12 +276,13 @@ export class AdminTopBar {
 
   readonly title = input('Klara Home');
   readonly identity = input.required<AdminIdentityView>();
-  readonly navOpen = input(false);
   readonly showNotifications = input(false);
   /** Messages needing attention. Zero renders no badge at all rather than a "0". */
   readonly notificationCount = input<number | null>(null);
+  /** Whether this session may create anything at all; false hides the "+ New" control. */
+  readonly showCreate = input(false);
 
-  readonly navToggled = output<void>();
+  readonly createOpened = output<void>();
   readonly searchOpened = output<void>();
   readonly signedOut = output<void>();
 

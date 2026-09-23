@@ -70,7 +70,7 @@ import { tableDate, tableDateTime } from '../../core/format';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="Not everything worked" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Some of it didn't save" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table

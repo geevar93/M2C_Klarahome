@@ -83,7 +83,7 @@ import { tableDateTime } from '../../core/format';
         variant="primary"
         (click)="startTracking()"
       >
-        Track a listing
+        Add to warehouse
       </button>
     </kh-page-header>
 
@@ -92,7 +92,7 @@ import { tableDateTime } from '../../core/format';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -132,7 +132,7 @@ import { tableDateTime } from '../../core/format';
 
       <ng-template khCell="actions" let-row>
         <div class="row-actions">
-          <button khButton type="button" size="sm" (click)="openLedger(row)">Ledger</button>
+          <button khButton type="button" size="sm" (click)="openLedger(row)">History</button>
           <button
             *khHasPermission="'inventory.stock.adjust'"
             khButton
@@ -157,7 +157,7 @@ import { tableDateTime } from '../../core/format';
 
     @if (ledgerFor(); as item) {
       <kh-entity-drawer
-        [heading]="'Ledger — ' + item.sku"
+        [heading]="'History — ' + item.sku"
         [subtitle]="item.warehouseCode + ' · ' + item.quantityOnHand + ' on hand'"
         (closed)="closeLedger()"
       >
@@ -165,12 +165,12 @@ import { tableDateTime } from '../../core/format';
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
         <p class="hint">
-          Every movement, newest first. The balance after each one is what the platform believed at that
+          Every movement, newest first. The balance after each one is what was on hand at that
           moment — nothing here can be edited, which is what makes it worth reading.
         </p>
 
         @if (ledger()?.error(); as message) {
-          <kh-alert tone="danger" heading="The ledger could not be loaded">{{ message }}</kh-alert>
+          <kh-alert tone="danger" heading="Couldn't load the history">{{ message }}</kh-alert>
         }
 
         <table>
@@ -282,7 +282,7 @@ import { tableDateTime } from '../../core/format';
           </select>
         </kh-field>
 
-        <kh-field label="Note" for="adjust-note" hint="Why, in a few words. It goes on the ledger row.">
+        <kh-field label="Note" for="adjust-note" hint="Why, in a few words. It goes on this history entry.">
           <input
             khControl
             id="adjust-note"
@@ -369,7 +369,7 @@ import { tableDateTime } from '../../core/format';
 
     <kh-modal
       [open]="tracking()"
-      heading="Track a listing"
+      heading="Add to warehouse"
       width="30rem"
       [dismissible]="!busy()"
       (closed)="tracking.set(false)"
@@ -388,7 +388,7 @@ import { tableDateTime } from '../../core/format';
       <kh-entity-picker
         label="Listing"
         inputId="track-listing"
-        hint="Search by SKU or product name, or paste the listing id."
+        hint="Search by product name or SKU."
         [search]="listingSearch"
         (chose)="trackListing.set($event?.id ?? null)"
       />

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { provideKlaraHomeHttp } from '@klarahome/data-access-auth';
+import { SessionStore, provideKlaraHomeHttp } from '@klarahome/data-access-auth';
 import { provideKlaraHomeI18n } from '@klarahome/i18n';
 import { RUNTIME_CONFIG } from '@klarahome/util';
 
@@ -131,6 +131,10 @@ describe('PageComposerPage reference fields', () => {
       );
     await settle(fixture);
 
+    // Blocks load collapsed to a one-line summary; open the block to see its fields.
+    element.querySelector<HTMLElement>('kh-disclosure summary')?.click();
+    await settle(fixture);
+
     // The two held ids are looked up in one request, by id.
     const lookup = productSearches();
     expect(lookup.map((request) => request.request.params.get('search'))).toEqual(['p1 p2']);
@@ -172,5 +176,123 @@ describe('PageComposerPage reference fields', () => {
     await settle(fixture);
 
     expect(tagText()).toEqual(['Brass lamp', 'Jute rug', 'Cotton throw']);
+  });
+});
+
+/**
+ * A published page is live: saving it changes what shoppers see immediately. The composer must say
+ * so plainly and make saving go through a confirmation, rather than the old "nothing reaches the
+ * storefront until it is saved" wording — which was true for a draft and false for a published page.
+ */
+describe('PageComposerPage saving a live page', () => {
+  const config = {
+    apiBaseUrl: 'http://api.klarahome.test',
+    tenantCode: 'test',
+    locale: 'en-IN',
+    timeZone: 'Asia/Kolkata',
+    environment: 'local' as const,
+    features: {},
+  };
+
+  let http: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [PageComposerPage],
+      providers: [
+        { provide: RUNTIME_CONFIG, useValue: config },
+        provideKlaraHomeI18n(config.locale),
+        provideKlaraHomeHttp(config),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'page-1' }) } },
+        },
+      ],
+    }).compileComponents();
+
+    http = TestBed.inject(HttpTestingController);
+
+    // The save button sits behind *khHasPermission, so the page needs someone allowed to edit it.
+    TestBed.inject(SessionStore).signIn('token', {
+      userId: 'u1',
+      displayName: 'Editor',
+      permissions: ['content.content.manage'],
+      roles: [],
+      expiresAt: Date.now() + 3_600_000,
+    });
+  });
+
+  const settle = async (fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  };
+
+  const publishedPage = (title: string) => ({
+    id: 'page-1',
+    slug: 'home',
+    title,
+    type: 'Home',
+    status: 'Published',
+    version: 2,
+    publishedAt: '2026-09-01T00:00:00Z',
+    summary: null,
+    author: null,
+    tags: [],
+    coverImage: null,
+    seo: { metaTitle: null, metaDescription: null, canonicalUrl: null, noIndex: false },
+    allowedTransitions: [],
+    blocks: [],
+  });
+
+  it('says the page is live, and asks for confirmation before saving it', async () => {
+    const fixture = TestBed.createComponent(PageComposerPage);
+    const element = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+
+    http.match((request) => request.url.endsWith('/block-types')).forEach((request) => request.flush([]));
+    http.match((request) => request.url.endsWith('/versions')).forEach((request) => request.flush([]));
+    http
+      .match((request) => request.url.endsWith('/pages/page-1') && request.method === 'GET')
+      .forEach((request) => request.flush(publishedPage('Home')));
+    await settle(fixture);
+
+    const titleInput = element.querySelector<HTMLInputElement>('#page-title');
+    if (!titleInput) throw new Error('Title input not found.');
+    titleInput.value = 'Home, updated';
+    titleInput.dispatchEvent(new Event('input'));
+    await settle(fixture);
+
+    // The banner tells the truth about a published page: saving updates the live site.
+    expect(element.textContent).toContain('This page is live');
+    expect(element.textContent).not.toContain('Nothing on this screen reaches the storefront');
+
+    const saveButton = Array.from(element.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('Save & update live site'),
+    );
+    expect(saveButton).toBeTruthy();
+    saveButton?.click();
+    await settle(fixture);
+
+    // Nothing is written until the confirmation is accepted.
+    http.expectNone((request) => request.url.endsWith('/pages/page-1') && request.method !== 'GET');
+    expect(document.body.textContent).toContain(
+      'This page is live. Saving will update it for shoppers right away.',
+    );
+
+    const confirmButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === 'Save & update',
+    );
+    confirmButton?.click();
+
+    const saveRequest = http.expectOne(
+      (request) => request.url.endsWith('/pages/page-1') && request.method !== 'GET',
+    );
+    saveRequest.flush(publishedPage('Home, updated'));
+    await settle(fixture);
+
+    expect(element.querySelector('#page-title')).toHaveProperty('value', 'Home, updated');
   });
 });

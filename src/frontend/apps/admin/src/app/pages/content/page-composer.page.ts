@@ -39,14 +39,23 @@ import {
   SchemaField,
   StatusBadge,
 } from '@klarahome/ui-admin';
-import { Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Control,
+  Disclosure,
+  Field,
+  Icon,
+  Skeleton,
+} from '@klarahome/ui-primitives';
 import { ImageUrls, ToastService } from '@klarahome/util';
 import { Observable, catchError, forkJoin, map, of, shareReplay } from 'rxjs';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
 import { MediaPicker } from '../catalog/media-picker';
-import { TRANSITION_LABELS } from './content-vocabulary';
+import { FIELD_LABEL_OVERRIDES, TRANSITION_LABELS } from './content-vocabulary';
 
 /** One block as the composer holds it: the API's record, plus the config being edited. */
 interface BlockDraft {
@@ -92,11 +101,11 @@ interface BlockDraft {
   selector: 'kh-page-composer-page',
   imports: [
     Alert,
-    Badge,
     Button,
     Checkbox,
     ConfirmDialog,
     Control,
+    Disclosure,
     EntityMultiPicker,
     Field,
     HasPermission,
@@ -121,7 +130,7 @@ interface BlockDraft {
 
         <ng-container *khHasPermission="'content.content.manage'">
           <button khButton type="button" size="sm" [disabled]="!dirty() || busy()" (click)="save()">
-            {{ busy() ? 'Saving…' : 'Save draft' }}
+            {{ busy() ? 'Saving…' : isLive() ? 'Save & update live site' : 'Save draft' }}
           </button>
           <button khButton type="button" size="sm" variant="tertiary" (click)="openPreview()">Preview</button>
 
@@ -161,10 +170,16 @@ interface BlockDraft {
       }
 
       @if (dirty()) {
-        <kh-alert tone="warning" heading="Unsaved changes">
-          Nothing on this screen reaches the storefront until it is saved, and a published page keeps serving
-          its last published version until it is published again.
-        </kh-alert>
+        @if (isLive()) {
+          <kh-alert tone="warning" heading="This page is live">
+            Shoppers are seeing this page right now. These changes won't reach them until you save — and
+            saving updates the live page immediately, for everybody.
+          </kh-alert>
+        } @else {
+          <kh-alert tone="warning" heading="Unsaved changes">
+            Nothing here reaches the storefront until you save it.
+          </kh-alert>
+        }
       }
 
       <div class="layout">
@@ -198,11 +213,12 @@ interface BlockDraft {
 
           @for (draft of blocks(); track draft.id) {
             <article class="block">
-              <header>
-                <h3>{{ labelFor(draft.type) }}</h3>
-                <kh-badge tone="neutral">{{ draft.type }}</kh-badge>
-              </header>
-
+              <kh-disclosure
+                [heading]="labelFor(draft.type)"
+                [hint]="blockSummary(draft)"
+                [open]="isExpanded(draft.id)"
+                (openChange)="setExpanded(draft.id, $event)"
+              >
               @if (schemaFor(draft.type); as schema) {
                 @for (field of schema.fields; track field.name) {
                   @if (isPickable(field)) {
@@ -331,9 +347,9 @@ interface BlockDraft {
                   </section>
                 }
               } @else {
-                <kh-alert tone="warning" heading="Unknown block type">
-                  The server does not declare <code>{{ draft.type }}</code> any more. It is kept as it is and
-                  will be sent back unchanged; remove it if it is no longer wanted.
+                <kh-alert tone="warning" heading="This block type isn't recognised any more">
+                  <code>{{ draft.type }}</code> isn't available to add or edit any more. It's kept as it is
+                  and saved unchanged; remove it if it's no longer wanted.
                 </kh-alert>
               }
 
@@ -364,6 +380,7 @@ interface BlockDraft {
                   />
                 </kh-field>
               </div>
+              </kh-disclosure>
             </article>
           }
         </section>
@@ -462,29 +479,36 @@ interface BlockDraft {
               ></textarea>
             </kh-field>
 
-            <kh-field label="Canonical URL" for="seo-canonical" [optional]="true">
-              <input
-                khControl
-                id="seo-canonical"
-                type="url"
-                [value]="canonicalUrl()"
-                (input)="setCanonical($any($event.target).value)"
-              />
-            </kh-field>
+            <kh-disclosure heading="Advanced">
+              <kh-field
+                label="Canonical URL"
+                for="seo-canonical"
+                [optional]="true"
+                hint="Only needed if this page's content also lives at another address."
+              >
+                <input
+                  khControl
+                  id="seo-canonical"
+                  type="url"
+                  [value]="canonicalUrl()"
+                  (input)="setCanonical($any($event.target).value)"
+                />
+              </kh-field>
 
-            <kh-checkbox
-              label="Ask search engines not to index this page"
-              inputId="seo-noindex"
-              [checked]="noIndex()"
-              (checkedChange)="setNoIndex($event)"
-            />
+              <kh-checkbox
+                label="Ask search engines not to index this page"
+                inputId="seo-noindex"
+                [checked]="noIndex()"
+                (checkedChange)="setNoIndex($event)"
+              />
+            </kh-disclosure>
           </section>
 
           <section class="panel">
             <h2>Version history</h2>
             <p class="hint">
-              A snapshot is taken on every publish. Restoring one replaces the draft; the snapshot itself is
-              untouched.
+              A copy is kept every time this page is published. Restoring one replaces the current draft; the
+              copy you restore from stays there, unchanged.
             </p>
 
             @if (versions().length === 0) {
@@ -617,7 +641,7 @@ interface BlockDraft {
         </kh-field>
       }
 
-      <kh-field label="Note" for="transition-note" [optional]="true" hint="Recorded on the version snapshot.">
+      <kh-field label="Note" for="transition-note" [optional]="true" hint="Kept with this version, for later reference.">
         <input
           khControl
           id="transition-note"
@@ -636,9 +660,20 @@ interface BlockDraft {
     </kh-modal>
 
     <kh-confirm-dialog
+      [open]="confirmingLiveSave()"
+      heading="Update the live site?"
+      message="This page is live. Saving will update it for shoppers right away."
+      confirmLabel="Save & update"
+      tone="warning"
+      [busy]="busy()"
+      (confirmed)="confirmLiveSave()"
+      (cancelled)="cancelLiveSave()"
+    />
+
+    <kh-confirm-dialog
       [open]="rollingBackTo() !== null"
       heading="Restore this version"
-      message="The current draft is replaced by the snapshot. Anything unsaved on this screen is lost."
+      message="The current draft is replaced by that saved version. Anything unsaved on this screen is lost."
       confirmLabel="Restore"
       tone="warning"
       [busy]="busy()"
@@ -768,8 +803,7 @@ interface BlockDraft {
       margin-block-start: var(--space-4);
     }
 
-    /* A block type's label can be as long as its schema's \`label\` field allows; the type badge
-       beside it wraps under it rather than squeezing either into an ellipsis. */
+    /* The "Items" section header and each item's own header, both nested inside \`.block\`. */
     .block header {
       display: flex;
       flex-wrap: wrap;
@@ -903,6 +937,11 @@ export class PageComposerPage implements HasUnsavedChanges {
   protected readonly dirty = signal(false);
 
   protected readonly blocks = signal<readonly BlockDraft[]>([]);
+  /** The one block whose form is open. Only one at a time, so the list reads as a list, not a wall. */
+  protected readonly expandedBlockId = signal<string | null>(null);
+  protected readonly confirmingLiveSave = signal(false);
+  /** A status change asked for while a live page had unsaved edits: it opens once they are saved. */
+  private readonly transitionAfterSave = signal<PageStatus | null>(null);
   protected readonly title = signal('');
   protected readonly slug = signal('');
   protected readonly pageSummary = signal('');
@@ -928,6 +967,9 @@ export class PageComposerPage implements HasUnsavedChanges {
   protected readonly previewing = signal(false);
   protected readonly previewError = signal<string | null>(null);
   protected readonly previewed = signal<StorePageResponse | null>(null);
+
+  /** Whether shoppers can see this page right now — the fact the trust copy and the save flow key off. */
+  protected readonly isLive = computed(() => this.page()?.status === 'Published');
 
   protected readonly subtitle = computed(() => {
     const current = this.page();
@@ -1001,15 +1043,18 @@ export class PageComposerPage implements HasUnsavedChanges {
 
     const reference = REFERENCE_HINTS[field.kind];
     if (reference) parts.push(reference);
-    if (field.kind === 'Html') parts.push('Raw markup — only on a block that permits it');
+    if (field.kind === 'Html') parts.push('For advanced formatting only');
     return parts.join(' · ');
   }
 
   protected itemsHint(schema: BlockTypeResponse): string {
-    return `Fields: ${(schema.itemFields ?? []).map((field) => field.name).join(', ')}`;
+    return schema.itemFields && schema.itemFields.length > 0 ? 'Fill in each item below.' : '';
   }
 
+  /** A field's label: a friendly override where one exists, otherwise the identifier spaced out. */
   protected humanise(name: string): string {
+    const override = FIELD_LABEL_OVERRIDES[name];
+    if (override) return override;
     const spaced = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
@@ -1153,12 +1198,13 @@ export class PageComposerPage implements HasUnsavedChanges {
   }
 
   protected addBlock(type: BlockTypeResponse): void {
+    const id = `new-${crypto.randomUUID()}`;
     this.blocks.update((current) => [
       ...current,
       {
         // Local only, and replaced by the server's id on the next load. `BlockBody.id` is null for
         // a block the server has not seen, which is what tells it this one is new.
-        id: `new-${crypto.randomUUID()}`,
+        id,
         type: type.type,
         config: {},
         isVisible: true,
@@ -1167,11 +1213,30 @@ export class PageComposerPage implements HasUnsavedChanges {
       },
     ]);
     this.dirty.set(true);
+    // A block just added is the one worth looking at; every other block collapses to its summary.
+    this.expandedBlockId.set(id);
   }
 
   protected removeBlock(blockId: string): void {
     this.blocks.update((current) => current.filter((draft) => draft.id !== blockId));
     this.dirty.set(true);
+    if (this.expandedBlockId() === blockId) this.expandedBlockId.set(null);
+  }
+
+  /** Whether one block's form is the one currently open. */
+  protected isExpanded(blockId: string): boolean {
+    return this.expandedBlockId() === blockId;
+  }
+
+  protected setExpanded(blockId: string, open: boolean): void {
+    this.expandedBlockId.set(open ? blockId : null);
+  }
+
+  /** The collapsed row's one-line note: hidden state, or a scheduling window, or nothing. */
+  protected blockSummary(draft: BlockDraft): string | null {
+    if (!draft.isVisible) return 'Hidden';
+    if (draft.startsAt || draft.endsAt) return 'Scheduled';
+    return null;
   }
 
   protected reorder(ids: readonly string[]): void {
@@ -1539,9 +1604,40 @@ export class PageComposerPage implements HasUnsavedChanges {
 
   // ---- Saving and the lifecycle -------------------------------------------------------------------
 
+  /**
+   * The save button.
+   *
+   * A published page is live: saving it changes what shoppers see immediately, so it goes through
+   * {@link confirmingLiveSave} rather than writing straight away. A draft (or anything else not
+   * currently published) has no such consequence and saves at once.
+   */
   protected save(): void {
     if (this.busy()) return;
+    if (this.isLive()) {
+      this.confirmingLiveSave.set(true);
+      return;
+    }
+    this.performSave();
+  }
 
+  protected confirmLiveSave(): void {
+    const next = this.transitionAfterSave();
+    this.confirmingLiveSave.set(false);
+    this.transitionAfterSave.set(null);
+    this.performSave(next ? () => this.openTransitionDialog(next) : undefined);
+  }
+
+  protected cancelLiveSave(): void {
+    this.confirmingLiveSave.set(false);
+    this.transitionAfterSave.set(null);
+  }
+
+  /**
+   * Writes the draft. `onSaved` is how {@link startTransition} chains a transition onto a save
+   * without duplicating the request body — the one place it is built stays this one.
+   */
+  private performSave(onSaved?: (saved: PageResponse) => void): void {
+    const wasLive = this.isLive();
     this.busy.set(true);
     this.summary.set([]);
 
@@ -1586,7 +1682,8 @@ export class PageComposerPage implements HasUnsavedChanges {
           this.busy.set(false);
           this.dirty.set(false);
           this.fill(saved);
-          this.toasts.success('Draft saved.');
+          this.toasts.success(wasLive ? 'Live site updated.' : 'Draft saved.');
+          onSaved?.(saved);
         },
         error: (error: unknown) => {
           this.busy.set(false);
@@ -1603,7 +1700,29 @@ export class PageComposerPage implements HasUnsavedChanges {
     return TRANSITION_LABELS[status] ?? status;
   }
 
+  /**
+   * Opens the transition dialog for the chosen status.
+   *
+   * Publishing (or any other transition) always sends the last *saved* version of the page — if
+   * there are unsaved edits on screen, saving them first is what stops a publish from quietly
+   * reverting to whatever was last written. So a dirty page is saved before the dialog opens, and
+   * the transition itself always acts on what was just written.
+   */
   protected startTransition(status: PageStatus): void {
+    if (this.dirty() && this.isLive()) {
+      // Saving a live page is itself a change shoppers see, so it is confirmed like any other save.
+      this.transitionAfterSave.set(status);
+      this.confirmingLiveSave.set(true);
+      return;
+    }
+    if (this.dirty()) {
+      this.performSave(() => this.openTransitionDialog(status));
+      return;
+    }
+    this.openTransitionDialog(status);
+  }
+
+  private openTransitionDialog(status: PageStatus): void {
     this.transitionError.set(null);
     this.transitionNote.set('');
     this.scheduledAt.set('');

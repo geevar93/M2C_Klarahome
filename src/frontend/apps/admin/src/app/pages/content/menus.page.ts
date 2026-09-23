@@ -115,7 +115,7 @@ import { MENU_PLACEMENTS } from './content-vocabulary';
       <kh-field
         label="Code"
         for="menu-code"
-        hint="How the storefront asks for it: the header is 'header', the footer is 'footer'. Not editable afterwards — a deployed page is already calling it."
+        hint="How the storefront asks for it: the header is 'header', the footer is 'footer'. Cannot be changed once saved — the storefront is already looking for the menu by this code."
         [error]="form.fields.code.error()"
       >
         <input

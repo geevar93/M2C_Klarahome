@@ -14,6 +14,13 @@ import {
 import { Alert, Badge } from '@klarahome/ui-primitives';
 
 import { tableDateTime, tableMoney } from '../../core/format';
+import {
+  ORDER_STATUS_VOCAB,
+  PAYMENT_STATUS_VOCAB,
+  SUB_ORDER_STATUS_VOCAB,
+  statusFilterOptions,
+  statusLabel,
+} from './order-vocabulary';
 
 /**
  * Every order.
@@ -35,7 +42,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
   template: `
     <kh-page-header
       heading="Orders"
-      description="One row per order. An order split across sellers has a part per seller, each moving at its own pace."
+      description="One row per order. When an order has items from more than one seller, each seller's share ships and is tracked separately."
     />
 
     @if (list.error(); as message) {
@@ -75,7 +82,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
       <ng-template khCell="subOrderStatuses" let-row>
         <div class="parts">
           @for (status of row.subOrderStatuses; track status) {
-            <kh-badge [tone]="tone(status)">{{ status }}</kh-badge>
+            <kh-badge [tone]="tone(status)">{{ label(status) }}</kh-badge>
           } @empty {
             <span class="who">—</span>
           }
@@ -130,16 +137,16 @@ export class OrdersPage {
       key: 'status',
       label: 'Status',
       kind: 'badge',
-      value: (row) => row.status,
+      value: (row) => statusLabel(ORDER_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
     },
-    { key: 'subOrderStatuses', label: 'Parts', kind: 'custom' },
+    { key: 'subOrderStatuses', label: 'Sellers’ shares', kind: 'custom' },
     {
       key: 'paymentStatus',
       label: 'Payment',
       kind: 'badge',
-      value: (row) => `${row.paymentMethod} · ${row.paymentStatus}`,
+      value: (row) => `${row.paymentMethod} · ${statusLabel(PAYMENT_STATUS_VOCAB, row.paymentStatus)}`,
       tone: (row) => toneFor(row.paymentStatus),
     },
     { key: 'itemCount', label: 'Items', kind: 'number', value: (row) => row.itemCount },
@@ -171,27 +178,13 @@ export class OrdersPage {
       key: 'status',
       label: 'Status',
       kind: 'select',
-      options: [
-        { value: 'Pending', label: 'Awaiting payment' },
-        { value: 'Confirmed', label: 'Confirmed' },
-        { value: 'Processing', label: 'Being prepared' },
-        { value: 'Shipped', label: 'Shipped' },
-        { value: 'Delivered', label: 'Delivered' },
-        { value: 'Cancelled', label: 'Cancelled' },
-        { value: 'Returned', label: 'Returned' },
-      ],
+      options: statusFilterOptions(ORDER_STATUS_VOCAB),
     },
     {
       key: 'paymentStatus',
       label: 'Payment',
       kind: 'select',
-      options: [
-        { value: 'Pending', label: 'Not paid' },
-        { value: 'Authorized', label: 'Authorised' },
-        { value: 'Paid', label: 'Paid' },
-        { value: 'Failed', label: 'Failed' },
-        { value: 'Refunded', label: 'Refunded' },
-      ],
+      options: statusFilterOptions(PAYMENT_STATUS_VOCAB),
     },
     { key: 'from', label: 'Placed from', kind: 'date' },
     { key: 'to', label: 'Placed to', kind: 'date' },
@@ -203,6 +196,10 @@ export class OrdersPage {
 
   protected tone(status: string) {
     return toneFor(status);
+  }
+
+  protected label(status: string) {
+    return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
   }
 
   protected applyFilters(values: FilterValues): void {

@@ -41,7 +41,7 @@ import { MediaPicker } from '../catalog/media-picker';
     StatusBadge,
   ],
   template: `
-    <kh-page-header heading="Your seller profile" description="What shoppers see, and what you promise them.">
+    <kh-page-header heading="Seller profile" description="What shoppers see, and what you promise them.">
       @if (vendor(); as current) {
         <kh-status-badge [status]="current.status" />
       }
@@ -213,7 +213,7 @@ import { MediaPicker } from '../catalog/media-picker';
             <dl>
               <dt>Legal name</dt>
               <dd>{{ current.legalName }}</dd>
-              <dt>Constitution</dt>
+              <dt>Business type</dt>
               <dd>{{ businessTypeLabel(current.businessType) }}</dd>
               <dt>PAN</dt>
               <dd>{{ current.pan ?? '—' }}</dd>

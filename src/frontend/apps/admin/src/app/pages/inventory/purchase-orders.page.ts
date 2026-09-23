@@ -98,7 +98,7 @@ interface ReceiptLine {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -574,6 +574,12 @@ interface ReceiptLine {
       align-items: end;
       padding-block: var(--space-2);
       border-block-start: 1px solid var(--color-border);
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .line > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .sku {

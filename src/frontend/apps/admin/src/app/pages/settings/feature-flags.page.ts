@@ -30,7 +30,7 @@ import { describeError } from '../../core/describe-error';
   template: `
     <kh-page-header
       heading="Feature flags"
-      description="What this deployment has switched on. Declared by the code that reads them."
+      description="Switches that turn admin features on or off."
     />
 
     @if (loadError(); as message) {
@@ -39,7 +39,7 @@ import { describeError } from '../../core/describe-error';
       <kh-skeleton height="16rem" />
     } @else {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       <ul>

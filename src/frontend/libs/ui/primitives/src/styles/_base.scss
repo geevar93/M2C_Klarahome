@@ -127,6 +127,102 @@ hr {
   border: 0;
 }
 
+// ---- Tables as cards -----------------------------------------------------------------------------
+// A hand-written data table that reads as a stack of cards on a phone and as a table from `md`.
+// Each cell names its column in `data-label`, which the card draws as the field's caption; the
+// cell marked `.kh-cards-title` is the card's heading and draws no caption. Mobile-first: the
+// card is the base state and the table is restored at 768px, in keeping with `_breakpoints.scss`.
+// The shared `kh-data-table` has its own copy of this behaviour, because its cells are generated;
+// this class is for the dozen tables that are not.
+.kh-cards {
+  display: block;
+  inline-size: 100%;
+}
+
+.kh-cards thead {
+  display: none;
+}
+
+.kh-cards tbody,
+.kh-cards tr {
+  display: block;
+}
+
+.kh-cards tr {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.kh-cards tr + tr {
+  margin-block-start: var(--space-2);
+}
+
+.kh-cards td {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  white-space: normal;
+}
+
+.kh-cards td[data-label]::before {
+  content: attr(data-label);
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.kh-cards td.kh-cards-title {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.kh-cards td:empty {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .kh-cards {
+    display: table;
+  }
+
+  .kh-cards thead {
+    display: table-header-group;
+  }
+
+  .kh-cards tbody {
+    display: table-row-group;
+  }
+
+  .kh-cards tr {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .kh-cards tr + tr {
+    margin-block-start: 0;
+  }
+
+  .kh-cards td,
+  .kh-cards td.kh-cards-title {
+    display: table-cell;
+    font-weight: inherit;
+  }
+
+  .kh-cards td[data-label]::before {
+    content: none;
+  }
+
+  .kh-cards td:empty {
+    display: table-cell;
+  }
+}
+
 // The skip link — the first thing in the tab order, hidden until it is focused.
 .kh-skip-link {
   position: absolute;

@@ -52,6 +52,16 @@ const ICON_PATHS = {
   card: ['M3 7h18v10H3z', 'M3 11h18'],
   pin: ['M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z', 'M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
   refresh: ['M20 12a8 8 0 1 1-2.4-5.7', 'M20 4v5h-5'],
+  // Added for the back office's five-door navigation (admin UX phase 2). Each hub needs a glyph
+  // nothing inside it reuses, or the tab bar and the row of secondary tabs beneath it read as the
+  // same thing twice.
+  megaphone: ['M4 10v4h3l8 4V6l-8 4H4z', 'M18 9a4 4 0 0 1 0 6', 'M7 14v4h3'],
+  grid: ['M4 4h6v6H4z', 'M14 4h6v6h-6z', 'M4 14h6v6H4z', 'M14 14h6v6h-6z'],
+  tag: ['M3 12V4h8l9 9-8 8-9-9z', 'M7.5 8h.01'],
+  layers: ['M12 4l9 4.5-9 4.5-9-4.5L12 4z', 'M3 13l9 4.5 9-4.5', 'M3 17l9 4.5 9-4.5'],
+  clipboard: ['M9 4h6v3H9z', 'M15 5h3v15H6V5h3', 'M9 12h6', 'M9 16h4'],
+  // The overflow menu's three dots, for a toolbar with more tools than room (admin UX phase 4).
+  more: ['M6 12h.01', 'M12 12h.01', 'M18 12h.01'],
   // The social marks, added at Step 31 for the footer's follow row. Drawn in the same 24x24
   // stroked box as everything else rather than pasted in as filled brand SVGs: a logo dropped into
   // this set would ignore `currentColor` and sit at a different weight beside the icons around it.

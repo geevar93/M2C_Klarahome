@@ -76,7 +76,7 @@ interface CountLine {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -174,7 +174,7 @@ interface CountLine {
       }
         @if (take.status === 'Submitted') {
           <kh-alert tone="info" heading="This count is closed">
-            Its variances have been written to the stock ledger as corrections. It cannot be changed.
+            Its differences have been applied to your stock counts. It cannot be changed.
           </kh-alert>
         }
 
@@ -276,7 +276,7 @@ interface CountLine {
       [open]="submitting()"
       heading="Submit this count"
       [message]="
-        'Every variance becomes a correction on the stock ledger and the quantities change. There is no undo — a mistake has to be corrected by another movement. Net change: ' +
+        'This will update your stock counts. You cannot undo it, but you can correct a mistake with another count. Net change: ' +
         (netVariance() > 0 ? '+' : '') +
         netVariance() +
         ' units.'

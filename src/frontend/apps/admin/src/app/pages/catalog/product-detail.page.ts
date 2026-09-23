@@ -192,7 +192,7 @@ interface CategoryOption {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (product()?.complianceGaps?.length) {
@@ -306,7 +306,12 @@ interface CategoryOption {
         <fieldset>
           <legend>Tax and origin</legend>
           <div class="pair">
-            <kh-field label="HSN code" for="product-hsn" [error]="form.fields.hsnCode.error()">
+            <kh-field
+              label="HSN code"
+              for="product-hsn"
+              hint="Tax classification code for this product"
+              [error]="form.fields.hsnCode.error()"
+            >
               <input
                 khControl
                 khNumeric
