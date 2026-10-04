@@ -23,6 +23,18 @@ public interface IReferenceData
     ValueTask<bool> StateExistsAsync(Guid stateId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The state id for a two-digit GST state code, or null if there is no such state.
+    /// </summary>
+    /// <remarks>
+    /// The reverse of <see cref="StateCodeAsync"/>. State ids are minted per database, so a module
+    /// that has to name a state it knows only by its statutory code - a seeder placing a demonstration
+    /// seller in Rajasthan - cannot hard-code one and has to ask.
+    /// </remarks>
+    /// <param name="stateCode">The GST state code, e.g. <c>08</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    ValueTask<Guid?> StateIdAsync(string stateCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The GST state code for a state id, or null if the id is unknown.
     /// </summary>
     /// <remarks>

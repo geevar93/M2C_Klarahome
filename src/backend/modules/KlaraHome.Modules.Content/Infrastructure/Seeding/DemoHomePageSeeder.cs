@@ -1,6 +1,7 @@
 using System.Text.Json;
 using KlaraHome.Contracts.Catalog;
 using KlaraHome.Infrastructure.Persistence.Seeding;
+using KlaraHome.Modules.Content.Application.Pages;
 using KlaraHome.Modules.Content.Domain;
 using KlaraHome.Modules.Content.Infrastructure.Persistence;
 using KlaraHome.SharedKernel.Time;
@@ -51,6 +52,9 @@ internal sealed partial class DemoHomePageSeeder(
     IClock clock,
     ILogger<DemoHomePageSeeder> logger) : IDataSeeder
 {
+    /// <summary>What the publish snapshot says it was.</summary>
+    private const string PublishNote = "Published with the demonstration data.";
+
     /// <summary>The prefix every demonstration SKU carries.</summary>
     private const string DemoSkuPrefix = "DEMO-";
 
@@ -73,12 +77,37 @@ internal sealed partial class DemoHomePageSeeder(
             return;
         }
 
+        // Blocks included: the backfill below snapshots them, and a snapshot of a page whose blocks
+        // were never loaded is a version with nothing in it.
         var existing = await context.Pages
-            .AnyAsync(page => page.Type == PageType.Home, cancellationToken)
+            .Include(page => page.Blocks)
+            .FirstOrDefaultAsync(page => page.Type == PageType.Home, cancellationToken)
             .ConfigureAwait(false);
 
-        if (existing)
+        if (existing is not null)
         {
+            // A published page with an empty history is a page that went live without the snapshot
+            // a real publish takes - this seeder's own earlier output, which wrote the status and
+            // not the version. It read "Published, v0" beside "never been published". Adding the
+            // missing snapshot is the only thing done to a page that was not written this run.
+            if (existing.Status == PageStatus.Published
+                && !await context.PageVersions
+                    .AnyAsync(version => version.PageId == existing.Id, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                TransitionPageCommandHandler.Snapshot(
+                    existing,
+                    PublishNote,
+                    restoredFrom: null,
+                    clock.UtcNow,
+                    actorId: null,
+                    context);
+
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                HomePageHistoryBackfilled(logger);
+                return;
+            }
+
             HomePageAlreadyAuthored(logger);
             return;
         }
@@ -172,6 +201,10 @@ internal sealed partial class DemoHomePageSeeder(
                 + "changed and this seeder now writes a draft nobody can see.");
         }
 
+        // The snapshot a real publish takes (TransitionPageCommandHandler), so the page is v1 with a
+        // history to show rather than "Published, v0" over an empty version list.
+        TransitionPageCommandHandler.Snapshot(page, PublishNote, restoredFrom: null, now, actorId: null, context);
+
         context.Pages.Add(page);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -246,4 +279,10 @@ internal sealed partial class DemoHomePageSeeder(
         Message = "A home page already exists, so the demonstration one was not written. "
                   + "Edit it in the back office, or delete it and re-run, if you want the demo front page.")]
     private static partial void HomePageAlreadyAuthored(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 9107,
+        Level = LogLevel.Information,
+        Message = "The published home page had no version history; recorded the snapshot a publish takes.")]
+    private static partial void HomePageHistoryBackfilled(ILogger logger);
 }

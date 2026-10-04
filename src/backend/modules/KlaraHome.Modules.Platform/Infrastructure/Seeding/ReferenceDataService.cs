@@ -28,6 +28,28 @@ internal sealed class ReferenceDataService(PlatformDbContext context, IMemoryCac
     }
 
     /// <inheritdoc />
+    public async ValueTask<Guid?> StateIdAsync(string stateCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(stateCode))
+        {
+            return null;
+        }
+
+        var wanted = stateCode.Trim().PadLeft(2, '0');
+        var states = await StatesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var (id, code) in states)
+        {
+            if (string.Equals(code, wanted, StringComparison.Ordinal))
+            {
+                return id;
+            }
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
     public async ValueTask<string?> StateCodeAsync(Guid stateId, CancellationToken cancellationToken = default)
     {
         var states = await StatesAsync(cancellationToken).ConfigureAwait(false);
