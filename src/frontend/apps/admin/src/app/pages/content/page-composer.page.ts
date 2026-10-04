@@ -277,7 +277,7 @@ interface BlockDraft {
                               khButton
                               type="button"
                               size="sm"
-                              variant="danger"
+                              variant="tertiary"
                               (click)="removeItem(draft.id, $index)"
                             >
                               Remove

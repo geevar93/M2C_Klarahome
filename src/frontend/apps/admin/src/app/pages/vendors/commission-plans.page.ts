@@ -14,6 +14,7 @@ import {
   DataTable,
   DataTableColumn,
   EntityDrawer,
+  EntityPicker,
   FormShell,
   PageHeader,
 } from '@klarahome/ui-admin';
@@ -22,6 +23,7 @@ import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableMoney } from '../../core/format';
+import { vendorSearchFor } from '../../core/vendor-search';
 
 /** One rule being edited. Prices are strings until they are sent. */
 interface RuleDraft {
@@ -67,6 +69,7 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
     Control,
     DataTable,
     EntityDrawer,
+    EntityPicker,
     Field,
     FormShell,
     HasPermission,
@@ -138,19 +141,16 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       <aside class="panel">
         <h2>What would this cost a seller?</h2>
         <p class="hint">
-          Locks in the commission rate for that order line, so the answer here is the answer a
-          statement will carry — and it names the rule that matched.
+          Locks in the commission rate for that order line, so the answer here is the answer a statement will
+          carry — and it names the rule that matched.
         </p>
 
-        <kh-field label="Seller id" for="preview-vendor">
-          <input
-            khControl
-            id="preview-vendor"
-            type="text"
-            [value]="previewVendorId()"
-            (input)="previewVendorId.set($any($event.target).value)"
-          />
-        </kh-field>
+        <kh-entity-picker
+          label="Seller"
+          inputId="preview-vendor"
+          [search]="vendorSearch"
+          (chose)="previewVendorId.set($event?.id ?? '')"
+        />
 
         <kh-field label="Category" for="preview-category" [optional]="true">
           <select
@@ -540,6 +540,7 @@ export class CommissionPlansPage {
   protected readonly categoryOptions = signal<readonly { id: string; label: string }[]>([]);
 
   protected readonly previewVendorId = signal('');
+  protected readonly vendorSearch = vendorSearchFor(inject(VendorsAdminService));
   protected readonly previewCategoryId = signal('');
   protected readonly previewPrice = signal('1000');
   protected readonly previewing = signal(false);
@@ -565,7 +566,12 @@ export class CommissionPlansPage {
 
   protected readonly columns: readonly DataTableColumn<CommissionPlanResponse>[] = [
     { key: 'name', label: 'Plan', kind: 'custom' },
-    { key: 'planType', label: 'How', value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType, width: '12rem' },
+    {
+      key: 'planType',
+      label: 'How',
+      value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType,
+      width: '12rem',
+    },
     {
       key: 'defaultRate',
       label: 'Default rate',

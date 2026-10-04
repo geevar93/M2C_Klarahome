@@ -24,7 +24,7 @@ import { BankAccountsPanel } from './bank-accounts.panel';
 import { KycPanel } from './kyc.panel';
 import { PickupLocationsPanel } from './pickup-locations.panel';
 import { ServiceableRegionsPanel } from './serviceable-regions.panel';
-import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
+import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker } from './vendor-vocabulary';
 
 /**
  * One seller, as the platform sees them.
@@ -111,7 +111,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
           <kh-alert tone="warning" heading="Not ready to trade yet">
             <ul>
               @for (blocker of state.blockers; track blocker) {
-                <li>{{ blocker }}</li>
+                <li>{{ readable(blocker) }}</li>
               }
             </ul>
           </kh-alert>
@@ -120,7 +120,12 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
 
       <div class="layout">
         <div class="column">
-          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="canVerify()" (changed)="loadReadiness()" />
+          <kh-kyc-panel
+            [vendorId]="id"
+            [canSubmit]="false"
+            [canVerify]="canVerify()"
+            (changed)="loadReadiness()"
+          />
 
           <kh-bank-accounts-panel
             [vendorId]="id"
@@ -131,7 +136,11 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
 
           <kh-pickup-locations-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
 
-          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
+          <kh-serviceable-regions-panel
+            [vendorId]="id"
+            [canManage]="canManage()"
+            (changed)="loadReadiness()"
+          />
         </div>
 
         <div class="column">
@@ -568,6 +577,7 @@ export class VendorDetailPage {
 
   protected readonly vendor = signal<VendorResponse | null>(null);
   protected readonly readiness = signal<VendorReadiness | null>(null);
+  protected readonly readable = readableBlocker;
   protected readonly plans = signal<readonly CommissionPlanResponse[]>([]);
   protected readonly staff = signal<readonly VendorStaffResponse[]>([]);
 

@@ -265,15 +265,24 @@ export class ReportChart {
   /** The top of the value axis: the largest value, rounded up to something a person would say. */
   private readonly ceiling = computed(() => {
     const largest = this.points().reduce((max, point) => Math.max(max, point.value), 0);
-    return largest <= 0 ? 1 : niceCeiling(largest);
+    if (largest <= 0) return 1;
+    const top = niceCeiling(largest);
+    // A count cannot have a quarter-tick: a ceiling of 1, 2 or 5 split in four gives 0.25 or 1.25
+    // orders. Small whole-number axes use a multiple of four so every gridline is a whole number.
+    return this.wholeNumbers() && top < 20 ? Math.max(4, Math.ceil(top / 4) * 4) : top;
   });
+
+  /** Every value is a whole number (a count), so the axis must not show fractions. */
+  private readonly wholeNumbers = computed(() =>
+    this.points().every((point) => Number.isInteger(point.value)),
+  );
 
   protected readonly ticks = computed<readonly Tick[]>(() => {
     const top = this.ceiling();
     const plotHeight = this.baseline - PAD_TOP;
     return [0, 0.25, 0.5, 0.75, 1].map((fraction) => ({
       y: this.baseline - fraction * plotHeight,
-      label: shortNumber(top * fraction),
+      label: shortNumber(this.wholeNumbers() ? Math.round(top * fraction) : top * fraction),
     }));
   });
 

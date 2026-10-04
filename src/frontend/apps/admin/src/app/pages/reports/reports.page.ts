@@ -119,7 +119,9 @@ const WEEKDAYS = [
                   }
                 </span>
                 @if (!report.isVendorScoped) {
-                  <kh-badge tone="info">The store's own</kh-badge>
+                  <kh-badge tone="info" title="Covers the whole store; sellers cannot run this one"
+                    >Whole store only</kh-badge
+                  >
                 }
               </a>
             }
@@ -296,11 +298,7 @@ const WEEKDAYS = [
         </kh-field>
       }
 
-      <kh-field
-        label="Run at (India time shown, stored as UTC)"
-        for="schedule-hour"
-        [hint]="hourUtcHint()"
-      >
+      <kh-field label="Run at (India time shown, stored as UTC)" for="schedule-hour" [hint]="hourUtcHint()">
         <input
           khControl
           id="schedule-hour"
