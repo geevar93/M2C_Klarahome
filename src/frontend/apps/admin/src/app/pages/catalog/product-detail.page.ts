@@ -214,6 +214,7 @@ interface CategoryOption {
         [summary]="summary()"
         [saving]="saving()"
         [dirty]="dirty()"
+        [revealOnDirty]="!isNew()"
         [submitLabel]="isNew() ? 'Create product' : 'Save changes'"
         (submitted)="save()"
         (cancelled)="back()"
@@ -877,17 +878,20 @@ interface CategoryOption {
       padding-inline-start: var(--space-4);
     }
 
+    /* Each group of fields is a card, with its title as the card's heading. */
     fieldset {
       margin: 0 0 var(--space-4);
-      padding: var(--space-3);
+      padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     legend {
       padding-inline: var(--space-2);
-      font-size: var(--text-sm);
-      font-weight: var(--weight-medium);
+      font-size: var(--text-base);
+      font-weight: var(--weight-semibold);
     }
 
     .hint {
@@ -926,8 +930,9 @@ interface CategoryOption {
       margin-block-start: var(--space-5);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .panel-head {
@@ -976,6 +981,14 @@ interface CategoryOption {
       padding: var(--space-2);
       border-block-end: 1px solid var(--color-border);
       text-align: start;
+    }
+
+    th {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .numeric {

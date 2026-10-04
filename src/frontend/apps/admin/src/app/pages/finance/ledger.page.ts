@@ -393,8 +393,9 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       margin-block-end: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .row {
@@ -466,8 +467,9 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     .panel {
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .panel header {

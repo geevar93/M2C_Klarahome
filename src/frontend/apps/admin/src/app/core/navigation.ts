@@ -8,7 +8,7 @@ import {
   platformPermissionGuard,
   vendorOnlyGuard,
 } from '@klarahome/data-access-auth';
-import { AdminNavHub, AdminNavSection, unsavedChangesGuard } from '@klarahome/ui-admin';
+import { AdminNavGroup, AdminNavHub, AdminNavSection, unsavedChangesGuard } from '@klarahome/ui-admin';
 
 /**
  * Every destination in the back office, declared once.
@@ -151,6 +151,23 @@ export const SECTION_HUB: Readonly<Record<NavSection, HubKey>> = {
   Settings: 'more',
   System: 'more',
 };
+
+/**
+ * The sidebar's headings, and which sections are filed under each.
+ *
+ * The same eleven sections as ever, grouped for a sidebar rather than for a tab bar: a heading is
+ * a static label, the first section under it is a flat list, and any further sections fold away
+ * until they are the one you are in. Every `NavSection` appears in exactly one group (the spec
+ * checks), so nothing declared in `DESTINATIONS` can be missing from the sidebar.
+ */
+export const SIDEBAR_GROUPS: readonly { readonly label: string | null; readonly sections: readonly NavSection[] }[] = [
+  { label: null, sections: ['Home'] },
+  { label: 'Sell', sections: ['Orders'] },
+  { label: 'Catalogue', sections: ['Products', 'Organise', 'Inventory'] },
+  { label: 'Grow', sections: ['Promotions', 'Storefront'] },
+  { label: 'Marketplace', sections: ['Marketplace'] },
+  { label: 'Business', sections: ['Your business', 'Settings', 'System'] },
+];
 
 export const DESTINATIONS: readonly AdminDestination[] = [
   // ---- Home -----------------------------------------------------------------------------------
@@ -760,6 +777,44 @@ export function withQueueCounts(
     const badge = capped ? `${Math.max(total, QUEUE_CAP)}+` : total;
     return { ...hub, sections, badge };
   });
+}
+
+/**
+ * The sidebar: headed groups of sections, with the queue counts on the items and added up on any
+ * section that folds away (so a closed "Inventory" can still say that something is waiting in it).
+ *
+ * Built from `visibleSections()`, the same list the route guards and global search read, so the
+ * sidebar cannot offer a screen the guard would refuse. A group with nothing reachable in it is
+ * dropped, and the first *reachable* section in a group is the flat one.
+ */
+export function sidebarGroups(
+  session: Session | null,
+  counts: ReadonlyMap<string, number | string>,
+): readonly AdminNavGroup[] {
+  const sections = visibleSections(session);
+
+  return SIDEBAR_GROUPS.map((group) => {
+    const own = sections.filter((section) => group.sections.includes(section.label as NavSection));
+    return {
+      label: group.label,
+      sections: own.map((section, index): AdminNavSection => {
+        let total = 0;
+        let capped = false;
+        const items = section.items.map((item) => {
+          const count = counts.get(item.path);
+          if (typeof count === 'number') total += count;
+          if (typeof count === 'string') capped = true;
+          return count === undefined ? item : { ...item, badge: count };
+        });
+        return {
+          ...section,
+          items,
+          collapsible: index > 0,
+          badge: capped ? `${Math.max(total, QUEUE_CAP)}+` : total,
+        };
+      }),
+    };
+  }).filter((group) => group.sections.length > 0);
 }
 
 /** The page the counts are read from; a capped queue is at least this long. Matches `DashboardService`. */

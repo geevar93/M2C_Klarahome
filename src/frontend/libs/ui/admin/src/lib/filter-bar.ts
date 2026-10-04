@@ -92,14 +92,26 @@ const QUICK_CHIP_LIMIT = 8;
     </div>
 
     @if (quick(); as filter) {
+      <!-- The workflow tabs: one underlined tab per status, "All" first. Buttons that set a filter,
+           not a tablist, because nothing here swaps a panel; the page below is the same table. -->
       <div class="quick" role="group" [attr.aria-label]="filter.label">
-        <kh-chip label="All" [selected]="valueOf(filter.key) === ''" (toggled)="apply(filter.key, '')" />
+        <button
+          type="button"
+          class="tab"
+          [attr.aria-pressed]="valueOf(filter.key) === ''"
+          (click)="apply(filter.key, '')"
+        >
+          All
+        </button>
         @for (option of filter.options ?? []; track option.value) {
-          <kh-chip
-            [label]="option.label"
-            [selected]="valueOf(filter.key) === option.value"
-            (toggled)="apply(filter.key, option.value)"
-          />
+          <button
+            type="button"
+            class="tab"
+            [attr.aria-pressed]="valueOf(filter.key) === option.value"
+            (click)="apply(filter.key, option.value)"
+          >
+            {{ option.label }}
+          </button>
         }
       </div>
     }
@@ -184,12 +196,13 @@ const QUICK_CHIP_LIMIT = 8;
       flex: none;
     }
 
-    /* Scrolls sideways on a phone rather than wrapping: a second row of chips above the first row
-       of data is exactly the height this pattern exists to win back. */
+    /* Underline tabs, as the prototype draws its status tabs. They scroll sideways on a phone
+       rather than wrapping: a second row of tabs above the first row of data is exactly the height
+       this pattern exists to win back. */
     .quick {
       display: flex;
-      gap: var(--space-2);
-      margin-block-start: var(--space-2);
+      gap: var(--space-1);
+      margin-block-start: var(--space-1);
       overflow-x: auto;
       scrollbar-width: none;
     }
@@ -198,8 +211,33 @@ const QUICK_CHIP_LIMIT = 8;
       display: none;
     }
 
-    .quick kh-chip {
+    .tab {
       flex: none;
+      padding: var(--space-2) var(--space-3);
+      border: 0;
+      border-block-end: 2px solid transparent;
+      background: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .tab:hover {
+      border-block-end-color: var(--color-border-strong);
+      color: var(--color-text);
+    }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
+      outline-offset: -2px;
+      border-radius: var(--radius-sm);
+    }
+
+    .tab[aria-pressed='true'] {
+      border-block-end-color: var(--color-primary);
+      color: var(--color-primary);
     }
 
     .panel {
@@ -295,6 +333,9 @@ export class FilterBar {
     return this.folded().filter((filter) => (values[filter.key] ?? '') !== '').length;
   });
 
+  /** Whether any search or filter is on, quick one included. */
+  readonly isFiltered = computed(() => Object.values(this.values()).some((value) => value !== ''));
+
   protected readonly chips = computed(() => {
     const values = this.values();
     const quickKey = this.quick()?.key;
@@ -342,7 +383,8 @@ export class FilterBar {
     this.changed.emit(next);
   }
 
-  protected clearAll(): void {
+  /** Switches every search and filter off. Public: an empty table beside the bar offers it. */
+  clearAll(): void {
     this.draft.set('');
     this.changed.emit({});
   }

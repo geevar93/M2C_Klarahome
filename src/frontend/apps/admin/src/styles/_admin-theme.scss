@@ -1,0 +1,176 @@
+// The back office's own skin.
+//
+// The shared primitives (`libs/ui/primitives`) declare every colour, radius and shadow as a
+// semantic custom property, and the storefront re-skins them per tenant. The back office does
+// not: its look is fixed and comes from the owner's reference prototype (teal brand, cool grey
+// neutrals, one status vocabulary), so this file re-maps the *same semantic tokens* for the admin
+// bundle only. Nothing in `libs/` changed to make this happen, which is what keeps the storefront
+// exactly as it was.
+//
+// Two palettes: light (the default) and dark, switched by `html.dark` (see `AdminColourScheme`).
+// Contrast was checked per pairing: muted text is 7.5:1 (light) and 6.9:1 (dark) on the page
+// ground; the input border (`--color-border-strong`) clears the 3:1 UI-boundary floor on both.
+
+:root {
+  color-scheme: light;
+
+  // Surfaces
+  --color-bg: #f9fafb;
+  --color-surface-raised: #ffffff;
+  --color-surface: #f3f4f6;
+  --color-surface-sunken: #f3f4f6;
+  --color-surface-muted: #e5e7eb;
+  --color-surface-inverse: #111827;
+  --color-overlay: rgb(17 24 39 / 55%);
+
+  // Borders
+  --color-border: #e5e7eb;
+  --color-border-strong: #858b96;
+  --color-border-subtle: #f3f4f6;
+  --color-border-inverse: rgb(255 255 255 / 22%);
+
+  // Text
+  --color-text: #111827;
+  --color-text-muted: #4b5563;
+  --color-text-subtle: #374151;
+  --color-text-inverse: #f9fafb;
+  --color-text-on-brand: #ffffff;
+  --color-text-on-image: #f9fafb;
+
+  // Brand: teal
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  --color-primary-active: #134e4a;
+  --color-primary-subtle: #f0fdfa;
+  --color-primary-subtle-hover: #ccfbf1;
+  --color-on-primary: #ffffff;
+  --color-link: #0f766e;
+
+  --color-accent: #0d9488;
+  --color-accent-muted: #99f6e4;
+  --color-accent-surface: #f0fdfa;
+  --color-accent-text: #0f766e;
+
+  // Status vocabulary: green done, orange needs action, blue in progress, yellow waiting, red problem.
+  --color-success: #047857;
+  --color-success-subtle: #ecfdf5;
+  --color-success-text: #065f46;
+
+  --color-warning: #c2410c;
+  --color-warning-subtle: #fff7ed;
+  --color-warning-surface: #ffedd5;
+  --color-warning-text: #9a3412;
+
+  --color-danger: #be123c;
+  --color-danger-subtle: #fff1f2;
+  --color-danger-text: #9f1239;
+
+  --color-info: #1d4ed8;
+  --color-info-subtle: #eff6ff;
+  --color-info-text: #1e40af;
+
+  --color-price: #111827;
+  --color-price-was: #4b5563;
+  --color-savings: #047857;
+
+  --color-focus-ring: #0f766e;
+  --color-focus-ring-inverse: #99f6e4;
+
+  // Type: the back office speaks in the system sans throughout; the storefront's display serif is
+  // a shopper-facing voice.
+  --font-display: var(--font-sans);
+  --weight-display: 700;
+  --tracking-display: -0.01em;
+
+  // Shape and depth
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-color: 16 24 40;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 6%);
+  --shadow-md: 0 2px 4px rgb(var(--shadow-color) / 6%), 0 6px 14px rgb(var(--shadow-color) / 8%);
+  --shadow-lg: 0 4px 8px rgb(var(--shadow-color) / 6%), 0 16px 40px rgb(var(--shadow-color) / 14%);
+
+  // Badges: a soft fill with coloured text and no outline (`libs/ui/primitives` badge hooks).
+  --badge-radius: var(--radius-sm);
+  --badge-border-width: 0px;
+  --badge-shadow: none;
+  --badge-bg: var(--color-surface-muted);
+  --badge-text-primary: var(--color-primary);
+  --badge-text-success: var(--color-success-text);
+  --badge-text-warning: var(--color-warning-text);
+  --badge-text-danger: var(--color-danger-text);
+  --badge-text-info: var(--color-info-text);
+
+  // Frame
+  --header-height: 64px;
+  --sidebar-width: 16rem;
+  --bottom-bar-height: 0px;
+}
+
+:root.dark {
+  color-scheme: dark;
+
+  --color-bg: #111827;
+  --color-surface-raised: #1f2937;
+  --color-surface: #273244;
+  --color-surface-sunken: #172033;
+  --color-surface-muted: #374151;
+  --color-surface-inverse: #f9fafb;
+  --color-overlay: rgb(3 7 18 / 65%);
+
+  --color-border: #374151;
+  --color-border-strong: #6b7280;
+  --color-border-subtle: #273244;
+  --color-border-inverse: rgb(17 24 39 / 30%);
+
+  --color-text: #f9fafb;
+  --color-text-muted: #9ca3af;
+  --color-text-subtle: #d1d5db;
+  --color-text-inverse: #111827;
+  --color-text-on-brand: #2a0710;
+  --color-text-on-image: #f9fafb;
+
+  --color-primary: #2dd4bf;
+  --color-primary-hover: #5eead4;
+  --color-primary-active: #99f6e4;
+  --color-primary-subtle: #12332f;
+  --color-primary-subtle-hover: #174640;
+  --color-on-primary: #042f2e;
+  --color-link: #5eead4;
+
+  --color-accent: #2dd4bf;
+  --color-accent-muted: #115e59;
+  --color-accent-surface: #12332f;
+  --color-accent-text: #5eead4;
+
+  --color-success: #34d399;
+  --color-success-subtle: #0f2f26;
+  --color-success-text: #6ee7b7;
+
+  --color-warning: #fb923c;
+  --color-warning-subtle: #34200f;
+  --color-warning-surface: #432a12;
+  --color-warning-text: #fdba74;
+
+  --color-danger: #fb7185;
+  --color-danger-subtle: #3b1520;
+  --color-danger-text: #fda4af;
+
+  --color-info: #60a5fa;
+  --color-info-subtle: #14263f;
+  --color-info-text: #93c5fd;
+
+  --color-price: #f9fafb;
+  --color-price-was: #9ca3af;
+  --color-savings: #34d399;
+
+  --color-focus-ring: #5eead4;
+  --color-focus-ring-inverse: #115e59;
+
+  --shadow-color: 0 0 0;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 35%);
+  --shadow-md: 0 2px 4px rgb(var(--shadow-color) / 30%), 0 6px 14px rgb(var(--shadow-color) / 35%);
+  --shadow-lg: 0 4px 8px rgb(var(--shadow-color) / 35%), 0 16px 40px rgb(var(--shadow-color) / 55%);
+}

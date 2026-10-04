@@ -5,8 +5,10 @@ import {
   HUBS,
   NAV_SECTIONS,
   SECTION_HUB,
+  SIDEBAR_GROUPS,
   adminRoutes,
   canReach,
+  sidebarGroups,
   visibleHubs,
   visibleSections,
   withQueueCounts,
@@ -163,6 +165,41 @@ describe('Admin navigation rules', () => {
     // A capped tab caps the door: nobody counted past fifty, so the door must not claim to have.
     expect(counted.find((hub) => hub.key === 'products')?.badge).toBe('50+');
     expect(counted.find((hub) => hub.key === 'home')?.badge).toBe(0);
+  });
+
+  it('files every section under exactly one sidebar heading, so nothing declared can go missing', () => {
+    const filed = SIDEBAR_GROUPS.flatMap((group) => group.sections);
+    expect([...filed].sort()).toEqual([...NAV_SECTIONS].sort());
+    expect(new Set(filed).size).toBe(filed.length);
+  });
+
+  it('draws the sidebar from the same reachable list, with the first section of a group flat', () => {
+    const everything = session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) });
+    const groups = sidebarGroups(everything, new Map());
+
+    const paths = groups.flatMap((group) => group.sections.flatMap((section) => section.items.map((item) => item.path)));
+    const reachable = visibleSections(everything).flatMap((section) => section.items.map((item) => item.path));
+    expect(paths.sort()).toEqual(reachable.sort());
+
+    for (const group of groups) {
+      expect(group.sections[0].collapsible).toBe(false);
+      for (const section of group.sections.slice(1)) expect(section.collapsible).toBe(true);
+    }
+  });
+
+  it('counts the queues onto sidebar items and adds them up on a section that folds away', () => {
+    const everything = session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) });
+    const groups = sidebarGroups(everything, new Map<string, number | string>([['/fulfilment', 8], ['/returns', 3]]));
+    const sell = groups.find((group) => group.label === 'Sell');
+    const items = sell?.sections.flatMap((section) => section.items) ?? [];
+
+    expect(items.find((item) => item.path === '/fulfilment')?.badge).toBe(8);
+    expect(sell?.sections[0].badge).toBe(11);
+  });
+
+  it('drops a sidebar group with nothing reachable in it', () => {
+    const groups = sidebarGroups(session({ permissions: ['identity.user.read'] }), new Map());
+    expect(groups.map((group) => group.label)).toEqual([null, 'Business']);
   });
 
   it('builds one guarded route per destination, and every route lazily', () => {

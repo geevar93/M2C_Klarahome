@@ -10,7 +10,7 @@ import {
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
-import { ConfirmDialog, Modal, PageHeader, toneFor } from '@klarahome/ui-admin';
+import { ConfirmDialog, Modal, PageHeader, StatusBadge, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Checkbox, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
@@ -72,6 +72,7 @@ interface CancelDraft {
     Modal,
     PageHeader,
     Skeleton,
+    StatusBadge,
     RouterLink,
   ],
   template: `
@@ -81,12 +82,12 @@ interface CancelDraft {
       [description]="subtitle()"
     >
       @if (order(); as current) {
-        <kh-badge [tone]="tone(current.status)" [title]="orderStatusTooltip(current.status)">
-          {{ orderStatusLabel(current.status) }}
-        </kh-badge>
-        <kh-badge [tone]="tone(current.paymentStatus)" [title]="paymentStatusTooltip(current.paymentStatus)">
-          {{ paymentStatusLabel(current.paymentStatus) }}
-        </kh-badge>
+        <span [title]="orderStatusTooltip(current.status)">
+          <kh-status-badge [status]="current.status" [label]="orderStatusLabel(current.status)" />
+        </span>
+        <span [title]="paymentStatusTooltip(current.paymentStatus)">
+          <kh-status-badge [status]="current.paymentStatus" [label]="paymentStatusLabel(current.paymentStatus)" />
+        </span>
       }
     </kh-page-header>
 
@@ -121,9 +122,9 @@ interface CancelDraft {
                     }
                   </p>
                 </div>
-                <kh-badge [tone]="tone(part.status)" [title]="partStatusTooltip(part.status)">
-                  {{ partStatusLabel(part.status) }}
-                </kh-badge>
+                <span [title]="partStatusTooltip(part.status)">
+                  <kh-status-badge [status]="part.status" [label]="partStatusLabel(part.status)" />
+                </span>
               </header>
 
               <table>
@@ -162,12 +163,15 @@ interface CancelDraft {
               </table>
 
               <div class="part-actions">
-                @for (next of part.nextStatuses; track next) {
+                @for (next of part.nextStatuses; track next; let first = $first) {
+                  <!-- One primary action per part: the first edge the API offers is the way the order
+                       moves forward, and the rest are alternatives. Destructive ones live under Cancel. -->
                   <button
                     *khHasPermission="'orders.order.transition'"
                     khButton
                     type="button"
                     size="sm"
+                    [variant]="first ? 'primary' : 'secondary'"
                     [disabled]="busy()"
                     (click)="transition(part, next)"
                   >
@@ -434,6 +438,7 @@ interface CancelDraft {
 
     .layout {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-4);
     }
 
@@ -448,13 +453,14 @@ interface CancelDraft {
       margin-block-end: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .panel h2 {
       margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
+      font-size: var(--text-base);
     }
 
     .part-head {
@@ -497,10 +503,23 @@ interface CancelDraft {
       font-size: var(--text-sm);
     }
 
+    @media (min-width: 768px) {
+      table {
+        display: table;
+      }
+    }
+
     @media (pointer: coarse) {
       button[khButton] {
         min-block-size: 44px;
       }
+    }
+
+    th {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     th,
@@ -524,14 +543,27 @@ interface CancelDraft {
       list-style: none;
     }
 
+    /* One column on a phone (when, what, who stacked); the three-column row from 640px. */
     .timeline li {
+      padding-inline-start: var(--space-3);
+      border-inline-start: 2px solid var(--color-primary-subtle-hover);
       display: grid;
-      grid-template-columns: 11rem 1fr auto;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-2);
       align-items: baseline;
       padding-block: var(--space-1);
       border-block-end: 1px solid var(--color-border);
       font-size: var(--text-sm);
+    }
+
+    @media (min-width: 768px) {
+      .timeline li {
+        grid-template-columns: 11rem minmax(0, 1fr) auto;
+      }
+    }
+
+    .part-head {
+      flex-wrap: wrap;
     }
 
     .when {

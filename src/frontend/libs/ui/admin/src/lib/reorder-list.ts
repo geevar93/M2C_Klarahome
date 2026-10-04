@@ -150,8 +150,9 @@ export class ReorderItemTemplate {
       align-items: center;
       padding: var(--space-2) var(--space-3);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     li.dragging {

@@ -124,27 +124,32 @@ const MAX_AXIS_LABELS = 12;
         </svg>
       }
 
-      <table [class.kh-visually-hidden]="!showTable()">
-        <caption>
-          {{
-            label()
-          }}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">{{ categoryLabel() }}</th>
-            <th scope="col">{{ valueLabel() }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (point of points(); track point.label) {
+      <!-- The wrapper is what is hidden, not the table: a table keeps its content width whatever
+           overflow is set on it, and an absolutely positioned one that is 300px wider than the
+           viewport still widens the page. -->
+      <div [class.kh-visually-hidden]="!showTable()" [class.data]="showTable()">
+        <table>
+          <caption>
+            {{
+              label()
+            }}
+          </caption>
+          <thead>
             <tr>
-              <th scope="row">{{ point.label }}</th>
-              <td>{{ point.display ?? point.value }}</td>
+              <th scope="col">{{ categoryLabel() }}</th>
+              <th scope="col">{{ valueLabel() }}</th>
             </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (point of points(); track point.label) {
+              <tr>
+                <th scope="row">{{ point.label }}</th>
+                <td>{{ point.display ?? point.value }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     </figure>
   `,
   styles: `
@@ -154,6 +159,10 @@ const MAX_AXIS_LABELS = 12;
 
     figure {
       margin: 0;
+    }
+
+    .data {
+      overflow-x: auto;
     }
 
     figcaption {

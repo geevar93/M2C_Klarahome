@@ -37,7 +37,7 @@ import { Button, Icon } from '@klarahome/ui-primitives';
   template: `
     @if (open()) {
       <div class="backdrop" (click)="requestClose()"></div>
-      <div class="wrap">
+      <div class="wrap" [class.top]="placement() === 'top'">
         <div
           #panel
           class="panel"
@@ -48,6 +48,7 @@ import { Button, Icon } from '@klarahome/ui-primitives';
           tabindex="-1"
           (keydown)="onKeydown($event)"
         >
+          @if (!bare()) {
           <header>
             <h2>{{ heading() }}</h2>
             <button
@@ -62,6 +63,7 @@ import { Button, Icon } from '@klarahome/ui-primitives';
               <kh-icon name="close" size="sm" />
             </button>
           </header>
+          }
 
           <div class="body">
             <ng-content />
@@ -93,6 +95,13 @@ import { Button, Icon } from '@klarahome/ui-primitives';
       pointer-events: none;
     }
 
+    /* The command palette's placement: hung from the upper third, as the prototype has it, so the
+       results list grows downwards instead of the whole dialog re-centring on every keystroke. */
+    .wrap.top {
+      align-items: flex-start;
+      padding-block-start: 12vh;
+    }
+
     .panel {
       display: flex;
       flex-direction: column;
@@ -100,7 +109,7 @@ import { Button, Icon } from '@klarahome/ui-primitives';
       max-height: calc(100vh - var(--space-8));
       pointer-events: auto;
       border-radius: var(--radius-lg);
-      background: var(--color-bg);
+      background: var(--color-surface-raised);
       box-shadow: var(--shadow-lg);
     }
 
@@ -152,6 +161,10 @@ export class Modal {
    * flight, a payout being confirmed — so a stray Escape does not abandon it.
    */
   readonly dismissible = input(true);
+  /** `top` hangs the dialog from the upper third instead of centring it; for a palette. */
+  readonly placement = input<'center' | 'top'>('center');
+  /** Draws no header: for a dialog whose own content is its title (the command palette). */
+  readonly bare = input(false);
   readonly closed = output<void>();
 
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
@@ -167,7 +180,10 @@ export class Modal {
         this.document.body.style.overflow = 'hidden';
         // The panel, not its first control: a screen reader then reads the dialog's name and role
         // before its contents, which is the announcement the user needs.
-        panel.nativeElement.focus({ preventScroll: true });
+        // Unless the content marks a field to land in (`data-autofocus`): a palette is useless
+        // until the cursor is in its box.
+        const field = panel.nativeElement.querySelector<HTMLElement>('[data-autofocus]');
+        (field ?? panel.nativeElement).focus({ preventScroll: true });
         return;
       }
 

@@ -33,6 +33,20 @@ export interface AdminNavItem {
 export interface AdminNavSection {
   readonly label: string;
   readonly items: readonly AdminNavItem[];
+  /**
+   * In the sidebar: drawn as a disclosure that opens onto its items, rather than as a flat list.
+   * The first section of each group is flat (it is what people come for); the rest fold away so
+   * forty-odd destinations do not become forty-odd rows.
+   */
+  readonly collapsible?: boolean;
+  /** The sidebar disclosure's own count: its items' counts added up. Zero and null show nothing. */
+  readonly badge?: number | string | null;
+}
+
+/** A heading in the sidebar, with the sections filed under it. A null label draws no heading. */
+export interface AdminNavGroup {
+  readonly label: string | null;
+  readonly sections: readonly AdminNavSection[];
 }
 
 /**
@@ -50,6 +64,30 @@ export interface AdminNavHub {
   readonly sections: readonly AdminNavSection[];
   /** Everything waiting behind this door, added up. Zero and null show nothing. */
   readonly badge?: number | string | null;
+}
+
+/** One thing in the "+ Create" menu. The app decides what it does when it is chosen. */
+export interface AdminCreateAction {
+  readonly key: string;
+  readonly label: string;
+  readonly hint?: string;
+  readonly icon?: string;
+}
+
+/**
+ * One line in the notifications panel: a queue with something waiting in it.
+ *
+ * These are the work queues the dashboard counts (parcels to pack, returns to decide), not a
+ * feed of events, because the API has no event feed. The count is the point; the panel is the
+ * answer to "is anything waiting for me", and every row is a link into the pre-filtered screen.
+ */
+export interface AdminAttentionItem {
+  readonly key: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly count: number | string;
+  readonly path: string;
+  readonly icon?: string;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -85,6 +123,12 @@ export interface DataTableColumn<TRow> {
   readonly numeric?: boolean;
   /** A fixed width, e.g. `12rem`. Omitted means the column takes what it needs. */
   readonly width?: string;
+  /**
+   * Pins the column to the right edge of a table that scrolls sideways (from 768px; below that rows
+   * are cards). A column keyed `actions` is pinned without asking: the row's main action must never
+   * be the thing that scrolls out of reach.
+   */
+  readonly sticky?: 'end';
 }
 
 /** Re-declared rather than imported from `ui-primitives` so a column definition is data. */

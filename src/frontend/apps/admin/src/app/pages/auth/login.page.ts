@@ -233,7 +233,7 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       justify-content: center;
       min-height: 100vh;
       padding: var(--space-4);
-      background: var(--color-surface);
+      background: var(--color-bg);
     }
 
     .pane {
@@ -242,7 +242,9 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       padding: var(--space-6);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
-      background: var(--color-bg);
+      background: var(--color-surface-raised);
+      border-block-start: 3px solid var(--color-primary);
+      box-shadow: var(--shadow-md);
     }
 
     h1 {

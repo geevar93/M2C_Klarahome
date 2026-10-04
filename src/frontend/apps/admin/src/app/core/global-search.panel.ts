@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { GlobalSearchService, SearchGroup } from '@klarahome/data-access-admin';
+import { GlobalSearchService, SearchGroup, SearchHit } from '@klarahome/data-access-admin';
 import { SessionStore } from '@klarahome/data-access-auth';
 import { Modal } from '@klarahome/ui-admin';
-import { Control, Skeleton } from '@klarahome/ui-primitives';
+import { Control, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { Subscription } from 'rxjs';
 
 import { describeError } from './describe-error';
 import { visibleSections } from './navigation';
+import { QuickAction } from './quick-actions';
 
 /**
  * Global search, as a dialog over whatever you were doing.
@@ -41,18 +42,20 @@ import { visibleSections } from './navigation';
  */
 @Component({
   selector: 'kh-global-search',
-  imports: [Control, Modal, Skeleton],
+  imports: [Control, Icon, Modal, Skeleton],
   template: `
-    <kh-modal [open]="open()" heading="Search" width="36rem" (closed)="close()">
+    <kh-modal [open]="open()" heading="Search" width="40rem" placement="top" [bare]="true" (closed)="close()">
+      <div class="box">
+      <kh-icon name="search" />
       <input
         khControl
         khDescribed="false"
-        #box
+        data-autofocus
         type="search"
         role="combobox"
         aria-autocomplete="list"
-        aria-label="Search orders, products, sellers and users"
-        placeholder="Order number, product, seller, email…"
+        aria-label="Search orders, products, sellers and users, or run a command"
+        placeholder="Search orders, products, sellers or type a command…"
         autocomplete="off"
         [attr.aria-expanded]="hits().length > 0"
         [attr.aria-controls]="listId"
@@ -61,29 +64,34 @@ import { visibleSections } from './navigation';
         (input)="onType($any($event.target).value)"
         (keydown)="onKeydown($event)"
       />
+      <kbd aria-hidden="true">Esc</kbd>
+      </div>
 
       @if (loading()) {
         <div class="state"><kh-skeleton [lines]="3" height="1rem" /></div>
       } @else if (failure(); as message) {
         <p class="state error">{{ message }}</p>
-      } @else if (term().trim().length < 2) {
+      } @else if (hits().length === 0 && term().trim().length < 2) {
         <p class="state">Type at least two characters. Orders are matched by their number.</p>
       } @else if (hits().length === 0) {
         <p class="state">Nothing found for “{{ term() }}”. Try a screen name, like “promotions”.</p>
       } @else {
+        @if (term().trim().length < 2) {
+          <p class="state hint">Type at least two characters to search. Orders are matched by their number.</p>
+        }
         <ul role="listbox" [id]="listId" [attr.aria-label]="'Search results'">
           @for (group of groups(); track group.key) {
             <li role="presentation" class="group">
               <p class="group-label" [id]="listId + '-' + group.key">{{ group.label }}</p>
               <ul role="group" [attr.aria-labelledby]="listId + '-' + group.key">
-                @for (hit of group.hits; track hit.path) {
+                @for (hit of group.hits; track hit) {
                   <li
                     role="option"
-                    [id]="listId + '-opt-' + indexOf(hit.path)"
-                    [attr.aria-selected]="activeIndex() === indexOf(hit.path)"
-                    [class.active]="activeIndex() === indexOf(hit.path)"
-                    (click)="go(hit.path)"
-                    (mouseenter)="activeIndex.set(indexOf(hit.path))"
+                    [id]="listId + '-opt-' + indexOf(hit)"
+                    [attr.aria-selected]="activeIndex() === indexOf(hit)"
+                    [class.active]="activeIndex() === indexOf(hit)"
+                    (click)="go(hit)"
+                    (mouseenter)="activeIndex.set(indexOf(hit))"
                   >
                     <span class="title">{{ hit.title }}</span>
                     <span class="subtitle">{{ hit.subtitle }}</span>
@@ -97,8 +105,41 @@ import { visibleSections } from './navigation';
     </kh-modal>
   `,
   styles: `
-    input {
-      margin-block-end: var(--space-3);
+    .box {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-3);
+      padding-inline: var(--space-4);
+      border-block-end: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+    }
+
+    .box input {
+      flex: 1;
+      min-height: 3.5rem;
+      padding-inline: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      font-size: var(--text-base);
+    }
+
+    .box input:focus-visible {
+      outline: none;
+    }
+
+    kbd {
+      padding: 0 var(--space-1);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-sans);
+      font-size: var(--text-xs);
+    }
+
+    .state.hint {
+      padding-block: 0 var(--space-3);
+      font-size: var(--text-xs);
     }
 
     .state {
@@ -161,7 +202,11 @@ export class GlobalSearchPanel {
   private readonly session = inject(SessionStore);
 
   readonly open = input(false);
+  /** The "+ Create" shortcuts this session may use, offered as commands. */
+  readonly actions = input<readonly QuickAction[]>([]);
   readonly closed = output<void>();
+  /** A command was chosen. Links are followed here; one with a sheet of its own is handed up. */
+  readonly actionChosen = output<QuickAction>();
 
   protected readonly listId = 'global-search-results';
   protected readonly term = signal('');
@@ -229,9 +274,33 @@ export class GlobalSearchPanel {
   });
 
   /** The "Go to" group first, then whatever records the search found — see the class doc. */
+  /** Commands: all of them with nothing typed, the matching ones once there is a term. */
+  protected readonly actionGroup = computed<SearchGroup | null>(() => {
+    const query = this.term().trim().toLowerCase();
+    const matching = this.actions().filter(
+      (action) =>
+        query.length === 0 ||
+        action.label.toLowerCase().includes(query) ||
+        `create ${action.label}`.toLowerCase().includes(query) ||
+        `new ${action.label}`.toLowerCase().includes(query),
+    );
+    if (matching.length === 0) return null;
+    return {
+      key: 'actions',
+      label: 'Quick actions',
+      hits: matching.map((action) => ({
+        id: action.targetPath,
+        title: `Create: ${action.label}`,
+        subtitle: action.hint,
+        path: action.targetPath,
+      })),
+    };
+  });
+
   protected readonly groups = computed<readonly SearchGroup[]>(() => {
     const screens = this.screenGroup();
-    return screens ? [screens, ...this.recordGroups()] : this.recordGroups();
+    const commands = this.actionGroup();
+    return [...(commands ? [commands] : []), ...(screens ? [screens] : []), ...this.recordGroups()];
   });
 
   constructor() {
@@ -248,12 +317,13 @@ export class GlobalSearchPanel {
   }
 
   /** Every hit, flattened, so the keyboard can move through them regardless of grouping. */
-  protected hits(): readonly { path: string }[] {
+  protected hits(): readonly SearchHit[] {
     return this.groups().flatMap((group) => group.hits);
   }
 
-  protected indexOf(path: string): number {
-    return this.hits().findIndex((hit) => hit.path === path);
+  /** By reference, not by path: a command and a screen can share one (`/inventory/purchase-orders`). */
+  protected indexOf(hit: SearchHit): number {
+    return this.hits().indexOf(hit);
   }
 
   protected activeId(): string | null {
@@ -286,7 +356,7 @@ export class GlobalSearchPanel {
         const hit = this.hits()[this.activeIndex()];
         if (!hit) return;
         event.preventDefault();
-        this.go(hit.path);
+        this.go(hit);
         return;
       }
       default:
@@ -294,9 +364,14 @@ export class GlobalSearchPanel {
     }
   }
 
-  protected go(path: string): void {
+  protected go(hit: SearchHit): void {
+    // A command is told apart from a screen by the group it came from, not by its path.
+    const action = this.actionGroup()?.hits.includes(hit)
+      ? this.actions().find((candidate) => candidate.targetPath === hit.path)
+      : undefined;
     this.close();
-    void this.router.navigateByUrl(path);
+    if (action) this.actionChosen.emit(action);
+    else void this.router.navigateByUrl(hit.path);
   }
 
   protected close(): void {

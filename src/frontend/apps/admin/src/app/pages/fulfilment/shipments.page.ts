@@ -20,6 +20,7 @@ import {
   FilterValues,
   PageHeader,
   toneFor,
+  StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
@@ -50,6 +51,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
 @Component({
   selector: 'kh-shipments-page',
   imports: [
+    StatusBadge,
     Alert,
     Badge,
     Button,
@@ -200,9 +202,9 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
           <div>
             <dt>Status</dt>
             <dd>
-              <kh-badge [tone]="tone(parcel.status)" [title]="statusTooltip(parcel.status)">
-                {{ statusLabelFor(parcel.status) }}
-              </kh-badge>
+              <span [title]="statusTooltip(parcel.status)">
+                <kh-status-badge [status]="parcel.status" [label]="statusLabelFor(parcel.status)" />
+              </span>
             </dd>
           </div>
           <div>

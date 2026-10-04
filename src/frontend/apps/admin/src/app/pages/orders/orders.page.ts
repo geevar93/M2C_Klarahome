@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { OrderFilters, OrderSummaryResponse, OrdersAdminService } from '@klarahome/data-access-admin';
 import {
   CellTemplate,
@@ -36,6 +36,9 @@ import {
  * status; the parts column shows the distinct statuses underneath it, which is the honest
  * summary — "Partially shipped" as a single word would be a status the domain does not have.
  */
+/** The filter keys that are mirrored into the address bar. */
+const FILTER_KEYS = ['status', 'paymentStatus', 'q', 'from', 'to'] as const;
+
 @Component({
   selector: 'kh-orders-page',
   imports: [Alert, Badge, CellTemplate, DataTable, FilterBar, PageHeader, RouterLink],
@@ -117,6 +120,8 @@ import {
 export class OrdersPage {
   protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   private readonly orders = inject(OrdersAdminService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly list = this.orders.orders();
   protected readonly values = signal<FilterValues>({});
@@ -191,7 +196,16 @@ export class OrdersPage {
   ];
 
   constructor() {
-    this.list.load();
+    // The filters live in the URL (`?status=Delivered&q=KH-1042`), so a link from the dashboard or
+    // the notifications panel lands on the right slice, and Back restores the one you left.
+    const query = this.route.snapshot.queryParamMap;
+    const initial: Record<string, string> = {};
+    for (const key of FILTER_KEYS) {
+      const value = query.get(key);
+      if (value) initial[key] = value;
+    }
+    // `setFilters` loads the first page, so there is no separate `load()`.
+    this.applyFilters(initial, false);
   }
 
   protected tone(status: string) {
@@ -202,8 +216,16 @@ export class OrdersPage {
     return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
   }
 
-  protected applyFilters(values: FilterValues): void {
+  protected applyFilters(values: FilterValues, syncUrl = true): void {
     this.values.set(values);
+    if (syncUrl) {
+      // Replace, not push: each chip press is a refinement of one view, not a page of history.
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: Object.fromEntries(FILTER_KEYS.map((key) => [key, values[key] || null])),
+        replaceUrl: true,
+      });
+    }
     const filters: OrderFilters = {
       status: values['status'],
       paymentStatus: values['paymentStatus'],

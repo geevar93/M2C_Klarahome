@@ -17,6 +17,7 @@ import {
   Modal,
   PageHeader,
   toneFor,
+  StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { Observable, map, of } from 'rxjs';
@@ -78,6 +79,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
 @Component({
   selector: 'kh-return-detail-page',
   imports: [
+    StatusBadge,
     Alert,
     Badge,
     Button,
@@ -97,9 +99,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       [description]="subtitle()"
     >
       @if (rma(); as current) {
-        <kh-badge [tone]="tone(current.status)" [title]="statusTooltip(current.status)">
-          {{ statusLabelFor(current.status) }}
-        </kh-badge>
+        <span [title]="statusTooltip(current.status)">
+          <kh-status-badge [status]="current.status" [label]="statusLabelFor(current.status)" />
+        </span>
       }
     </kh-page-header>
 

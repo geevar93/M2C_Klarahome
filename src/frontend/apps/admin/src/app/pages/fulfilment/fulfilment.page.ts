@@ -9,7 +9,7 @@ import {
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { Modal, PageHeader, toneFor } from '@klarahome/ui-admin';
+import { Modal, PageHeader, StatusBadge, toneFor } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
@@ -53,7 +53,7 @@ interface PackLine {
  */
 @Component({
   selector: 'kh-fulfilment-page',
-  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton],
+  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
   template: `
     <kh-page-header
       heading="To pack"
@@ -161,9 +161,9 @@ interface PackLine {
                 </td>
                 <td data-label="Seller">{{ part.vendorName ?? '—' }}</td>
                 <td data-label="Status">
-                  <kh-badge [tone]="tone(part.status)" [title]="statusTooltip(part.status)">
-                    {{ statusLabelFor(part.status) }}
-                  </kh-badge>
+                  <span [title]="statusTooltip(part.status)">
+                    <kh-status-badge [status]="part.status" [label]="statusLabelFor(part.status)" />
+                  </span>
                 </td>
                 <td class="numeric" data-label="Items">{{ part.lines.length }}</td>
                 <td data-label="Dispatch due">

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   CatalogApiClient,
   NotificationsApiClient,
+  OrderSummaryResponse,
   OrdersApiClient,
   ReturnsApiClient,
   VendorsApiClient,
@@ -57,6 +58,19 @@ export class DashboardService {
   private static readonly Quiet = { silentErrors: true, showLoading: false } as const;
 
   /** The tiles this user may see, with their counts. */
+  /**
+   * The five most recent orders, for the dashboard's "Recent orders" card.
+   *
+   * Empty (not an error) when the session may not read orders or the call fails: the card is a
+   * convenience, and the dashboard must not turn red because a side list could not load.
+   */
+  recentOrders(): Observable<readonly OrderSummaryResponse[]> {
+    if (!this.session.hasPermission('orders.order.read')) return of([]);
+    return this.orders
+      .adminListOrders({ size: 5 }, DashboardService.Quiet)
+      .pipe(map((result) => result.items), catchError(() => of([])));
+  }
+
   tiles(): Observable<readonly DashboardTile[]> {
     const quiet = DashboardService.Quiet;
     const sources: Observable<DashboardTile | null>[] = [];

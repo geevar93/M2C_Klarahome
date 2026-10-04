@@ -1,24 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
-import {
-  IdentityAdminService,
-  ImpersonationStore,
-  NotificationCentreService,
-  VendorsAdminService,
-} from '@klarahome/data-access-admin';
+import { IdentityAdminService, ImpersonationStore, VendorsAdminService } from '@klarahome/data-access-admin';
 import { SessionStore } from '@klarahome/data-access-auth';
-import { AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
+import { AdminAttentionItem, AdminCreateAction, AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
 import { ToastHost } from '@klarahome/ui-primitives';
-import { filter } from 'rxjs';
+import { filter, map } from 'rxjs';
 
-import { CreateSheet } from './create-sheet';
-import { visibleHubs, withQueueCounts } from './navigation';
+import { breadcrumbsFor } from './breadcrumbs';
+import { ColourSchemeService } from './colour-scheme';
+import { sidebarGroups } from './navigation';
 import { GlobalSearchPanel } from './global-search.panel';
 import { ProductQuickAdd } from './product-quick-add';
 import { QueueCountsStore } from './queue-counts.store';
 import { QuickAction, quickActionsFor } from './quick-actions';
 import { SignInFlow } from './sign-in.flow';
+
+/** The glyph each work queue wears in the notifications panel. */
+const ATTENTION_ICONS: Readonly<Record<string, string>> = {
+  'to-pack': 'package',
+  overdue: 'clock',
+  returns: 'refresh',
+  moderation: 'check',
+  vendors: 'user',
+  notifications: 'alert',
+};
 
 /**
  * Everything behind the sign-in screen.
@@ -27,43 +33,45 @@ import { SignInFlow } from './sign-in.flow';
  * a shell that rendered its own navigation around a sign-in form would be a menu of links to
  * screens the visitor cannot open, and the identity in its top bar would have nobody to name.
  *
- * It owns the two pieces of state that belong to the whole back office and to no page — whether
- * global search is up, and whether the "+ New" sheet is — and nothing else. Everything a page needs, a page fetches. The navigation
- * itself holds no state any more: the five doors are always on screen and the tabs behind the
- * open one follow the route, so there is no drawer to open and no rail to collapse.
+ * It owns the state that belongs to the whole back office and to no page — whether the command
+ * palette is up, whether the product quick-add sheet is, and the colour scheme — and nothing else.
+ * Everything a page needs, a page fetches.
  *
- * The **hubs come off the session**, through the same declaration the route guards are built
+ * The **sidebar comes off the session**, through the same declaration the route guards are built
  * from (`navigation.ts`), so the shell cannot offer a screen the guard will refuse. The counts on
- * them come off `QueueCountsStore`, the same numbers the dashboard shows, refreshed on navigation
- * at the store's own pace.
+ * it, and in the notifications panel, come off `QueueCountsStore`, the same numbers the dashboard
+ * shows, refreshed on navigation at the store's own pace. The breadcrumb trail is derived from
+ * the same declaration and the current URL (`breadcrumbs.ts`).
  */
 @Component({
   selector: 'kh-admin-layout',
-  imports: [AdminShell, CreateSheet, GlobalSearchPanel, ProductQuickAdd, RouterOutlet, ToastHost],
+  imports: [AdminShell, GlobalSearchPanel, ProductQuickAdd, RouterOutlet, ToastHost],
   template: `
     <kh-admin-shell
-      [hubs]="hubs()"
+      [groups]="groups()"
+      [crumbs]="crumbs()"
       [identity]="identity()"
-      [showNotifications]="canReadNotifications()"
-      [notificationCount]="notificationCount()"
-      [showCreate]="quickActions().length > 0"
-      (createOpened)="createOpen.set(true)"
+      [showNotifications]="true"
+      [attention]="attention()"
+      [messageLogPath]="canReadNotifications() ? '/notifications' : null"
+      [createActions]="createActions()"
+      [scheme]="scheme.scheme()"
       [impersonation]="impersonation()"
       [endingImpersonation]="endingImpersonation()"
+      (createChosen)="createFromMenu($event)"
       (searchOpened)="searchOpen.set(true)"
+      (schemeToggled)="scheme.toggle()"
       (signedOut)="signOut()"
       (impersonationExited)="endImpersonation()"
     >
       <router-outlet />
     </kh-admin-shell>
 
-    <kh-global-search [open]="searchOpen()" (closed)="searchOpen.set(false)" />
-
-    <kh-create-sheet
-      [open]="createOpen()"
+    <kh-global-search
+      [open]="searchOpen()"
       [actions]="quickActions()"
-      (closed)="createOpen.set(false)"
-      (opened)="openQuickAction($event)"
+      (closed)="searchOpen.set(false)"
+      (actionChosen)="openQuickAction($event)"
     />
 
     <kh-product-quick-add [open]="productQuickAddOpen()" (closed)="productQuickAddOpen.set(false)" />
@@ -71,36 +79,82 @@ import { SignInFlow } from './sign-in.flow';
     <kh-toast-host />
   `,
   host: {
-    // `/` opens search from anywhere, as it does in every tool the people using this already use.
-    // Guarded so it does not steal the slash out of somebody's typing.
+    // Ctrl/Cmd+K opens the command palette from anywhere, and so does `/` (as it does in every
+    // tool the people using this already use). `/` is guarded so it does not steal the slash out
+    // of somebody's typing; Ctrl/Cmd+K is safe to take everywhere because no field uses it.
     '(document:keydown)': 'onKeydown($event)',
   },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShellLayout {
   private readonly session = inject(SessionStore);
-  private readonly notifications = inject(NotificationCentreService);
   private readonly vendors = inject(VendorsAdminService);
   private readonly signInFlow = inject(SignInFlow);
   private readonly router = inject(Router);
 
   private readonly queues = inject(QueueCountsStore);
 
+  protected readonly scheme = inject(ColourSchemeService);
+
   protected readonly searchOpen = signal(false);
-  protected readonly createOpen = signal(false);
   protected readonly productQuickAddOpen = signal(false);
 
-  /** A "+ New" entry with a sheet of its own: this sheet closes, that one opens. */
+  /**
+   * A quick action chosen from the palette or the Create menu. Most are a link; the product one
+   * has a sheet of its own, which opens here rather than navigating to the full form.
+   */
   protected openQuickAction(action: QuickAction): void {
-    this.createOpen.set(false);
     if (action.opens === 'product-quick-add') this.productQuickAddOpen.set(true);
+    else void this.router.navigateByUrl(action.targetPath);
   }
 
-  protected readonly hubs = computed(() =>
-    withQueueCounts(visibleHubs(this.session.session()), this.queues.countsByPath()),
+  protected createFromMenu(key: string): void {
+    const action = this.quickActions().find((candidate) => candidate.targetPath === key);
+    if (action) this.openQuickAction(action);
+  }
+
+  protected readonly groups = computed(() =>
+    sidebarGroups(this.session.session(), this.queues.countsByPath()),
   );
   protected readonly quickActions = computed(() => quickActionsFor(this.session.session()));
-  protected readonly notificationCount = this.notifications.attentionCount;
+
+  protected readonly createActions = computed<readonly AdminCreateAction[]>(() =>
+    this.quickActions().map((action) => ({
+      key: action.targetPath,
+      label: action.label,
+      hint: action.hint,
+      icon: action.icon,
+    })),
+  );
+
+  /** The trail above the page, from the current URL and the same declaration the routes come from. */
+  protected readonly crumbs = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => breadcrumbsFor((event as NavigationEnd).urlAfterRedirects)),
+    ),
+    { initialValue: breadcrumbsFor(this.router.url) },
+  );
+
+  /**
+   * The notifications panel: the work queues that have something in them.
+   *
+   * The same numbers the dashboard shows (`QueueCountsStore`), not a separate feed — the API has
+   * no event stream, and a second source would be a second number that disagrees with the first.
+   */
+  protected readonly attention = computed<readonly AdminAttentionItem[]>(() =>
+    this.queues
+      .tiles()
+      .filter((tile) => tile.value !== null && tile.value !== 0)
+      .map((tile) => ({
+        key: tile.key,
+        label: tile.label,
+        hint: tile.hint,
+        count: tile.value as number | string,
+        path: tile.path,
+        icon: ATTENTION_ICONS[tile.key],
+      })),
+  );
 
   protected readonly canReadNotifications = computed(() =>
     this.session.hasPermission('notifications.log.read'),
@@ -191,11 +245,6 @@ export class ShellLayout {
       void this.signInFlow.sessionEnded(this.router.url);
     });
 
-    // Counted once on entry rather than polled. See `NotificationCentreService` for why.
-    if (this.session.hasPermission('notifications.log.read')) {
-      this.notifications.refreshAttentionCount().subscribe({ error: () => undefined });
-    }
-
     // The queue counts on the tabs: on entry, and then on each navigation once they have gone
     // stale. The store decides what stale means; see `QueueCountsStore`.
     this.queues.refresh(true);
@@ -215,6 +264,12 @@ export class ShellLayout {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      this.searchOpen.set(true);
+      return;
+    }
+
     if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
 
     // Not while somebody is typing. `isContentEditable` covers the rich-text editor Step 28 adds.

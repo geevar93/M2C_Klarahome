@@ -59,6 +59,7 @@ import { MediaPicker } from '../catalog/media-picker';
           [summary]="profileSummary()"
           [saving]="savingProfile()"
           [dirty]="profileDirty()"
+          [revealOnDirty]="true"
           submitLabel="Save shopfront"
           [cancelLabel]="'Undo changes'"
           (submitted)="saveProfile()"
@@ -128,6 +129,7 @@ import { MediaPicker } from '../catalog/media-picker';
             [summary]="operationsSummary()"
             [saving]="savingOperations()"
             [dirty]="operationsDirty()"
+            [revealOnDirty]="true"
             submitLabel="Save promises"
             [cancelLabel]="'Undo changes'"
             (submitted)="saveOperations()"
@@ -265,8 +267,9 @@ import { MediaPicker } from '../catalog/media-picker';
     .panel {
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     h2 {

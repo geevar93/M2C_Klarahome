@@ -128,6 +128,7 @@ const NEW = 'new';
           [summary]="summary()"
           [saving]="busy()"
           [dirty]="form.dirty()"
+          [revealOnDirty]="!isNew()"
           [submitLabel]="isNew() ? 'Create promotion' : 'Save changes'"
           (submitted)="save()"
           (cancelled)="back()"
@@ -1246,7 +1247,14 @@ export class PromotionDetailPage implements HasUnsavedChanges {
       next: (saved) => {
         this.busy.set(false);
         this.promotion.set(saved);
-        this.toasts.success(saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.');
+        // Reversible, so it is undoable rather than confirmed, exactly as on the list: Undo is the
+        // other call, made against the state this one just produced.
+        this.toasts.show({
+          tone: 'success',
+          message: saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.',
+          durationMs: 8000,
+          action: { label: 'Undo', run: () => this.toggle(saved) },
+        });
       },
       error: (error: unknown) => {
         this.busy.set(false);

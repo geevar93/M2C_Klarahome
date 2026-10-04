@@ -14,8 +14,9 @@ import {
   FilterDefinition,
   FilterValues,
   PageHeader,
+  StatusBadge,
 } from '@klarahome/ui-admin';
-import { Alert, Badge, Button, Icon } from '@klarahome/ui-primitives';
+import { Alert, Button, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
@@ -39,7 +40,7 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
  */
 @Component({
   selector: 'kh-promotions-page',
-  imports: [Alert, Badge, Button, CellTemplate, DataTable, FilterBar, Icon, PageHeader, RouterLink],
+  imports: [Alert, Button, CellTemplate, DataTable, FilterBar, Icon, PageHeader, RouterLink, StatusBadge],
   template: `
     <kh-page-header heading="Promotions" description="Coupons and cart rules, and when each one applies.">
       <a khButton routerLink="/promotions/new" variant="primary">
@@ -84,6 +85,14 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
         <span class="note">
           @if (row.code) {
             Coupon <code>{{ row.code }}</code>
+            <button
+              type="button"
+              class="copy"
+              [attr.aria-label]="'Copy the code ' + row.code"
+              (click)="copyCode(row.code)"
+            >
+              <kh-icon name="clipboard" size="sm" />
+            </button>
           } @else {
             Automatic — no code to type
           }
@@ -91,9 +100,7 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
       </ng-template>
 
       <ng-template khCell="state" let-row>
-        <kh-badge [tone]="row.isActive ? 'success' : 'neutral'">
-          {{ row.isActive ? 'On' : 'Off' }}
-        </kh-badge>
+        <kh-status-badge [status]="stateOf(row)" />
         <span class="note">{{ windowLabel(row) }}</span>
       </ng-template>
 
@@ -101,6 +108,11 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
         <span>{{ row.usageCount }}</span>
         @if (row.usageLimitTotal !== null) {
           <span class="note">of {{ row.usageLimitTotal }}</span>
+          <progress
+            [value]="row.usageCount"
+            [max]="row.usageLimitTotal || 1"
+            [attr.aria-label]="row.usageCount + ' of ' + row.usageLimitTotal + ' uses'"
+          ></progress>
         }
       </ng-template>
 
@@ -136,6 +148,30 @@ import { PROMOTION_TYPES } from './promotion-vocabulary';
 
     code {
       font-family: var(--font-mono);
+    }
+
+    .copy {
+      display: inline-flex;
+      padding: var(--space-1);
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: none;
+      color: var(--color-text-muted);
+      vertical-align: middle;
+      cursor: pointer;
+    }
+
+    .copy:hover {
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    progress {
+      display: block;
+      inline-size: 5rem;
+      block-size: 0.375rem;
+      margin-block-start: var(--space-1);
+      accent-color: var(--color-primary);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -194,13 +230,16 @@ export class PromotionsPage {
       key: 'type',
       label: 'Discount type',
       kind: 'select',
+      quick: false,
       options: PROMOTION_TYPES.map((entry) => ({ value: entry.value, label: entry.label })),
     },
     {
+      // The one workflow tab the API can filter on: All, or only what is switched on.
       key: 'activeOnly',
       label: 'State',
       kind: 'select',
-      options: [{ value: 'true', label: 'Switched on only' }],
+      quick: true,
+      options: [{ value: 'true', label: 'Switched on' }],
     },
   ];
 
@@ -214,6 +253,22 @@ export class PromotionsPage {
   }
 
   /** What the dates say, which is not what `isActive` says. See the class remarks. */
+  /** The one status the list shows: off beats everything, then the clock decides. */
+  protected stateOf(row: PromotionResponse): string {
+    if (!row.isActive) return 'Disabled';
+    const now = Date.now();
+    if (now < new Date(row.startsAt).getTime()) return 'Scheduled';
+    if (row.endsAt && now > new Date(row.endsAt).getTime()) return 'Expired';
+    return 'Active';
+  }
+
+  protected copyCode(code: string): void {
+    navigator.clipboard.writeText(code).then(
+      () => this.toasts.success(`Copied ${code}.`),
+      () => this.toasts.warning('The browser would not let this page copy. Select the code and copy it by hand.'),
+    );
+  }
+
   protected windowLabel(row: PromotionResponse): string {
     const now = Date.now();
     const starts = new Date(row.startsAt).getTime();
@@ -246,7 +301,13 @@ export class PromotionsPage {
     request.subscribe({
       next: () => {
         this.busyId.set(null);
-        this.toasts.success(row.isActive ? 'Promotion switched off.' : 'Promotion switched on.');
+        // Reversible, so it is undoable rather than confirmed: Undo is the other call.
+        this.toasts.show({
+          tone: 'success',
+          message: row.isActive ? 'Promotion switched off.' : 'Promotion switched on.',
+          durationMs: 8000,
+          action: { label: 'Undo', run: () => this.toggle({ ...row, isActive: !row.isActive }) },
+        });
         this.list.refresh();
       },
       error: (error: unknown) => {

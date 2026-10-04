@@ -81,7 +81,7 @@ export const unsavedChangesGuard: CanDeactivateFn<HasUnsavedChanges> = (componen
         <ng-content />
       </div>
 
-      <footer>
+      <footer [hidden]="revealOnDirty() && !dirty() && !saving()">
         <ng-content select="[slot=actions]" />
 
         @if (showDefaultActions()) {
@@ -136,13 +136,26 @@ export const unsavedChangesGuard: CanDeactivateFn<HasUnsavedChanges> = (componen
       padding-inline-start: var(--space-5);
     }
 
+    /* The save bar rides the bottom edge of the viewport while the form is longer than the screen,
+       so Save is never a scroll away. A raised bar rather than a rule, so it reads as a control
+       surface and not as the end of the content. */
     footer {
+      position: sticky;
+      inset-block-end: var(--space-3);
+      z-index: 5;
       display: flex;
       flex-wrap: wrap;
       gap: var(--space-2);
       justify-content: flex-end;
-      padding-block-start: var(--space-4);
-      border-block-start: 1px solid var(--color-border);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+      box-shadow: var(--shadow-md);
+    }
+
+    footer[hidden] {
+      display: none;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -154,6 +167,11 @@ export class FormShell {
   readonly summary = input<readonly string[]>([]);
   readonly saving = input(false);
   readonly dirty = input(false);
+  /**
+   * Show the save bar only once something has changed, as the prototype's product form does. Opt in
+   * for an existing record being edited; a form that creates something must keep it visible.
+   */
+  readonly revealOnDirty = input(false);
   readonly submitLabel = input('Save');
   readonly cancelLabel = input('Cancel');
   /** False when the screen projects its own footer through the `actions` slot. */

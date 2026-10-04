@@ -786,8 +786,9 @@ interface BlockDraft {
     .library {
       padding: var(--space-3);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     @media (min-width: 768px) {

@@ -11,7 +11,6 @@ import { Alert, Badge, Button, Checkbox, Control, Disclosure, Field, Skeleton } 
 import {
   THEME_MARKER_TOKEN,
   THEME_PRESETS,
-  ThemeService,
   ToastService,
   presetIdFromTokens,
 } from '@klarahome/util';
@@ -84,8 +83,26 @@ interface SettingField {
         save is rejected, the problem is shown next to that section.
       </p>
 
+      <div class="layout">
+      <nav class="sections" aria-label="Settings sections">
+        <ul>
+          @for (entry of sections(); track entry.key) {
+            <li>
+              <button
+                type="button"
+                [attr.aria-current]="current() === entry.key ? 'true' : null"
+                (click)="jump(entry.key)"
+              >
+                {{ humanise(entry.key) }}
+              </button>
+            </li>
+          }
+        </ul>
+      </nav>
+
+      <div class="stack">
       @for (section of sections(); track section.key) {
-        <section class="panel">
+        <section class="panel" [id]="'settings-' + section.key">
           <header>
             <h2>{{ humanise(section.key) }}</h2>
             @if (section.isPublic) {
@@ -215,9 +232,94 @@ interface SettingField {
           }
         </section>
       }
+      </div>
+      </div>
     }
   `,
   styles: `
+    /* A single track that may shrink: an auto track is as wide as its widest nowrap child, which
+       is the whole tab row, and that pushed the form card off the right edge of a phone. */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-4);
+    }
+
+    .sections {
+      min-width: 0;
+    }
+
+    .stack {
+      min-width: 0;
+      max-width: 48rem;
+    }
+
+    /* A phone gets the sections as a row of tabs that scrolls sideways; a desktop gets the
+       prototype's vertical list, held beside the form while it scrolls. */
+    .sections ul {
+      display: flex;
+      gap: var(--space-1);
+      margin: 0;
+      padding: 0;
+      overflow-x: auto;
+      list-style: none;
+      scrollbar-width: none;
+    }
+
+    .sections li {
+      display: flex;
+    }
+
+    .sections button {
+      min-block-size: 2.5rem;
+      line-height: var(--leading-tight);
+      padding: var(--space-2) var(--space-3);
+      border: 0;
+      border-radius: var(--radius-md);
+      background: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .sections button:hover {
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .sections button[aria-current='true'] {
+      background: var(--color-primary-subtle);
+      color: var(--color-primary);
+    }
+
+    @media (min-width: 1024px) {
+      .layout {
+        grid-template-columns: 13rem minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .sections {
+        position: sticky;
+        inset-block-start: calc(var(--header-height) + var(--space-4));
+      }
+
+      .sections ul {
+        flex-direction: column;
+        overflow: visible;
+      }
+
+      .sections button {
+        inline-size: 100%;
+        text-align: start;
+      }
+
+      .panel {
+        scroll-margin-block-start: calc(var(--header-height) + var(--space-4));
+      }
+    }
+
     kh-alert,
     kh-theme-picker,
     kh-disclosure {
@@ -243,10 +345,11 @@ interface SettingField {
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-4);
+      padding: var(--space-5);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     header {
@@ -276,12 +379,12 @@ interface SettingField {
     }
 
     .note {
-      margin: 0;
+      margin: 0 0 var(--space-4);
       color: var(--color-text-muted);
       font-size: var(--text-sm);
     }
 
-    button {
+    .panel > button {
       margin-block-start: var(--space-3);
     }
   `,
@@ -290,7 +393,6 @@ interface SettingField {
 export class StoreSettingsPage implements HasUnsavedChanges {
   private readonly settings = inject(PlatformSettingsService);
   private readonly toasts = inject(ToastService);
-  private readonly theme = inject(ThemeService);
   private readonly session = inject(SessionStore);
 
   protected readonly presets = THEME_PRESETS;
@@ -361,7 +463,7 @@ export class StoreSettingsPage implements HasUnsavedChanges {
   }
 
   /**
-   * A theme was picked: the section records *which* theme, and the admin wears it at once.
+   * A theme was picked: the section records *which* theme; the storefront wears it once saved.
    *
    * Only the marker is stored. Writing the whole palette out froze it at the moment of the click —
    * a later improvement to that preset, or a contrast fix, then never reached this store, because
@@ -374,9 +476,16 @@ export class StoreSettingsPage implements HasUnsavedChanges {
     const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId);
     if (!preset) return;
     this.setValue(sectionKey, path, JSON.stringify({ [THEME_MARKER_TOKEN]: preset.id }, null, 2));
-    // Previewed here, not only after saving — an operator choosing between six palettes needs to see
-    // the page in each one, and the saved value is what decides it for everyone else.
-    this.theme.apply(preset.tokens);
+    // Not previewed on the back office itself: the admin keeps its own fixed skin (see
+    // `apps/admin/src/styles/_admin-theme.scss`), and the picker's swatches are the preview. The
+    // palette is what the *storefront* will wear once this is saved.
+  }
+
+  protected readonly current = signal<string | null>(null);
+
+  protected jump(key: string): void {
+    this.current.set(key);
+    document.getElementById(`settings-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   protected fieldsFor(key: string): readonly SettingField[] {
@@ -462,10 +571,7 @@ export class StoreSettingsPage implements HasUnsavedChanges {
           ...current,
           [sectionKey]: this.describe(sectionKey, flatten(saved.value, '')),
         }));
-        // The saved theme is the one this app wears from now on. The storefront reads the same
-        // section on its next load.
-        const tokens = (saved.value as { themeTokens?: Record<string, string> }).themeTokens;
-        if (sectionKey === 'branding') this.theme.apply(tokens);
+        // The storefront reads the saved theme on its next load; the back office keeps its own skin.
       },
       error: (error: unknown) => {
         this.savingKey.set(null);

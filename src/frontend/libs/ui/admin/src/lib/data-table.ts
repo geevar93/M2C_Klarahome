@@ -5,6 +5,7 @@ import {
   ElementRef,
   TemplateRef,
   computed,
+  contentChild,
   contentChildren,
   effect,
   inject,
@@ -16,6 +17,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Badge, Button, Checkbox, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { BrowserStorage } from '@klarahome/util';
 
+import { FilterBar } from './filter-bar';
+import { humanise } from './status-badge';
 import { BulkAction, DataTableColumn, TablePage, TableSort } from './admin.model';
 
 /**
@@ -97,9 +100,21 @@ export class CellTemplate {
             </button>
 
             @if (toolsOpen()) {
-              <div class="tools-panel" role="group" aria-label="Table tools" (keydown)="onToolsKeydown($event)">
+              <div
+                class="tools-panel"
+                role="group"
+                aria-label="Table tools"
+                (keydown)="onToolsKeydown($event)"
+              >
                 @if (exportMode() !== 'none') {
-                  <button khButton type="button" size="sm" variant="tertiary" class="tool" (click)="requestExport()">
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    variant="tertiary"
+                    class="tool"
+                    (click)="requestExport()"
+                  >
                     <kh-icon name="download" size="sm" />
                     Export CSV
                   </button>
@@ -171,6 +186,7 @@ export class CellTemplate {
                 scope="col"
                 [style.width]="column.width"
                 [class.numeric]="isNumeric(column)"
+                [class.sticky-end]="isSticky(column)"
                 [attr.aria-sort]="ariaSort(column)"
               >
                 @if (column.sortKey; as sortKey) {
@@ -217,6 +233,7 @@ export class CellTemplate {
                 @for (column of visibleColumns(); track column.key; let first = $first) {
                   <td
                     [class.numeric]="isNumeric(column)"
+                    [class.sticky-end]="isSticky(column)"
                     [class.title]="first"
                     [attr.data-label]="first ? null : column.label"
                   >
@@ -226,9 +243,9 @@ export class CellTemplate {
                         [ngTemplateOutletContext]="{ $implicit: row, index: index }"
                       />
                     } @else if (column.kind === 'badge') {
-                      <kh-badge [tone]="column.tone ? column.tone(row) : 'neutral'">{{
-                        text(column, row)
-                      }}</kh-badge>
+                      <kh-badge [tone]="column.tone ? column.tone(row) : 'neutral'"
+                        ><span class="dot" aria-hidden="true"></span>{{ badgeText(column, row) }}</kh-badge
+                      >
                     } @else {
                       {{ text(column, row) }}
                     }
@@ -238,10 +255,11 @@ export class CellTemplate {
             } @empty {
               <tr>
                 <td class="empty" [attr.colspan]="columnCount()">
-                  {{ emptyMessage() }}
-                  @if (filtered()) {
-                    <button khButton type="button" size="sm" variant="tertiary" (click)="filtersCleared.emit()">
-                      Clear the filters
+                  <span class="empty-glyph" aria-hidden="true"><kh-icon name="search" /></span>
+                  <span class="empty-message">{{ emptyMessage() }}</span>
+                  @if (canClear()) {
+                    <button khButton type="button" size="sm" variant="secondary" (click)="clearFilters()">
+                      Clear filters
                     </button>
                   }
                 </td>
@@ -252,44 +270,47 @@ export class CellTemplate {
       </table>
     </div>
 
-    <div class="pager">
-      <p class="count">
-        {{ rows().length }} shown
-        @if (total(); as rowCount) {
-          <span class="muted">· about {{ formatCount(rowCount) }} in total</span>
-        }
-      </p>
+    @if (rows().length > 0 || hasPrevious() || hasNext()) {
+      <div class="pager">
+        <p class="count">
+          {{ rows().length }} shown
+          @if (total(); as rowCount) {
+            <span class="muted">· about {{ formatCount(rowCount) }} in total</span>
+          }
+        </p>
 
-      <div class="pager-controls">
-        <button
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="!hasPrevious() || loading()"
-          (click)="previousPage.emit()"
-        >
-          <kh-icon name="chevron-left" size="sm" />
-          Previous
-        </button>
-        <button
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="!hasNext() || loading()"
-          (click)="nextPage.emit()"
-        >
-          Next
-          <kh-icon name="chevron-right" size="sm" />
-        </button>
+        <div class="pager-controls">
+          <button
+            khButton
+            type="button"
+            size="sm"
+            [disabled]="!hasPrevious() || loading()"
+            (click)="previousPage.emit()"
+          >
+            <kh-icon name="chevron-left" size="sm" />
+            Previous
+          </button>
+          <button
+            khButton
+            type="button"
+            size="sm"
+            [disabled]="!hasNext() || loading()"
+            (click)="nextPage.emit()"
+          >
+            Next
+            <kh-icon name="chevron-right" size="sm" />
+          </button>
+        </div>
       </div>
-    </div>
+    }
   `,
   styles: `
     :host {
       display: block;
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     /* Bottom-aligned, like the filter bar inside it: its fields carry a label above the control,
@@ -374,7 +395,8 @@ export class CellTemplate {
       align-items: center;
       padding: var(--space-2) var(--space-3);
       background: var(--color-primary-subtle);
-      border-block-end: 1px solid var(--color-border);
+      border-block-end: 1px solid var(--color-primary);
+      color: var(--color-text);
     }
 
     .bulk-count {
@@ -413,7 +435,7 @@ export class CellTemplate {
     tbody tr {
       padding: var(--space-2) var(--space-3);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
     }
 
@@ -532,8 +554,41 @@ export class CellTemplate {
         inset-block-start: 0;
         z-index: 1;
         background: var(--color-surface);
-        font-weight: var(--weight-medium);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
         color: var(--color-text-muted);
+      }
+
+      tbody tr:last-child td {
+        border-block-end: 0;
+      }
+
+      tbody tr:hover:not(.selected) {
+        background: var(--color-surface);
+      }
+
+      /* The pinned end column (row actions). Opaque so the cells scrolling under it do not show
+         through, and it follows the row's own hover and selected tints. */
+      .sticky-end {
+        position: sticky;
+        inset-inline-end: 0;
+        background: var(--color-surface-raised);
+        box-shadow: inset 1px 0 0 var(--color-border);
+      }
+
+      thead th.sticky-end {
+        z-index: 2;
+        background: var(--color-surface);
+      }
+
+      tbody tr:hover:not(.selected) .sticky-end {
+        background: var(--color-surface);
+      }
+
+      tbody tr.selected .sticky-end {
+        background: var(--color-primary-subtle);
       }
 
       .numeric {
@@ -543,6 +598,14 @@ export class CellTemplate {
       .select-cell {
         width: var(--touch-target-min);
       }
+    }
+
+    .dot {
+      flex: none;
+      width: 0.375rem;
+      height: 0.375rem;
+      border-radius: var(--radius-full);
+      background: currentColor;
     }
 
     .sort {
@@ -563,6 +626,26 @@ export class CellTemplate {
       text-align: center;
       color: var(--color-text-muted);
       white-space: normal;
+    }
+
+    /* A designed empty state, not a sentence: a glyph, the message, and the way out. */
+    .empty-glyph {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 3rem;
+      height: 3rem;
+      margin-block-end: var(--space-3);
+      border-radius: var(--radius-full);
+      background: var(--color-surface);
+      color: var(--color-text-muted);
+    }
+
+    .empty-message {
+      display: block;
+      margin-block-end: var(--space-2);
+      color: var(--color-text);
+      font-weight: var(--weight-medium);
     }
 
     /* The empty row is a card with no border: a bordered box saying "nothing" is a box. */
@@ -673,9 +756,27 @@ export class DataTable<TRow> {
   readonly exportRequested = output<void>();
 
   private readonly cellTemplates = contentChildren(CellTemplate);
+  /** The filter bar projected into the `filters` slot, if any: it knows whether the list is narrowed, and how to widen it. */
+  private readonly filterBar = contentChild(FilterBar);
+  /**
+   * Whether an empty table can offer a way out: a page said so with `filtered`, or the projected
+   * filter bar has a search or filter on. Every list gets the reset without wiring it.
+   */
+  protected readonly canClear = computed(() => this.filtered() || this.filterBar()?.isFiltered() === true);
   private readonly selection = signal<ReadonlySet<string>>(new Set());
   private readonly hidden = signal<ReadonlySet<string>>(new Set());
   protected readonly toolsOpen = signal(false);
+
+  protected isSticky(column: DataTableColumn<TRow>): boolean {
+    return column.sticky === 'end' || column.key === 'actions';
+  }
+
+  /** Resets the projected filter bar (which tells the page), else asks the page to clear. */
+  protected clearFilters(): void {
+    const bar = this.filterBar();
+    if (bar) bar.clearAll();
+    else this.filtersCleared.emit();
+  }
 
   protected readonly visibleColumns = computed(() =>
     this.columns().filter((column) => !this.hidden().has(column.key)),
@@ -806,6 +907,12 @@ export class DataTable<TRow> {
 
   protected isNumeric(column: DataTableColumn<TRow>): boolean {
     return column.numeric ?? column.kind === 'number';
+  }
+
+  /** A raw enum name (`UnderReview`) reads as words; text a page already worded is left alone. */
+  protected badgeText(column: DataTableColumn<TRow>, row: TRow): string {
+    const value = this.text(column, row);
+    return /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(value) ? humanise(value) : value;
   }
 
   protected text(column: DataTableColumn<TRow>, row: TRow): string {

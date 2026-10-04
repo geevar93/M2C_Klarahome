@@ -230,8 +230,9 @@ interface CategoryRow {
       padding: 0;
       list-style: none;
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .tree li {

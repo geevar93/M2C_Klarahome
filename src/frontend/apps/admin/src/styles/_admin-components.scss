@@ -1,0 +1,12 @@
+// Admin-only refinements to shared component output.
+//
+// Anything here targets the *rendered result* of a shared primitive and applies to the back office
+// bundle alone, so the storefront (which shares those primitives) is untouched. Prefer a token in
+// `_admin-theme.scss`; this file is for the few things a token cannot express.
+
+// `RouteFocusManager` moves focus to the page's <h1> on navigation so a screen reader starts at the
+// title. That is programmatic focus on a non-interactive element, so it must not draw a ring.
+h1[tabindex='-1']:focus,
+h1[tabindex='-1']:focus-visible {
+  outline: none;
+}

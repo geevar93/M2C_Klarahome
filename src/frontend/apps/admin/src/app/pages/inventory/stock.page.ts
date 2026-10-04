@@ -18,6 +18,7 @@ import {
   FilterBar,
   FilterDefinition,
   FilterValues,
+  KpiCard,
   Modal,
   PageHeader,
 } from '@klarahome/ui-admin';
@@ -68,6 +69,7 @@ import { tableDateTime } from '../../core/format';
     Field,
     FilterBar,
     HasPermission,
+    KpiCard,
     Modal,
     PageHeader,
   ],
@@ -86,6 +88,31 @@ import { tableDateTime } from '../../core/format';
         Add to warehouse
       </button>
     </kh-page-header>
+
+    <!-- Two counts that are also the two filters: press one to see just those rows. Counted from the
+         same list endpoint with the same filters, capped at one page, so a long queue reads "50+". -->
+    <div class="tiles">
+      <button type="button" class="tile" [attr.aria-pressed]="values()['level'] === 'low'" (click)="pickLevel('low')">
+        <kh-kpi-card
+          label="Low stock"
+          hint="At or below the reorder level"
+          icon="alert"
+          tone="warning"
+          [value]="lowCount()"
+          [loading]="lowList.loading() && lowList.rows().length === 0"
+        />
+      </button>
+      <button type="button" class="tile" [attr.aria-pressed]="values()['level'] === 'out'" (click)="pickLevel('out')">
+        <kh-kpi-card
+          label="Out of stock"
+          hint="Nothing available to sell"
+          icon="package"
+          tone="danger"
+          [value]="outCount()"
+          [loading]="outList.loading() && outList.rows().length === 0"
+        />
+      </button>
+    </div>
 
     @if (list.error(); as message) {
       <kh-alert tone="danger" heading="Stock could not be loaded">{{ message }}</kh-alert>
@@ -428,6 +455,32 @@ import { tableDateTime } from '../../core/format';
       margin-block-end: var(--space-4);
     }
 
+    .tiles {
+      display: grid;
+      gap: var(--space-3);
+      margin-block-end: var(--space-4);
+    }
+
+    @media (min-width: 768px) {
+      .tiles {
+        grid-template-columns: repeat(2, minmax(0, 16rem));
+      }
+    }
+
+    .tile {
+      padding: 0;
+      border: 2px solid transparent;
+      border-radius: var(--radius-lg);
+      background: none;
+      color: inherit;
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .tile[aria-pressed='true'] {
+      border-color: var(--color-primary);
+    }
+
     .sku {
       display: block;
       font-weight: var(--weight-medium);
@@ -531,6 +584,24 @@ export class StockPage {
   ];
 
   protected readonly list = this.inventory.stock();
+
+  /** The two queues the tiles count. A page each is enough: past it the tile says "50+". */
+  protected readonly lowList = this.inventory.stock({ lowStock: true }, 50);
+  protected readonly outList = this.inventory.stock({ outOfStock: true }, 50);
+  protected readonly lowCount = computed(() => this.countOf(this.lowList));
+  protected readonly outCount = computed(() => this.countOf(this.outList));
+
+  private countOf(list: { rows(): readonly unknown[]; nextCursor(): string | null; loading(): boolean; error(): string | null }): number | string | null {
+    if (list.error() || (list.loading() && list.rows().length === 0)) return null;
+    return list.nextCursor() ? `${list.rows().length}+` : list.rows().length;
+  }
+
+  protected pickLevel(level: 'low' | 'out'): void {
+    const next = { ...this.values() };
+    if (next['level'] === level) delete next['level'];
+    else next['level'] = level;
+    this.applyFilters(next);
+  }
   /** Reference data for the warehouse filter. Small, bounded, and read straight off the store. */
   private readonly warehouseList = this.inventory.warehouses({ activeOnly: true }, 200);
   protected readonly values = signal<FilterValues>({});
@@ -612,6 +683,7 @@ export class StockPage {
       key: 'level',
       label: 'Stock level',
       kind: 'select',
+      quick: true,
       options: [
         { value: 'low', label: 'Low — at or below reorder' },
         { value: 'out', label: 'Out of stock' },
@@ -621,6 +693,8 @@ export class StockPage {
 
   constructor() {
     this.list.load();
+    this.lowList.load();
+    this.outList.load();
     this.warehouseList.load();
   }
 

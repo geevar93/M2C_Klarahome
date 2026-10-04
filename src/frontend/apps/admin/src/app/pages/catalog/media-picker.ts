@@ -193,10 +193,11 @@ import { describeError } from '../../core/describe-error';
       inline-size: 100%;
       padding: var(--space-2);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
       text-align: start;
       cursor: pointer;
+      box-shadow: var(--shadow-sm);
     }
 
     .tile.chosen {

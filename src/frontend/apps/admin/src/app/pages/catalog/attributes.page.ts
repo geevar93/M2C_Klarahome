@@ -347,8 +347,9 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
       margin-block-end: var(--space-5);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .panel h2 {

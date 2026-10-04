@@ -287,8 +287,9 @@ import { describeError, fieldErrors } from '../core/describe-error';
       margin-block-end: var(--space-6);
       padding: var(--space-5);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
 
     .section-head {

@@ -19,11 +19,11 @@ import {
   FilterValues,
   Modal,
   PageHeader,
-  toneFor,
+  StatusBadge,
   ConfirmDialog,
 } from '@klarahome/ui-admin';
 import { Alert, Button, Icon } from '@klarahome/ui-primitives';
-import { ToastService } from '@klarahome/util';
+import { ImageUrls, ToastService } from '@klarahome/util';
 import { Subscription } from 'rxjs';
 
 import { describeError } from '../../core/describe-error';
@@ -52,7 +52,20 @@ import { tableDate, tableDateTime } from '../../core/format';
  */
 @Component({
   selector: 'kh-products-page',
-  imports: [HasPermission, Alert, Button, CellTemplate, DataTable, FilterBar, Icon, Modal, PageHeader, RouterLink, ConfirmDialog],
+  imports: [
+    HasPermission,
+    Alert,
+    Button,
+    CellTemplate,
+    DataTable,
+    FilterBar,
+    Icon,
+    Modal,
+    PageHeader,
+    RouterLink,
+    ConfirmDialog,
+    StatusBadge,
+  ],
   template: `
     <kh-page-header heading="Products" description="Everything the catalogue holds, whoever created it.">
       <a khButton variant="primary" routerLink="/catalog/products/new" *khHasPermission="'catalog.product.manage'">
@@ -103,8 +116,21 @@ import { tableDate, tableDateTime } from '../../core/format';
       />
 
       <ng-template khCell="name" let-row>
-        <a class="link" [routerLink]="['/catalog/products', row.id]">{{ row.name }}</a>
-        <span class="slug">{{ row.slug }}</span>
+        <div class="product">
+          @if (thumb(row); as src) {
+            <img class="thumb" [src]="src" alt="" width="40" height="40" loading="lazy" />
+          } @else {
+            <span class="thumb tile" aria-hidden="true">{{ initials(row.name) }}</span>
+          }
+          <div class="names">
+            <a class="link" [routerLink]="['/catalog/products', row.id]">{{ row.name }}</a>
+            <span class="slug">{{ row.slug }}</span>
+          </div>
+        </div>
+      </ng-template>
+
+      <ng-template khCell="status" let-row>
+        <kh-status-badge [status]="row.status" />
       </ng-template>
     </kh-data-table>
 
@@ -216,6 +242,37 @@ import { tableDate, tableDateTime } from '../../core/format';
       font-weight: var(--weight-medium);
     }
 
+    .product {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      text-align: start;
+    }
+
+    .names {
+      min-width: 0;
+    }
+
+    .thumb {
+      flex: none;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: var(--radius-md);
+      object-fit: cover;
+      background: var(--color-surface-muted);
+    }
+
+    /* No image yet: the product's initials, so a row without a photo is still a row. */
+    .tile {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--color-primary-subtle);
+      color: var(--color-primary);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+    }
+
     .slug {
       display: block;
       color: var(--color-text-muted);
@@ -297,6 +354,7 @@ export class ProductsPage implements OnDestroy {
   private readonly catalog = inject(CatalogAdminService);
   private readonly documents = inject(DocumentPrintService);
   private readonly toasts = inject(ToastService);
+  private readonly images = inject(ImageUrls);
 
   protected readonly list = this.catalog.products();
   protected readonly values = signal<FilterValues>({});
@@ -325,13 +383,7 @@ export class ProductsPage implements OnDestroy {
 
   protected readonly columns: readonly DataTableColumn<ProductListItem>[] = [
     { key: 'name', label: 'Product', kind: 'custom' },
-    {
-      key: 'status',
-      label: 'Status',
-      kind: 'badge',
-      value: (row) => row.status,
-      tone: (row) => toneFor(row.status),
-    },
+    { key: 'status', label: 'Status', kind: 'custom' },
     { key: 'variantCount', label: 'Variants', kind: 'number', value: (row) => row.variantCount },
     { key: 'listingCount', label: 'Offers', kind: 'number', value: (row) => row.listingCount },
     {
@@ -391,6 +443,21 @@ export class ProductsPage implements OnDestroy {
     this.stopPolling();
   }
 
+  protected thumb(row: ProductListItem): string | null {
+    return this.images.forFile(row.primaryImageFileId, 96);
+  }
+
+  protected initials(name: string): string {
+    return (
+      name
+        .split(/\s+/)
+        .filter((word) => /^[A-Za-z0-9]/.test(word))
+        .slice(0, 2)
+        .map((word) => word[0].toUpperCase())
+        .join('') || '?'
+    );
+  }
+
   protected applyFilters(values: FilterValues): void {
     this.values.set(values);
     const filters: ProductFilters = { status: values['status'], search: values['q'] };
@@ -435,7 +502,22 @@ export class ProductsPage implements OnDestroy {
         this.busy.set(false);
 
         if (outcome.changed > 0) {
-          this.toasts.success(`${outcome.changed} of ${outcome.results.length} updated.`);
+          const message = `${outcome.changed} of ${outcome.results.length} updated.`;
+          // Publish and unpublish are each other's undo, so they get one rather than a dialog. Only
+          // the products that actually changed are put back. Archive is neither: it asks first.
+          const changedIds = outcome.results.filter((result) => result.changed).map((result) => result.productId);
+          const inverse: ProductStatus | null =
+            status === 'Active' ? 'Inactive' : status === 'Inactive' ? 'Active' : null;
+          if (inverse) {
+            this.toasts.show({
+              tone: 'success',
+              message,
+              durationMs: 8000,
+              action: { label: 'Undo', run: () => this.undoStatus(changedIds, inverse) },
+            });
+          } else {
+            this.toasts.success(message);
+          }
         }
 
         // The first refusal in full rather than a count of them: an operator who can read one
@@ -466,6 +548,16 @@ export class ProductsPage implements OnDestroy {
    * *shape* — and a shape can be served as JSON to a client that already holds a bearer token,
    * where a streamed file could not be (Step 28B, deliverable 7). The CSV is written here.
    */
+  private undoStatus(ids: readonly string[], status: ProductStatus): void {
+    this.catalog.bulkProductStatus(ids, status).subscribe({
+      next: () => {
+        this.toasts.info('Put back as it was.');
+        this.list.refresh();
+      },
+      error: (error: unknown) => this.actionError.set(describeError(error, 'That could not be undone.')),
+    });
+  }
+
   protected downloadTemplate(): void {
     this.documents.productImportTemplate().subscribe({
       next: (template) => this.documents.saveCsvHeader(template.columns, template.fileName),
