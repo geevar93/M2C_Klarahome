@@ -656,7 +656,11 @@ export class OrderDetailPage {
   protected readonly subtitle = computed(() => {
     const current = this.order();
     if (!current) return null;
-    return `${current.customerName} · placed ${tableDateTime(current.placedAt)}`;
+    const phone =
+      current.customerMobile && current.customerMobile !== current.customerName
+        ? ` · ${current.customerMobile}`
+        : '';
+    return `${current.customerName}${phone} · placed ${tableDateTime(current.placedAt)}`;
   });
 
   /** Newest first: the question on an order detail page is always "what happened last". */

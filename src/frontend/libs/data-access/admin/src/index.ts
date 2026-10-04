@@ -105,6 +105,7 @@ export type {
   CreateUserBody,
   CreateVendorBody,
   CreditNoteResponse,
+  DashboardSummaryResponse,
   DeliveryCoverageResponse,
   EffectivePrice,
   FeatureFlagResponse,

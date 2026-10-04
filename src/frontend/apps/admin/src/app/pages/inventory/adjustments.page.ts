@@ -64,8 +64,8 @@ import { tableDateTime } from '../../core/format';
                 [attr.aria-pressed]="chosen()?.id === item.id"
                 (click)="choose(item)"
               >
-                <span class="sku">{{ item.sku }}</span>
-                <span class="where">{{ item.warehouseCode }}</span>
+                <span class="sku">{{ item.productName ?? item.sku }}</span>
+                <span class="where">{{ item.productName ? item.sku + ' · ' : '' }}{{ item.warehouseName ?? item.warehouseCode }}</span>
                 <span class="counts">
                   {{ item.quantityOnHand }} on hand · {{ item.quantityAvailable }} available
                 </span>

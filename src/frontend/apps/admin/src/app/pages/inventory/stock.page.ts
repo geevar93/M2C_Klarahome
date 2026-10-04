@@ -7,6 +7,7 @@ import {
   StockLedgerEntryResponse,
   StockMovementReason,
 } from '@klarahome/data-access-admin';
+import { RouterLink } from '@angular/router';
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
@@ -72,6 +73,7 @@ import { tableDateTime } from '../../core/format';
     KpiCard,
     Modal,
     PageHeader,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -92,7 +94,12 @@ import { tableDateTime } from '../../core/format';
     <!-- Two counts that are also the two filters: press one to see just those rows. Counted from the
          same list endpoint with the same filters, capped at one page, so a long queue reads "50+". -->
     <div class="tiles">
-      <button type="button" class="tile" [attr.aria-pressed]="values()['level'] === 'low'" (click)="pickLevel('low')">
+      <button
+        type="button"
+        class="tile"
+        [attr.aria-pressed]="values()['level'] === 'low'"
+        (click)="pickLevel('low')"
+      >
         <kh-kpi-card
           label="Low stock"
           hint="At or below the reorder level"
@@ -102,7 +109,12 @@ import { tableDateTime } from '../../core/format';
           [loading]="lowList.loading() && lowList.rows().length === 0"
         />
       </button>
-      <button type="button" class="tile" [attr.aria-pressed]="values()['level'] === 'out'" (click)="pickLevel('out')">
+      <button
+        type="button"
+        class="tile"
+        [attr.aria-pressed]="values()['level'] === 'out'"
+        (click)="pickLevel('out')"
+      >
         <kh-kpi-card
           label="Out of stock"
           hint="Nothing available to sell"
@@ -146,8 +158,18 @@ import { tableDateTime } from '../../core/format';
       />
 
       <ng-template khCell="sku" let-row>
-        <span class="sku">{{ row.sku }}</span>
-        <span class="where">{{ row.warehouseCode }}</span>
+        <!-- The product leads when the API names it (a link to its page), the SKU beneath it. -->
+        @if (row.productName) {
+          @if (row.productId) {
+            <a class="product" [routerLink]="['/catalog/products', row.productId]">{{ row.productName }}</a>
+          } @else {
+            <span class="product">{{ row.productName }}</span>
+          }
+          <span class="where">{{ row.sku }} · {{ row.warehouseName ?? row.warehouseCode }}</span>
+        } @else {
+          <span class="sku">{{ row.sku }}</span>
+          <span class="where">{{ row.warehouseName ?? row.warehouseCode }}</span>
+        }
       </ng-template>
 
       <ng-template khCell="available" let-row>
@@ -185,15 +207,15 @@ import { tableDateTime } from '../../core/format';
     @if (ledgerFor(); as item) {
       <kh-entity-drawer
         [heading]="'History — ' + item.sku"
-        [subtitle]="item.warehouseCode + ' · ' + item.quantityOnHand + ' on hand'"
+        [subtitle]="(item.warehouseName ?? item.warehouseCode) + ' · ' + item.quantityOnHand + ' on hand'"
         (closed)="closeLedger()"
       >
-      @if (dialogError(); as message) {
-        <kh-alert tone="danger">{{ message }}</kh-alert>
-      }
+        @if (dialogError(); as message) {
+          <kh-alert tone="danger">{{ message }}</kh-alert>
+        }
         <p class="hint">
-          Every movement, newest first. The balance after each one is what was on hand at that
-          moment — nothing here can be edited, which is what makes it worth reading.
+          Every movement, newest first. The balance after each one is what was on hand at that moment —
+          nothing here can be edited, which is what makes it worth reading.
         </p>
 
         @if (ledger()?.error(); as message) {
@@ -274,8 +296,8 @@ import { tableDateTime } from '../../core/format';
       }
       @if (adjustFor(); as item) {
         <p class="hint">
-          {{ item.sku }} at {{ item.warehouseCode }} — {{ item.quantityOnHand }} on hand,
-          {{ item.quantityReserved }} reserved.
+          {{ item.sku }} at {{ item.warehouseName ?? item.warehouseCode }} — {{ item.quantityOnHand }} on
+          hand, {{ item.quantityReserved }} reserved.
         </p>
 
         <kh-field
@@ -342,7 +364,7 @@ import { tableDateTime } from '../../core/format';
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
       @if (settingsFor(); as item) {
-        <p class="hint">{{ item.sku }} at {{ item.warehouseCode }}.</p>
+        <p class="hint">{{ item.sku }} at {{ item.warehouseName ?? item.warehouseCode }}.</p>
 
         <kh-field label="Reorder level" for="settings-level" hint="At or below this, the row is flagged low.">
           <input
@@ -481,7 +503,8 @@ import { tableDateTime } from '../../core/format';
       border-color: var(--color-primary);
     }
 
-    .sku {
+    .sku,
+    .product {
       display: block;
       font-weight: var(--weight-medium);
     }
@@ -591,7 +614,12 @@ export class StockPage {
   protected readonly lowCount = computed(() => this.countOf(this.lowList));
   protected readonly outCount = computed(() => this.countOf(this.outList));
 
-  private countOf(list: { rows(): readonly unknown[]; nextCursor(): string | null; loading(): boolean; error(): string | null }): number | string | null {
+  private countOf(list: {
+    rows(): readonly unknown[];
+    nextCursor(): string | null;
+    loading(): boolean;
+    error(): string | null;
+  }): number | string | null {
     if (list.error() || (list.loading() && list.rows().length === 0)) return null;
     return list.nextCursor() ? `${list.rows().length}+` : list.rows().length;
   }
@@ -649,11 +677,18 @@ export class StockPage {
   }));
 
   protected readonly rowKey = (row: StockItemResponse) => row.id;
-  protected readonly rowLabel = (row: StockItemResponse) => `${row.sku} at ${row.warehouseCode}`;
+  protected readonly rowLabel = (row: StockItemResponse) =>
+    `${row.sku} at ${row.warehouseName ?? row.warehouseCode}`;
 
   protected readonly columns: readonly DataTableColumn<StockItemResponse>[] = [
-    { key: 'sku', label: 'SKU', kind: 'custom' },
-    { key: 'quantityOnHand', label: 'On hand', kind: 'number', value: (row) => row.quantityOnHand, card: true },
+    { key: 'sku', label: 'Product', kind: 'custom' },
+    {
+      key: 'quantityOnHand',
+      label: 'On hand',
+      kind: 'number',
+      value: (row) => row.quantityOnHand,
+      card: true,
+    },
     { key: 'quantityReserved', label: 'Reserved', kind: 'number', value: (row) => row.quantityReserved },
     { key: 'available', label: 'Available', kind: 'custom', numeric: true, card: true },
     {

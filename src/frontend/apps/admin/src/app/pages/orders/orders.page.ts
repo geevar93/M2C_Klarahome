@@ -81,6 +81,9 @@ const FILTER_KEYS = ['status', 'paymentStatus', 'q', 'from', 'to'] as const;
       <ng-template khCell="orderNumber" let-row>
         <a class="link" [routerLink]="['/orders', row.id]">{{ row.orderNumber }}</a>
         <span class="who">{{ row.customerName }}</span>
+        @if (row.customerMobile && row.customerMobile !== row.customerName) {
+          <span class="who">{{ row.customerMobile }}</span>
+        }
         <!-- Items and sellers used to be two columns of their own; at 1366 they pushed "Placed" off
              the edge, and neither is a figure anybody sorts by. -->
         <span class="who"

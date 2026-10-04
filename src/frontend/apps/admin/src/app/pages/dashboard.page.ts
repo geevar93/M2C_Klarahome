@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DashboardService, OrderSummaryResponse } from '@klarahome/data-access-admin';
+import {
+  DashboardService,
+  DashboardSummaryResponse,
+  OrderSummaryResponse,
+} from '@klarahome/data-access-admin';
 import { SessionStore } from '@klarahome/data-access-auth';
 import { KpiCard, PageHeader, StatusBadge } from '@klarahome/ui-admin';
 import { Alert, Button, EmptyState, ICON_NAMES, Icon, IconName } from '@klarahome/ui-primitives';
@@ -36,6 +40,25 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
 
     @if (failure(); as message) {
       <kh-alert tone="warning" heading="Some figures could not be loaded">{{ message }}</kh-alert>
+    }
+
+    @if (kpis(); as figures) {
+      <!-- Today's commercial numbers, from the same facts as the Sales-by-day report. Absent when this
+           account may not read reports, or the call failed: it never blocks the work queues below. -->
+      <section class="kpis" aria-labelledby="today-heading">
+        <h2 id="today-heading" class="section">Today</h2>
+        <div class="grid">
+          @for (figure of figures; track figure.label) {
+            <kh-kpi-card
+              [label]="figure.label"
+              [value]="figure.value"
+              [hint]="figure.hint"
+              [path]="figure.path"
+              [icon]="figure.icon"
+            />
+          }
+        </div>
+      </section>
     }
 
     @if (tiles().length > 0 || loading()) {
@@ -88,7 +111,13 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
                   <a [routerLink]="['/orders', order.id]">
                     <span class="main">
                       <span class="number">{{ order.orderNumber }}</span>
-                      <span class="who">{{ order.customerName }} · {{ placed(order) }}</span>
+                      <span class="who"
+                        >{{ order.customerName }}
+                        @if (order.customerMobile && order.customerMobile !== order.customerName) {
+                          · {{ order.customerMobile }}
+                        }
+                        · {{ placed(order) }}</span
+                      >
                     </span>
                     <kh-status-badge [status]="order.status" />
                     <span class="amount">{{ money(order) }}</span>
@@ -136,6 +165,10 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
       color: var(--color-text-muted);
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+
+    .kpis {
+      margin-block-end: var(--space-6);
     }
 
     .grid {
@@ -246,6 +279,10 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
         gap: var(--space-4);
       }
 
+      .kpis .grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
       .two {
         grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
       }
@@ -262,6 +299,46 @@ export class DashboardPage {
   protected readonly loading = this.queues.loading;
   protected readonly failure = this.queues.failure;
   protected readonly recent = signal<readonly OrderSummaryResponse[]>([]);
+  private readonly summary = signal<DashboardSummaryResponse | null>(null);
+
+  /** The KPI cards, or null when there is nothing to show. COD is skipped when the API says null (a seller). */
+  protected readonly kpis = computed(() => {
+    const summary = this.summary();
+    if (!summary) return null;
+    const cards = [
+      {
+        label: 'Orders today',
+        value: summary.ordersToday as number | string,
+        hint: 'Placed since midnight',
+        path: '/orders',
+        icon: 'package',
+      },
+      {
+        label: 'Revenue today',
+        value: tableMoney(summary.revenueToday, summary.currencyCode),
+        hint: 'Orders placed today',
+        path: '/orders',
+        icon: 'download',
+      },
+    ];
+    if (summary.codPendingOrders !== null && summary.codPendingAmount !== null) {
+      cards.push({
+        label: 'Cash on delivery to collect',
+        value: tableMoney(summary.codPendingAmount, summary.currencyCode),
+        hint: `${summary.codPendingOrders} ${summary.codPendingOrders === 1 ? 'order' : 'orders'} unpaid`,
+        path: '/orders',
+        icon: 'clock',
+      });
+    }
+    cards.push({
+      label: 'Low stock',
+      value: summary.lowStockCount,
+      hint: 'At or below the reorder level',
+      path: '/inventory/stock',
+      icon: 'alert',
+    });
+    return cards;
+  });
 
   protected readonly hasAnyScreen = computed(() => visibleSections(this.session.session()).length > 1);
   protected readonly shortcuts = computed(() => quickActionsFor(this.session.session()));
@@ -280,6 +357,7 @@ export class DashboardPage {
     // Always, not only when stale: the counts are this page's content.
     this.queues.refresh(true);
     this.dashboard.recentOrders().subscribe((orders) => this.recent.set(orders));
+    this.dashboard.summary().subscribe((summary) => this.summary.set(summary));
   }
 
   protected lookFor(key: string): { icon: string; tone: 'warning' | 'danger' } {

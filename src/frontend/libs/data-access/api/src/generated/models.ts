@@ -263,6 +263,8 @@ export interface AuditLogResponse {
   entityId: string | null;
   actorType: AuditActorType;
   actorId: string | null;
+  actorDisplay: string | null;
+  targetLabel: string | null;
   before: null | unknown;
   after: null | unknown;
   ip: string | null;
@@ -1051,6 +1053,16 @@ export interface CustomerProfileResponse {
   referralCode: string;
 }
 
+export interface DashboardSummaryResponse {
+  day: string;
+  currencyCode: string;
+  ordersToday: number;
+  revenueToday: number;
+  codPendingOrders: number | null;
+  codPendingAmount: number | null;
+  lowStockCount: number;
+}
+
 export interface DeliveryCoverageResponse {
   enabled: boolean;
   allowedCities: string[];
@@ -1787,6 +1799,7 @@ export interface OrderSummaryResponse {
   orderNumber: string;
   customerId: string;
   customerName: string;
+  customerMobile: string | null;
   status: string;
   paymentMethod: string;
   paymentStatus: string;
@@ -4343,6 +4356,9 @@ export interface StockItemResponse {
   listingId: string;
   warehouseId: string;
   warehouseCode: string;
+  warehouseName: string | null;
+  productId: string | null;
+  productName: string | null;
   vendorId: string | null;
   sku: string;
   quantityOnHand: number;

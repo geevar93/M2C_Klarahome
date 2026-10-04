@@ -1,9 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import {
   CatalogApiClient,
+  DashboardSummaryResponse,
   NotificationsApiClient,
   OrderSummaryResponse,
   OrdersApiClient,
+  ReportingApiClient,
   ReturnsApiClient,
   VendorsApiClient,
 } from '@klarahome/data-access-api';
@@ -54,6 +56,7 @@ export class DashboardService {
   private readonly catalog = inject(CatalogApiClient);
   private readonly vendors = inject(VendorsApiClient);
   private readonly notifications = inject(NotificationsApiClient);
+  private readonly reporting = inject(ReportingApiClient);
 
   private static readonly Quiet = { silentErrors: true, showLoading: false } as const;
 
@@ -71,18 +74,33 @@ export class DashboardService {
       .pipe(map((result) => result.items), catchError(() => of([])));
   }
 
+  /**
+   * Today's orders and revenue, cash on delivery still to collect, and stock running low.
+   *
+   * Null — never an error — when the session may not read reports, or the call fails: the reports
+   * feature flag being off answers 404 and a seller token 403s, and a KPI row is a convenience the
+   * dashboard must not turn red over. Fetched on its own, so it neither blanks nor waits on the
+   * queue counts beside it.
+   */
+  summary(): Observable<DashboardSummaryResponse | null> {
+    if (!this.session.hasPermission('reporting.report.read')) return of(null);
+    return this.reporting
+      .adminDashboardSummary(DashboardService.Quiet)
+      .pipe(catchError(() => of(null)));
+  }
+
   tiles(): Observable<readonly DashboardTile[]> {
     const quiet = DashboardService.Quiet;
     const sources: Observable<DashboardTile | null>[] = [];
 
     if (this.session.hasPermission('orders.order.read')) {
       sources.push(
-        this.orders.adminListSubOrders({ status: 'Confirmed', size: CountPage }, quiet).pipe(
+        this.orders.adminListSubOrders({ status: 'Confirmed,Processing', size: CountPage }, quiet).pipe(
           map((result) =>
             tile(
               'to-pack',
               'Awaiting packing',
-              'Confirmed, not yet packed',
+              'New or being prepared, not yet packed',
               countOf(result),
               '/fulfilment',
             ),

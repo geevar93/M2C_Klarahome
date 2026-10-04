@@ -20,7 +20,8 @@ export function toAuditEntry(row: AuditLogResponse): AuditEntryView {
     action: humanise(row.action),
     entityType: row.entityType,
     entityId: row.entityId,
-    actor: describeActor(row),
+    actor: row.actorDisplay || describeActor(row),
+    targetLabel: row.targetLabel,
     ip: row.ip,
     correlationId: row.correlationId,
     changes: diff(row.before, row.after),
@@ -30,10 +31,9 @@ export function toAuditEntry(row: AuditLogResponse): AuditEntryView {
 /**
  * Who did it.
  *
- * The row carries an actor *type* and an id, never a name — the audit store may not join to
- * identity, and storing a name would make the trail wrong the day somebody is renamed. So the type
- * is what is shown, with the id where there is one: "User a3f19c8e". A screen that has loaded the
- * user can do better; the log cannot.
+ * The API resolves a display name at read time (`actorDisplay`), which is used when it is there —
+ * nothing is stored, so a rename never makes the trail wrong. Without one, the actor *type* is
+ * shown with the id where there is one: "User a3f19c8e".
  */
 function describeActor(row: AuditLogResponse): string {
   const type = humanise(row.actorType);

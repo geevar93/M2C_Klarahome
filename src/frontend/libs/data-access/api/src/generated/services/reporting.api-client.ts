@@ -48,6 +48,14 @@ export class ReportingApiClient {
   }
 
   /**
+   * Orders and revenue today, cash on delivery still to collect, and stock running low. Built on the same facts as the sales-by-day report; a seller sees only their own.
+   * `GET /api/v1/admin/dashboard/summary`
+   */
+  adminDashboardSummary(options?: ApiRequestOptions): Observable<Models.DashboardSummaryResponse> {
+    return this.http.request<Models.DashboardSummaryResponse>('GET', `${this.baseUrl}/api/v1/admin/dashboard/summary`, undefined, undefined, options);
+  }
+
+  /**
    * Removes a standing instruction. The reports it produced stay.
    * `DELETE /api/v1/admin/report-schedules/{id}`
    */

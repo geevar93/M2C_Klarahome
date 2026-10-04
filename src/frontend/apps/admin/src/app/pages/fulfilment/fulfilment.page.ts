@@ -142,7 +142,7 @@ interface PackLine {
       <div class="panel-head">
         <h2>Waiting to be packed</h2>
         <p class="hint">
-          Confirmed parts with no parcel yet. Overdue ones are past the seller's dispatch cut-off.
+          New parts to accept and accepted parts being prepared, none with a parcel yet. Overdue ones are past the seller's dispatch cut-off.
         </p>
       </div>
 
@@ -193,7 +193,7 @@ interface PackLine {
                     [disabled]="busy()"
                     (click)="startPack(part)"
                   >
-                    Pack
+                    {{ part.status === 'Confirmed' ? 'Accept & pack' : 'Pack' }}
                   </button>
                 </td>
               </tr>
@@ -598,8 +598,11 @@ export class FulfilmentPage {
   private readonly documents = inject(DocumentPrintService);
   private readonly toasts = inject(ToastService);
 
-  /** Confirmed parts are the ones with stock held and nothing packed. */
-  protected readonly queue = this.orders.subOrders({ status: 'Confirmed' });
+  /**
+   * Parts with stock held and nothing packed: "New — to accept" (Confirmed) and "Being prepared"
+   * (Processing, accepted but not yet packed). Packing a new part accepts it in the same step.
+   */
+  protected readonly queue = this.orders.subOrders({ status: 'Confirmed,Processing' });
 
   protected readonly pickList = signal<readonly PickListLineResponse[]>([]);
   protected readonly pickLoading = signal(false);

@@ -199,6 +199,8 @@ export interface AuditEntryView {
   readonly entityId: string | null;
   /** Who did it: a user's name where one is known, otherwise the actor type. */
   readonly actor: string;
+  /** What it was done to, in words ("Brass Serving Spoons"), when the API could name it. */
+  readonly targetLabel?: string | null;
   readonly ip: string | null;
   readonly correlationId: string | null;
   /** The changed fields, before and after. Empty for an action that changed no field. */
