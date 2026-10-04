@@ -85,6 +85,21 @@ public sealed class ShippingBookingTests(KlaraHomeSchemaFixture fixture) : Comme
                 .First(entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId)
                 .GetProperty("status").GetString());
 
+        // A shopper who signed up by mobile number has the number as their account name; the order
+        // shows the delivery contact's name instead, with the number kept alongside it.
+        var number = reread.GetProperty("orderNumber").GetString();
+        var named = await ReadAsync(await admin.GetAsync(
+            new Uri($"/api/v1/admin/orders?number={number}", UriKind.Relative),
+            Cancellation));
+
+        var summary = Assert.Single(named.GetProperty("items").EnumerateArray());
+
+        Assert.Contains(summary.GetProperty("customerName").GetString()!, char.IsLetter);
+        Assert.Equal(
+            reread.GetProperty("customerName").GetString(),
+            summary.GetProperty("customerName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(summary.GetProperty("customerMobile").GetString()));
+
         Assert.Contains(
             Factory.Courier.Bookings,
             request => request.ShipmentId == response.GetProperty("id").GetGuid());
