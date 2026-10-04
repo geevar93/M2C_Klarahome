@@ -53,17 +53,24 @@ interface PackLine {
  */
 @Component({
   selector: 'kh-fulfilment-page',
-  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
+  imports: [
+    HasPermission,
+    Alert,
+    Badge,
+    Button,
+    Control,
+    Field,
+    Icon,
+    Modal,
+    PageHeader,
+    Skeleton,
+    StatusBadge,
+  ],
   template: `
     <kh-page-header
       heading="To pack"
       description="What has to leave the building today, and the steps that get it there."
-    >
-      <button khButton type="button" [disabled]="pickLoading()" (click)="loadPickList()">
-        <kh-icon name="refresh" size="sm" />
-        Refresh the pick list
-      </button>
-    </kh-page-header>
+    />
 
     @if (actionError(); as message) {
       <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
@@ -73,6 +80,11 @@ interface PackLine {
       <div class="panel-head">
         <h2>Pick list</h2>
         <p class="hint">{{ pickList().length }} lines to take off the shelves.</p>
+        <!-- Beside the list it refreshes, and a plain button: it was the page's only filled action. -->
+        <button khButton type="button" size="sm" [disabled]="pickLoading()" (click)="loadPickList()">
+          <kh-icon name="refresh" size="sm" />
+          Refresh
+        </button>
 
         <kh-field label="Warehouse" for="pick-warehouse">
           <select
@@ -194,6 +206,7 @@ interface PackLine {
         </table>
 
         <div class="pager">
+          <span class="hint">{{ queue.rows().length }} shown</span>
           <button
             khButton
             type="button"
@@ -521,8 +534,14 @@ interface PackLine {
     .pager {
       display: flex;
       gap: var(--space-2);
+      align-items: center;
       justify-content: flex-end;
       margin-block-start: var(--space-3);
+    }
+
+    .pager .hint {
+      margin: 0;
+      margin-inline-end: auto;
     }
 
     .steps {

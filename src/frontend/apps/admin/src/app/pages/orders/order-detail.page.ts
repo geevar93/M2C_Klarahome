@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CancelLineBody,
@@ -7,6 +8,7 @@ import {
   OrderEventResponse,
   OrderResponse,
   OrdersAdminService,
+  ReferenceDataService,
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
@@ -290,8 +292,12 @@ interface CancelDraft {
             @if (current.customerEmail; as email) {
               <p class="note">{{ email }}</p>
             }
+            <!-- The customer's name is their number when they never gave one, so printing the mobile
+                 under it said the same thing twice. -->
             @if (current.customerMobile; as mobile) {
-              <p class="note">{{ mobile }}</p>
+              @if (mobile !== current.customerName) {
+                <p class="note">{{ mobile }}</p>
+              }
             }
           </section>
 
@@ -304,9 +310,11 @@ interface CancelDraft {
                 {{ line2 }}<br />
               }
               {{ current.shippingAddress.city }},
-              {{ current.shippingAddress.stateName ?? current.shippingAddress.stateCode }}
+              {{ stateName(current.shippingAddress.stateName, current.shippingAddress.stateCode) }}
               {{ current.shippingAddress.pincode }}<br />
-              {{ current.shippingAddress.mobile }}
+              @if (current.shippingAddress.mobile !== current.customerMobile) {
+                {{ current.shippingAddress.mobile }}
+              }
             </p>
           </section>
 
@@ -328,7 +336,7 @@ interface CancelDraft {
                 <dd>{{ money(current.shippingTotal, current.currencyCode) }}</dd>
               </div>
               <div>
-                <dt>Tax</dt>
+                <dt>Tax (included in the prices)</dt>
                 <dd>{{ money(current.taxTotal, current.currencyCode) }}</dd>
               </div>
               @if (current.codFee > 0) {
@@ -599,6 +607,13 @@ interface CancelDraft {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrderDetailPage {
+  /** The platform's states, to say "Telangana" for the code "36" the address is stored with. */
+  private readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
+
+  protected stateName(name: string | null | undefined, code: string | null | undefined): string {
+    return name ?? this.states().find((state) => state.code === code)?.name ?? code ?? '';
+  }
+
   private readonly session = inject(SessionStore);
   /** A seller has no seller directory to link into; platform staff do. */
   protected readonly isPlatform = computed(() => !this.session.session()?.vendorId);
