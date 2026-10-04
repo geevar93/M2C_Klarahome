@@ -149,6 +149,76 @@ internal sealed partial class OrderFulfilmentService(
     }
 
     /// <inheritdoc />
+    public async Task<Result> MarkPackedAsync(
+        Guid subOrderId,
+        bool byVendor,
+        Guid? actorId,
+        CancellationToken cancellationToken = default)
+    {
+        var (order, subOrder) = await LoadAsync(subOrderId, cancellationToken).ConfigureAwait(false);
+
+        if (order is null || subOrder is null)
+        {
+            return Result.Failure(OrdersErrors.NotFound("sub-order"));
+        }
+
+        // Already boxed, or already on its way: a second parcel of a partial shipment, or a retried
+        // request. Nothing to move, and nothing wrong.
+        if (subOrder.Status >= SubOrderStatus.Packed && subOrder.Status != SubOrderStatus.Cancelled)
+        {
+            return Result.Success();
+        }
+
+        var actor = byVendor ? OrderActor.Vendor : OrderActor.Platform;
+        var from = subOrder.Status;
+
+        var moved = await OrdersTransaction
+            .RunAsync(
+                context,
+                async token =>
+                {
+                    if (subOrder.Status == SubOrderStatus.Confirmed)
+                    {
+                        var accepted = await workflow
+                            .TransitionAsync(
+                                order,
+                                subOrder,
+                                SubOrderStatus.Processing,
+                                actor,
+                                actorId,
+                                "Accepted when the parcel was packed.",
+                                token)
+                            .ConfigureAwait(false);
+
+                        if (accepted.IsFailure)
+                        {
+                            return accepted;
+                        }
+                    }
+
+                    return await workflow
+                        .TransitionAsync(
+                            order,
+                            subOrder,
+                            SubOrderStatus.Packed,
+                            actor,
+                            actorId,
+                            "Packed.",
+                            token)
+                        .ConfigureAwait(false);
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (moved.IsSuccess)
+        {
+            CourierMoved(logger, subOrder.SubOrderNumber, from, SubOrderStatus.Packed);
+        }
+
+        return moved;
+    }
+
+    /// <inheritdoc />
     public async Task<Result> NoteAsync(
         Guid subOrderId,
         string note,

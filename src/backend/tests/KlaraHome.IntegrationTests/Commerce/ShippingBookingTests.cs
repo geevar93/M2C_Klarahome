@@ -66,9 +66,24 @@ public sealed class ShippingBookingTests(KlaraHomeSchemaFixture fixture) : Comme
         Assert.Equal("shiprocket", response.GetProperty("provider").GetString());
         Assert.NotEmpty(response.GetProperty("lines").EnumerateArray());
 
-        // The order's own timeline learned it, through IOrderFulfilment.AdvanceAsync — the booking
-        // does not dispatch, so the sub-order is still Confirmed, not yet Shipped.
-        var order = await orders.LoadAsync(placed.OrderId);
+        // Packing is accepting: the part has left the "Confirmed" to-pack queue, and the booking
+        // does not dispatch, so it is Packed and not yet Shipped.
+        var queued = await ReadAsync(await admin.GetAsync(
+            new Uri("/api/v1/admin/sub-orders?status=Confirmed,Processing&size=100", UriKind.Relative),
+            Cancellation));
+
+        Assert.DoesNotContain(
+            queued.GetProperty("items").EnumerateArray(),
+            entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId);
+
+        var reread = await ReadAsync(
+            await admin.GetAsync(new Uri($"/api/v1/admin/orders/{placed.OrderId}", UriKind.Relative), Cancellation));
+
+        Assert.Equal(
+            "Packed",
+            reread.GetProperty("subOrders").EnumerateArray()
+                .First(entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId)
+                .GetProperty("status").GetString());
 
         Assert.Contains(
             Factory.Courier.Bookings,

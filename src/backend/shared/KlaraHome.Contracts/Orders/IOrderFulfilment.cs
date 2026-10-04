@@ -151,6 +151,36 @@ public interface IOrderFulfilment
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Records that the seller's part is fully boxed: accepts it if nobody has yet, then marks it packed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Boxing a part <em>is</em> accepting it. The ordering machine keeps <c>Confirmed</c> ("new, to
+    /// accept"), <c>Processing</c> ("being picked") and <c>Packed</c> as three states, but the pack
+    /// screen has one button, and a parcel that exists against a sub-order still sitting at
+    /// <c>Confirmed</c> is the contradiction this method removes: the part would stay in the
+    /// "to pack" queue after it was packed, and dispatch would later be refused for want of the
+    /// <c>Packed -> Shipped</c> edge.
+    /// </para>
+    /// <para>
+    /// Taken as the operator who boxed it — <c>Vendor</c> for a seller, <c>Platform</c> for staff —
+    /// because <c>Confirmed -> Processing</c> and <c>Processing -> Packed</c> are closed to
+    /// <c>System</c>. Idempotent: a part already <c>Packed</c> is a success, and one already past it
+    /// (a second parcel of a partial shipment) is too. A part the machine cannot move — cancelled
+    /// while the packer worked — is refused.
+    /// </para>
+    /// </remarks>
+    /// <param name="subOrderId">The seller's part.</param>
+    /// <param name="byVendor">Whether the seller (rather than platform staff) boxed it.</param>
+    /// <param name="actorId">The user who boxed it, for the timeline.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<Result> MarkPackedAsync(
+        Guid subOrderId,
+        bool byVendor,
+        Guid? actorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Writes a line on the order's timeline without moving it.
     /// </summary>
     /// <remarks>

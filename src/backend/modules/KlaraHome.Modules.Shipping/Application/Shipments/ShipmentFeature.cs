@@ -397,8 +397,11 @@ internal sealed class GetPickListQueryHandler(
 /// <summary>Puts units into a parcel.</summary>
 /// <param name="context">The Shipping data context.</param>
 /// <param name="orders">Supplies what the seller's part actually contains.</param>
-internal sealed class PackShipmentCommandHandler(ShippingDbContext context, IOrderFulfilment orders)
-    : ICommandHandler<PackShipmentCommand, ShipmentResponse>
+/// <param name="scope">Says whether a seller or platform staff boxed it.</param>
+internal sealed class PackShipmentCommandHandler(
+    ShippingDbContext context,
+    IOrderFulfilment orders,
+    ShippingScope scope) : ICommandHandler<PackShipmentCommand, ShipmentResponse>
 {
     public async Task<Result<ShipmentResponse>> HandleAsync(
         PackShipmentCommand command,
@@ -426,7 +429,13 @@ internal sealed class PackShipmentCommandHandler(ShippingDbContext context, IOrd
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(ShippingProjection.ToShipment(shipment, []));
+        var accepted = await ShipmentPacker
+            .MarkPartPackedAsync(context, orders, scope, shipment, cancellationToken)
+            .ConfigureAwait(false);
+
+        return accepted.IsFailure
+            ? Result.Failure<ShipmentResponse>(accepted.Error)
+            : Result.Success(ShippingProjection.ToShipment(shipment, []));
     }
 }
 
@@ -470,10 +479,12 @@ internal sealed class CaptureWeightCommandHandler(ShippingDbContext context)
 /// <summary>Packs, weighs and books in one call.</summary>
 /// <param name="context">The Shipping data context.</param>
 /// <param name="orders">Supplies what the seller's part contains, and its state.</param>
+/// <param name="scope">Says whether a seller or platform staff boxed it.</param>
 /// <param name="booker">Does the booking.</param>
 internal sealed class CreateShipmentCommandHandler(
     ShippingDbContext context,
     IOrderFulfilment orders,
+    ShippingScope scope,
     ShipmentBooker booker) : ICommandHandler<CreateShipmentCommand, ShipmentResponse>
 {
     public async Task<Result<ShipmentResponse>> HandleAsync(
@@ -535,6 +546,18 @@ internal sealed class CreateShipmentCommandHandler(
         if (packed.IsFailure)
         {
             return Result.Failure<ShipmentResponse>(packed.Error);
+        }
+
+        // Boxing it is accepting it. The part leaves the "to pack" queue here rather than at
+        // dispatch, so a packed part is never offered for packing twice and the machine has the
+        // Packed -> Shipped edge waiting when the courier collects.
+        var accepted = await ShipmentPacker
+            .MarkPartPackedAsync(context, orders, scope, shipment, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (accepted.IsFailure)
+        {
+            return Result.Failure<ShipmentResponse>(accepted.Error);
         }
 
         var box = command.Dimensions;
@@ -925,6 +948,66 @@ internal static class ShipmentLoader
 /// </remarks>
 internal static class ShipmentPacker
 {
+    /// <summary>
+    /// Once every live unit of a seller's part is in a parcel, tells the ordering module the part is
+    /// packed — which also accepts it if nobody had.
+    /// </summary>
+    /// <remarks>
+    /// A partial shipment leaves the part where it was: some of it is still on the shelf, so it
+    /// belongs in the "to pack" queue until the last unit is boxed. Counted from the other parcels
+    /// plus this one's in-memory lines, so it can run before this parcel is saved.
+    /// </remarks>
+    /// <param name="context">The Shipping data context.</param>
+    /// <param name="orders">Supplies what the part contains, and moves it.</param>
+    /// <param name="scope">Says who boxed it.</param>
+    /// <param name="shipment">The parcel just packed.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task<Result> MarkPartPackedAsync(
+        ShippingDbContext context,
+        IOrderFulfilment orders,
+        ShippingScope scope,
+        Shipment shipment,
+        CancellationToken cancellationToken)
+    {
+        var view = await orders.GetAsync(shipment.SubOrderId, cancellationToken).ConfigureAwait(false);
+
+        if (view.IsFailure)
+        {
+            return Result.Failure(ShippingErrors.OrderUnavailable(view.Error.Message));
+        }
+
+        var elsewhere = await context.ShipmentLines
+            .AsNoTracking()
+            .Where(line => line.ShipmentId != shipment.Id)
+            .Join(
+                context.Shipments
+                    .AsNoTracking()
+                    .Where(other => other.SubOrderId == shipment.SubOrderId
+                                    && !other.IsReturn
+                                    && other.Status != ShipmentStatus.Cancelled),
+                line => line.ShipmentId,
+                other => other.Id,
+                (line, _) => line)
+            .GroupBy(line => line.OrderLineId)
+            .Select(group => new { OrderLineId = group.Key, Quantity = group.Sum(line => line.Quantity) })
+            .ToDictionaryAsync(row => row.OrderLineId, row => row.Quantity, cancellationToken)
+            .ConfigureAwait(false);
+
+        var here = shipment.Lines
+            .GroupBy(line => line.OrderLineId)
+            .ToDictionary(group => group.Key, group => group.Sum(line => line.Quantity));
+
+        var everythingBoxed = view.Value.Lines.All(line =>
+            elsewhere.GetValueOrDefault(line.OrderLineId) + here.GetValueOrDefault(line.OrderLineId)
+            >= line.Quantity);
+
+        return everythingBoxed
+            ? await orders
+                .MarkPackedAsync(shipment.SubOrderId, scope.IsVendor, scope.ActorId, cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Success();
+    }
+
     /// <summary>Replaces a parcel's contents.</summary>
     /// <param name="context">The Shipping data context.</param>
     /// <param name="orders">Supplies what the seller's part contains.</param>
