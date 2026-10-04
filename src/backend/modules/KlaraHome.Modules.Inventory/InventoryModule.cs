@@ -86,6 +86,10 @@ public sealed class InventoryModule : IModule
         // making it up arrived.
         services.AddScoped<IInventoryAgeing, InventoryAgeingService>();
 
+        // A count of stock at or below its reorder level, for the admin dashboard. The reorder level
+        // is an Inventory setting, not a fact any event carries, so Reporting has to ask.
+        services.AddScoped<IStockAlerts, StockAlertService>();
+
         // Inventory reacts to an offer's life cycle: a listing that goes live gets a stock row, and
         // one whose SKU changes gets its label refreshed.
         services.AddScoped<ListingLifecycleHandlers>();

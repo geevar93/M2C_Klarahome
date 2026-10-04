@@ -94,11 +94,36 @@ internal static class AdminReportingEndpoints
     {
         ArgumentNullException.ThrowIfNull(admin);
 
+        MapDashboard(admin);
         MapReports(admin);
         MapRuns(admin);
         MapSchedules(admin);
 
         return admin;
+    }
+
+    /// <summary>The commercial figures at the top of the admin dashboard.</summary>
+    private static void MapDashboard(IEndpointRouteBuilder admin)
+    {
+        var group = admin
+            .MapGroup("/dashboard")
+            .WithTags("Reporting")
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite);
+
+        group.MapGet("/summary", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new GetDashboardSummaryQuery(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminDashboardSummary")
+            .WithSummary("Orders and revenue today, cash on delivery still to collect, and stock running low. "
+                         + "Built on the same facts as the sales-by-day report; a seller sees only their own.")
+            .RequirePermission(ReportingPermissions.ReportRead)
+            .RequireFeature(ReportingFeatures.Reports)
+            .Produces<DashboardSummaryResponse>();
     }
 
     /// <summary>The catalogue and the reports themselves.</summary>
