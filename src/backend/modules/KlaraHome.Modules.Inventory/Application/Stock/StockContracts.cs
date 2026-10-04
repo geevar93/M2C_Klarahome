@@ -1,3 +1,4 @@
+using KlaraHome.Contracts.Catalog;
 using KlaraHome.Modules.Inventory.Domain;
 
 namespace KlaraHome.Modules.Inventory.Application.Stock;
@@ -7,6 +8,15 @@ namespace KlaraHome.Modules.Inventory.Application.Stock;
 /// <param name="ListingId">The offer.</param>
 /// <param name="WarehouseId">Where it is held.</param>
 /// <param name="WarehouseCode">The location's code, so a list reads without a second call.</param>
+/// <param name="WarehouseName">The location's name, for a screen that should not show a code to a person.</param>
+/// <param name="ProductId">
+/// The catalogue product the offer belongs to, so a stock row can link back to it. Null on the
+/// responses to a write, and when the offer has since been archived out of the catalogue's read seam.
+/// </param>
+/// <param name="ProductName">
+/// What the offer is called, variant included, from the catalogue's read seam
+/// (<c>IProductCatalog</c>) rather than a copy held here. Same nullability as <paramref name="ProductId"/>.
+/// </param>
 /// <param name="VendorId">The seller.</param>
 /// <param name="Sku">The stock-keeping unit.</param>
 /// <param name="QuantityOnHand">Units physically held.</param>
@@ -25,6 +35,9 @@ internal sealed record StockItemResponse(
     Guid ListingId,
     Guid WarehouseId,
     string WarehouseCode,
+    string? WarehouseName,
+    Guid? ProductId,
+    string? ProductName,
     Guid? VendorId,
     string Sku,
     int QuantityOnHand,
@@ -127,7 +140,13 @@ internal static class StockProjection
     /// <summary>States a stock row.</summary>
     /// <param name="item">The stock row.</param>
     /// <param name="warehouseCode">Its location's code.</param>
-    public static StockItemResponse ToResponse(StockItem item, string warehouseCode)
+    /// <param name="warehouseName">Its location's name, when the caller has it to hand.</param>
+    /// <param name="listing">What the catalogue says the offer is, when the caller asked.</param>
+    public static StockItemResponse ToResponse(
+        StockItem item,
+        string warehouseCode,
+        string? warehouseName = null,
+        ListingSummary? listing = null)
     {
         ArgumentNullException.ThrowIfNull(item);
 
@@ -136,6 +155,9 @@ internal static class StockProjection
             item.ListingId,
             item.WarehouseId,
             warehouseCode,
+            warehouseName,
+            listing?.ProductId,
+            listing?.Name,
             item.VendorId,
             item.Sku,
             item.QuantityOnHand,
