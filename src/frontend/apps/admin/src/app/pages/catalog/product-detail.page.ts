@@ -42,6 +42,33 @@ interface CategoryOption {
   readonly label: string;
 }
 
+/** The five GST slabs, as the form carries them (strings, like every field). */
+const GST_SLABS: readonly string[] = ['0', '5', '12', '18', '28'];
+
+/** ISO 3166 alpha-2 codes — what is stored — with the names shown. India first: it is the default. */
+const COUNTRIES: readonly { code: string; name: string }[] = [
+  { code: 'IN', name: 'India' },
+  { code: 'AE', name: 'United Arab Emirates' },
+  { code: 'BD', name: 'Bangladesh' },
+  { code: 'CN', name: 'China' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'HK', name: 'Hong Kong' },
+  { code: 'ID', name: 'Indonesia' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'KR', name: 'South Korea' },
+  { code: 'LK', name: 'Sri Lanka' },
+  { code: 'MY', name: 'Malaysia' },
+  { code: 'NP', name: 'Nepal' },
+  { code: 'SG', name: 'Singapore' },
+  { code: 'TH', name: 'Thailand' },
+  { code: 'TR', name: 'Turkey' },
+  { code: 'TW', name: 'Taiwan' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'US', name: 'United States' },
+  { code: 'VN', name: 'Vietnam' },
+];
+
 /**
  * The product editor.
  *
@@ -158,6 +185,12 @@ interface CategoryOption {
           </button>
         }
 
+        @if (storefrontUrl(); as url) {
+          <a khButton size="sm" variant="tertiary" [href]="url" target="_blank" rel="noopener">
+            View on storefront
+          </a>
+        }
+
         @if (current.status === 'Active') {
           <button
             *khHasPermission="'catalog.product.moderate'"
@@ -208,7 +241,24 @@ interface CategoryOption {
     @if (loading()) {
       <kh-skeleton height="20rem" />
     } @else {
+      @if (product()) {
+        <!-- Images, variants and offers sit below a long form: a way to reach them without a
+             3,500px scroll. Buttons that scroll, not links — a hash link would re-route against
+             the app's base href. -->
+        <nav class="index" aria-label="Sections of this product">
+          @for (entry of sections; track entry.id) {
+            <button type="button" (click)="jump(entry.id)">{{ entry.label }}</button>
+          }
+        </nav>
+      } @else if (isNew()) {
+        <kh-alert tone="info" heading="Photos, variants and prices come after you create it">
+          Save the details first. Images, variants and sellers' offers are added on the product's own page
+          once it exists.
+        </kh-alert>
+      }
+
       <kh-form-shell
+        id="section-details"
         heading="Product details"
         description="What the product is, and everything the law requires us to say about it."
         [summary]="summary()"
@@ -326,18 +376,22 @@ interface CategoryOption {
             </kh-field>
 
             <kh-field label="GST rate (%)" for="product-gst" [error]="form.fields.gstRate.error()">
-              <input
+              <!-- The five legal slabs. A rate loaded from before this was a list (a half-slab, say) is
+                   kept as its own option rather than silently rewritten on the next save. -->
+              <select
                 khControl
-                khNumeric
                 id="product-gst"
-                type="number"
-                min="0"
-                max="28"
-                step="0.01"
                 [value]="form.fields.gstRate.value()"
-                (input)="onEdit(); form.fields.gstRate.set($any($event.target).value)"
-                (touched)="form.fields.gstRate.markTouched()"
-              />
+                (change)="onEdit(); form.fields.gstRate.set($any($event.target).value)"
+                (blur)="form.fields.gstRate.markTouched()"
+              >
+                <option value="" [selected]="form.fields.gstRate.value() === ''">Choose a rate</option>
+                @for (rate of gstRates(); track rate) {
+                  <option [value]="rate" [selected]="form.fields.gstRate.value() === rate">
+                    {{ rate }}%
+                  </option>
+                }
+              </select>
             </kh-field>
           </div>
 
@@ -346,15 +400,25 @@ interface CategoryOption {
             for="product-origin"
             [error]="form.fields.countryOfOrigin.error()"
           >
-            <input
+            <select
               khControl
               id="product-origin"
-              type="text"
-              maxlength="60"
               [value]="form.fields.countryOfOrigin.value()"
-              (input)="onEdit(); form.fields.countryOfOrigin.set($any($event.target).value)"
-              (touched)="form.fields.countryOfOrigin.markTouched()"
-            />
+              (change)="onEdit(); form.fields.countryOfOrigin.set($any($event.target).value)"
+              (blur)="form.fields.countryOfOrigin.markTouched()"
+            >
+              <option value="" [selected]="form.fields.countryOfOrigin.value() === ''">
+                Choose a country
+              </option>
+              @for (country of countries(); track country.code) {
+                <option
+                  [value]="country.code"
+                  [selected]="form.fields.countryOfOrigin.value() === country.code"
+                >
+                  {{ country.name }}
+                </option>
+              }
+            </select>
           </kh-field>
         </fieldset>
 
@@ -524,7 +588,14 @@ interface CategoryOption {
                     (input)="setSpec(index, 'group', $any($event.target).value)"
                   />
                 </kh-field>
-                <button khButton type="button" size="sm" variant="danger" (click)="removeSpec(index)">
+                <button
+                  khButton
+                  type="button"
+                  size="sm"
+                  variant="tertiary"
+                  aria-label="Remove this specification"
+                  (click)="removeSpec(index)"
+                >
                   <kh-icon name="trash" size="sm" />
                 </button>
               </div>
@@ -569,7 +640,7 @@ interface CategoryOption {
       </kh-form-shell>
 
       @if (product(); as current) {
-        <section class="panel">
+        <section class="panel" id="section-images">
           <h2>Images</h2>
           <p class="hint">Saved together with the details above by "Save changes".</p>
           <kh-media-manager
@@ -582,7 +653,7 @@ interface CategoryOption {
           />
         </section>
 
-        <section class="panel">
+        <section class="panel" id="section-variants">
           <div class="panel-head">
             <h2>Variants</h2>
             <button khButton type="button" size="sm" (click)="editVariant(null)">
@@ -601,7 +672,9 @@ interface CategoryOption {
               <thead>
                 <tr>
                   <th scope="col">SKU</th>
-                  <th scope="col">Name</th>
+                  @if (hasVariantNames()) {
+                    <th scope="col">Name</th>
+                  }
                   <th scope="col">Status</th>
                   <th scope="col" class="numeric">MRP</th>
                   <th scope="col" class="numeric">Weight</th>
@@ -612,7 +685,9 @@ interface CategoryOption {
                 @for (variant of current.variants; track variant.id) {
                   <tr>
                     <td>{{ variant.sku }}</td>
-                    <td>{{ variant.nameSuffix || '—' }}</td>
+                    @if (hasVariantNames()) {
+                      <td>{{ variant.nameSuffix || '—' }}</td>
+                    }
                     <td>
                       <kh-badge [tone]="tone(variant.status)">{{ variant.status }}</kh-badge>
                     </td>
@@ -628,7 +703,7 @@ interface CategoryOption {
           }
         </section>
 
-        <section class="panel">
+        <section class="panel" id="section-offers">
           <div class="panel-head">
             <h2>Offers</h2>
             <button
@@ -651,8 +726,9 @@ interface CategoryOption {
             <div class="offer-form">
               @if (editingOffer(); as listing) {
                 <p class="hint">
-                  Editing the offer on <strong>{{ listing.sku }}</strong>. The variant and the seller stay as
-                  they are; a live offer's new price reaches the storefront as soon as it is saved.
+                  Editing the offer on <strong>{{ listing.sku }}</strong
+                  >. The variant and the seller stay as they are; a live offer's new price reaches the
+                  storefront as soon as it is saved.
                 </p>
               } @else {
                 <kh-field label="Variant" for="offer-variant">
@@ -698,7 +774,11 @@ interface CategoryOption {
                   label="MRP"
                   for="offer-mrp"
                   [optional]="!editingOffer()"
-                  [hint]="editingOffer() ? 'The selling price may not exceed it.' : 'Blank uses the variant’s own MRP.'"
+                  [hint]="
+                    editingOffer()
+                      ? 'The selling price may not exceed it.'
+                      : 'Blank uses the variant’s own MRP.'
+                  "
                 >
                   <input
                     khControl
@@ -748,7 +828,9 @@ interface CategoryOption {
               @if (offerError(); as message) {
                 <kh-alert
                   tone="danger"
-                  [heading]="editingOffer() ? 'That offer could not be saved' : 'That offer could not be opened'"
+                  [heading]="
+                    editingOffer() ? 'That offer could not be saved' : 'That offer could not be opened'
+                  "
                   [dismissible]="true"
                   >{{ message }}</kh-alert
                 >
@@ -829,7 +911,7 @@ interface CategoryOption {
           }
         </section>
 
-        <section class="panel">
+        <section class="panel" id="section-history">
           <h2>History</h2>
           <kh-audit-trail [entries]="auditEntries()" [loading]="audit.loading()" />
         </section>
@@ -910,6 +992,43 @@ interface CategoryOption {
       display: flex;
       gap: var(--space-2);
       align-items: flex-start;
+    }
+
+    .index {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 2;
+      display: flex;
+      gap: var(--space-1);
+      margin-block-end: var(--space-3);
+      padding: var(--space-1);
+      overflow-x: auto;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
+      scrollbar-width: none;
+    }
+
+    .index button {
+      flex: none;
+      padding: var(--space-2) var(--space-3);
+      border: 0;
+      border-radius: var(--radius-md);
+      background: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+      cursor: pointer;
+    }
+
+    .index button:hover {
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .index button:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
     }
 
     .spec-remove kh-field {
@@ -1080,7 +1199,7 @@ export class ProductDetailPage implements HasUnsavedChanges {
     description: formField('', [], this.submitted),
     hsnCode: formField('', [required('The HSN code')], this.submitted),
     gstRate: formField('', [required('The GST rate')], this.submitted),
-    countryOfOrigin: formField('', [required('The country of origin')], this.submitted),
+    countryOfOrigin: formField('IN', [required('The country of origin')], this.submitted),
     returnWindowDays: formField('', [], this.submitted),
     warranty: formField('', [], this.submitted),
     metaTitle: formField('', [], this.submitted),
@@ -1122,6 +1241,50 @@ export class ProductDetailPage implements HasUnsavedChanges {
     const country = this.form.fields.countryOfOrigin.value().trim().toUpperCase();
     return country.length > 0 && country !== 'IN';
   });
+
+  /** The five GST slabs, plus whatever rate this product already carries if it is not one of them. */
+  protected readonly gstRates = computed(() => {
+    const current = this.form.fields.gstRate.value();
+    return current !== '' && !GST_SLABS.includes(current) ? [...GST_SLABS, current] : GST_SLABS;
+  });
+
+  /** Countries a product is commonly sourced from, plus the stored value if it is not among them. */
+  protected readonly countries = computed(() => {
+    const current = this.form.fields.countryOfOrigin.value();
+    return current !== '' && !COUNTRIES.some((country) => country.code === current.toUpperCase())
+      ? [...COUNTRIES, { code: current, name: current }]
+      : COUNTRIES;
+  });
+
+  /**
+   * Where this product is on the storefront. The admin is served from `admin.<store host>`, so the
+   * store is the same host without that label; anywhere else (no `admin.` prefix) the link is left
+   * out rather than guessed.
+   */
+  protected readonly storefrontUrl = computed(() => {
+    const current = this.product();
+    if (current?.status !== 'Active' || !current.slug) return null;
+    const { protocol, hostname, port } = window.location;
+    if (!hostname.startsWith('admin.')) return null;
+    return `${protocol}//${hostname.slice('admin.'.length)}${port ? `:${port}` : ''}/p/${current.slug}`;
+  });
+
+  /** A single-variant product has no variant names, and a column of dashes says nothing. */
+  protected readonly hasVariantNames = computed(
+    () => this.product()?.variants.some((variant) => !!variant.nameSuffix) ?? false,
+  );
+
+  protected readonly sections = [
+    { id: 'section-details', label: 'Details' },
+    { id: 'section-images', label: 'Images' },
+    { id: 'section-variants', label: 'Variants' },
+    { id: 'section-offers', label: 'Offers' },
+    { id: 'section-history', label: 'History' },
+  ] as const;
+
+  protected jump(id: string): void {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   protected readonly auditEntries = computed(() => this.audit.rows().map(toAuditEntry));
 
@@ -1478,9 +1641,7 @@ export class ProductDetailPage implements HasUnsavedChanges {
         next: () => {
           this.busy.set(false);
           this.toasts.success(
-            listing.status === 'Active'
-              ? 'Offer saved. The storefront shows the new price.'
-              : 'Offer saved.',
+            listing.status === 'Active' ? 'Offer saved. The storefront shows the new price.' : 'Offer saved.',
           );
           this.cancelOffer();
           this.listings.refresh();

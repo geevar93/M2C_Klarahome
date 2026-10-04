@@ -122,13 +122,13 @@ friction · **P3** polish. Owner: [FE] frontend · [BE] API/read model · [BOTH]
 
 | # | Sev | Gap | Where | Status |
 |---|-----|-----|-------|--------|
-| I1 | P2 [FE] | Product detail: Images, Variants and Offers sit at the bottom of a ~3,500 px page under Specifications and SEO. Move them up after Product details, or add a section index. New-product form needs a one-liner that photos, variants and prices come after Create. | product-detail | ☐ |
-| I2 | P2 [FE] | GST rate is free text (five legal slabs — a select); Country of origin free text and shows the raw "IN". | product-detail | ☐ |
-| I3 | P2 [FE] | No "View on storefront" link on a published product. | product-detail | ☐ |
+| I1 | P2 [FE] | Product detail: Images, Variants and Offers sit at the bottom of a ~3,500 px page under Specifications and SEO. Move them up after Product details, or add a section index. New-product form needs a one-liner that photos, variants and prices come after Create. | product-detail | ☑ Done: sticky section index (Details/Images/Variants/Offers/History) + new-product note. |
+| I2 | P2 [FE] | GST rate is free text (five legal slabs — a select); Country of origin free text and shows the raw "IN". | product-detail | ☑ Done: GST select 0/5/12/18/28, country select (India default, names; stores the ISO code). |
+| I3 | P2 [FE] | No "View on storefront" link on a published product. | product-detail | ☑ Done: "View on storefront" for Active products; URL derived from admin.<host> → <host>/p/<slug>, omitted if the host has no admin. prefix. |
 | I4 | P2 [BOTH] | Stock rows show SKU + warehouse *code* only ("DEMO-CC-0002 / DEMO-WH-JAI") — no product name, no warehouse name, no link. Stock summary needs `productId`, `productName`, `warehouseName`. | stock, inventory API | ☑ `GET /admin/stock` and `GET /admin/stock/{id}` rows gain `productId`, `productName`, `warehouseName` (nullable; null on write responses and when the offer left the catalogue seam). |
-| I5 | P2 [FE] | Adjustments & transfers is a lone "Search by SKU" box: no explanation of the two flows, no recent movements, no path from the Stock list. | adjustments | ☐ |
-| I6 | P2 [FE] | Attributes: two empty sections with no CTA in the empty state; sets are read-only (F2). | attributes | ☐ |
-| I7 | P3 [FE] | Products list: "Rating —" on every row (hide until reviews exist); Created-at-seconds beside Published. Variant "Name —" on single-variant products. Stock "Tracking: None" unexplained. | products, product-detail, stock | ☐ |
+| I5 | P2 [FE] | Adjustments & transfers is a lone "Search by SKU" box: no explanation of the two flows, no recent movements, no path from the Stock list. | adjustments | ◐ Guidance for both flows added. Recent movements parked: the ledger endpoint is per stock item only, no global feed. |
+| I6 | P2 [FE] | Attributes: two empty sections with no CTA in the empty state; sets are read-only (F2). | attributes | ◐ Empty-state CTA and "sets are read-only" note; set editing is F2. |
+| I7 | P3 [FE] | Products list: "Rating —" on every row (hide until reviews exist); Created-at-seconds beside Published. Variant "Name —" on single-variant products. Stock "Tracking: None" unexplained. | products, product-detail, stock | ☑ Done: Rating/Created/Tracking hidden by default (hiddenByDefault bug), variant Name column hidden when no names. |
 | I8 | P3 [BE] | Product History says "Nothing recorded yet" for a product that was created and published — catalog audit not reaching the trail. Demo products are all "Keep out of search engines" — seeder. | catalog audit, demo seeder | ☐ |
 
 ## J. Grow (promotions, storefront content)

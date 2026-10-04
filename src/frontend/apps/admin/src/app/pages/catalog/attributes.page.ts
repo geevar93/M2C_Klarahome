@@ -66,7 +66,13 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
       heading="Attributes"
       description="What the catalogue can say about a product, and which of those a shopper can filter by."
     >
-      <button khButton type="button" variant="primary" *khHasPermission="'catalog.taxonomy.manage'" (click)="startCreate()">
+      <button
+        khButton
+        type="button"
+        variant="primary"
+        *khHasPermission="'catalog.taxonomy.manage'"
+        (click)="startCreate()"
+      >
         <kh-icon name="plus" size="sm" />
         New attribute
       </button>
@@ -129,7 +135,20 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
               </tr>
             } @empty {
               <tr>
-                <td colspan="6" class="hint">No attributes yet.</td>
+                <td colspan="6" class="hint">
+                  No attributes yet. Add the first one — Colour, Material, Size — and mark whether shoppers
+                  can filter by it.
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    *khHasPermission="'catalog.taxonomy.manage'"
+                    (click)="startCreate()"
+                  >
+                    <kh-icon name="plus" size="sm" />
+                    New attribute
+                  </button>
+                </td>
               </tr>
             }
           </tbody>
@@ -149,7 +168,10 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
               <span class="hint">{{ set.attributes.length }} attributes</span>
             </li>
           } @empty {
-            <li class="hint">No sets yet.</li>
+            <li class="hint">
+              No sets yet. Sets are read-only on this screen for now; they are assigned to a category on the
+              categories screen.
+            </li>
           }
         </ul>
       </section>

@@ -256,6 +256,24 @@ import { tableDateTime } from '../../core/format';
           </button>
         </div>
       </section>
+    } @else {
+      <!-- Nothing chosen yet: say what the two flows are, so the page is not just a search box. -->
+      <div class="columns">
+        <section class="panel">
+          <h2>Adjust a count</h2>
+          <p class="hint">
+            The shelf says 12 and the system says 15: find the SKU above, pick its warehouse and enter the
+            difference (−3). Damage, loss and write-offs go through here too, each with a reason.
+          </p>
+        </section>
+        <section class="panel">
+          <h2>Transfer between warehouses</h2>
+          <p class="hint">
+            Pick the SKU in the warehouse it is leaving, then the destination and a quantity. It is one
+            movement out and one in, written together, so stock is never left in neither place.
+          </p>
+        </section>
+      </div>
     }
     <kh-confirm-dialog
       [open]="confirmingWriteOff()"
