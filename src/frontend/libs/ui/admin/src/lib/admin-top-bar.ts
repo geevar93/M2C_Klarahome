@@ -106,7 +106,7 @@ type Popover = 'create' | 'account';
 
     <button
       type="button"
-      class="icon-btn"
+      class="icon-btn scheme-btn"
       [attr.aria-label]="scheme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
       (click)="schemeToggled.emit()"
     >
@@ -145,6 +145,14 @@ type Popover = 'create' | 'account';
           <a role="menuitem" routerLink="/more" (click)="close()">
             <kh-icon name="grid" size="sm" /><span>All screens</span>
           </a>
+          <!-- The two controls the phone bar gives up (seven was too many): home and the colour scheme. -->
+          <a role="menuitem" class="phone-only" routerLink="/dashboard" (click)="close()">
+            <kh-icon name="home" size="sm" /><span>Dashboard</span>
+          </a>
+          <button type="button" role="menuitem" class="phone-only" (click)="close(); schemeToggled.emit()">
+            <kh-icon [name]="scheme() === 'dark' ? 'sun' : 'moon'" size="sm" />
+            <span>{{ scheme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode' }}</span>
+          </button>
           <button type="button" role="menuitem" class="sign-out" (click)="close(); signedOut.emit()">
             <span>Sign out</span>
           </button>
@@ -189,8 +197,9 @@ type Popover = 'create' | 'account';
       color: var(--color-text);
     }
 
+    /* The home pill and the colour-scheme toggle live in the account menu on a phone. */
     .brand {
-      display: flex;
+      display: none;
       gap: var(--space-2);
       align-items: center;
       color: var(--color-text);
@@ -204,6 +213,10 @@ type Popover = 'create' | 'account';
         min-block-size: var(--touch-target-min);
         min-inline-size: var(--touch-target-min);
       }
+    }
+
+    .scheme-btn {
+      display: none;
     }
 
     .mark {
@@ -407,6 +420,18 @@ type Popover = 'create' | 'account';
     @media (min-width: 768px) {
       :host {
         gap: var(--space-2);
+      }
+
+      .brand {
+        display: flex;
+      }
+
+      .scheme-btn {
+        display: inline-flex;
+      }
+
+      .menu .phone-only {
+        display: none;
       }
 
       .search {

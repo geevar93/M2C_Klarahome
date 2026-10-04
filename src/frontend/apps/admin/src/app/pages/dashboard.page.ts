@@ -106,7 +106,9 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
               @for (action of shortcuts(); track action.targetPath) {
                 <li>
                   <a [routerLink]="action.targetPath">
-                    <span class="glyph" aria-hidden="true"><kh-icon [name]="iconFor(action.icon)" size="sm" /></span>
+                    <span class="glyph" aria-hidden="true"
+                      ><kh-icon [name]="iconFor(action.icon)" size="sm"
+                    /></span>
                     <span class="main">
                       <span class="number">{{ action.label }}</span>
                       <span class="who">{{ action.hint }}</span>
@@ -138,8 +140,8 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-      gap: var(--space-4);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
     }
 
     /* One shrinkable track: an auto track grows to its widest nowrap child (the order lines), and
@@ -237,7 +239,13 @@ const QUEUE_LOOK: Readonly<Record<string, { icon: string; tone: 'warning' | 'dan
       color: var(--color-primary);
     }
 
+    /* Two across on a phone, three from lg: six queues are a 3×2 block, not 4 and an orphan pair. */
     @media (min-width: 1024px) {
+      .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+      }
+
       .two {
         grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
       }

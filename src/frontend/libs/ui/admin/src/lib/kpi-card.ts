@@ -21,11 +21,11 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
   imports: [Icon, NgTemplateOutlet, RouterLink, Skeleton],
   template: `
     @if (path(); as target) {
-      <a [routerLink]="target" class="card" [attr.data-tone]="activeTone()">
+      <a [routerLink]="target" class="card" [attr.data-tone]="activeTone()" [class.zero]="isZero()">
         <ng-container *ngTemplateOutlet="body" />
       </a>
     } @else {
-      <div class="card" [attr.data-tone]="activeTone()">
+      <div class="card" [attr.data-tone]="activeTone()" [class.zero]="isZero()">
         <ng-container *ngTemplateOutlet="body" />
       </div>
     }
@@ -63,7 +63,7 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
       flex-direction: column;
       gap: var(--space-1);
       height: 100%;
-      padding: var(--space-4);
+      padding: var(--space-3);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
@@ -127,8 +127,25 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
       color: var(--color-danger-text);
     }
 
+    /* A queue at zero has no work: flat and quiet, so the tile with something in it is the one seen. */
+    .card.zero {
+      background: var(--color-surface);
+      box-shadow: none;
+    }
+
+    .card.zero .value,
+    .card.zero .label {
+      color: var(--color-text-muted);
+    }
+
+    .card.zero .glyph {
+      background: var(--color-surface-raised);
+      color: var(--color-text-muted);
+    }
+
+    /* The "Open ›" cue is for a pointer; the whole tile is the target on a phone. */
     .go {
-      display: inline-flex;
+      display: none;
       align-items: center;
       margin-block-start: var(--space-1);
       color: var(--color-primary);
@@ -142,7 +159,7 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
     }
 
     .value {
-      font-size: var(--text-3xl);
+      font-size: var(--text-2xl);
       font-weight: var(--weight-bold);
       letter-spacing: var(--tracking-display);
       font-variant-numeric: tabular-nums;
@@ -156,6 +173,20 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
     .hint {
       font-size: var(--text-xs);
       color: var(--color-text-muted);
+    }
+
+    @media (min-width: 768px) {
+      .card {
+        padding: var(--space-4);
+      }
+
+      .value {
+        font-size: var(--text-3xl);
+      }
+
+      .go {
+        display: inline-flex;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -185,6 +216,8 @@ export class KpiCard {
     const name = this.icon();
     return name && (ICON_NAMES as readonly string[]).includes(name) ? (name as IconName) : null;
   });
+
+  protected readonly isZero = computed(() => this.value() === 0);
 
   protected readonly activeTone = computed(() => {
     const value = this.value();
