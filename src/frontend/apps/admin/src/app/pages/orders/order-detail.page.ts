@@ -86,7 +86,10 @@ interface CancelDraft {
           <kh-status-badge [status]="current.status" [label]="orderStatusLabel(current.status)" />
         </span>
         <span [title]="paymentStatusTooltip(current.paymentStatus)">
-          <kh-status-badge [status]="current.paymentStatus" [label]="paymentStatusLabel(current.paymentStatus)" />
+          <kh-status-badge
+            [status]="current.paymentStatus"
+            [label]="paymentStatusLabel(current.paymentStatus)"
+          />
         </span>
       }
     </kh-page-header>
@@ -111,7 +114,9 @@ interface CancelDraft {
                   <h2>{{ part.subOrderNumber }}</h2>
                   <p class="hint">
                     @if (isPlatform()) {
-                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{ part.vendorName ?? 'Seller' }}</a>
+                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{
+                        part.vendorName ?? 'Seller'
+                      }}</a>
                     } @else {
                       {{ part.vendorName ?? 'Seller' }}
                     }
@@ -406,7 +411,6 @@ interface CancelDraft {
             }
           </tbody>
         </table>
-
       }
 
       <div slot="footer">

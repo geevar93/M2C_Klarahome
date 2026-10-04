@@ -115,9 +115,9 @@ interface PackLine {
                 <td class="kh-cards-title">{{ line.name }}</td>
                 <td data-label="SKU">{{ line.sku }}</td>
                 <td class="numeric" data-label="Qty">{{ line.quantity }}</td>
-                <td data-label="Order">{{ line.subOrderNumber }}</td>
+                <td class="kh-cards-extra" data-label="Order">{{ line.subOrderNumber }}</td>
                 <td data-label="Shelf">{{ line.warehouseName ?? 'Not allocated' }}</td>
-                <td data-label="To">{{ line.destinationPincode }}</td>
+                <td class="kh-cards-extra" data-label="To">{{ line.destinationPincode }}</td>
                 <td data-label="Due">{{ when(line.dispatchDueAt) }}</td>
               </tr>
             }
@@ -159,13 +159,13 @@ interface PackLine {
                   {{ part.subOrderNumber }}
                   <span class="note">{{ money(part.netTotal, part.currencyCode) }}</span>
                 </td>
-                <td data-label="Seller">{{ part.vendorName ?? '—' }}</td>
+                <td class="kh-cards-extra" data-label="Seller">{{ part.vendorName ?? '—' }}</td>
                 <td data-label="Status">
                   <span [title]="statusTooltip(part.status)">
                     <kh-status-badge [status]="part.status" [label]="statusLabelFor(part.status)" />
                   </span>
                 </td>
-                <td class="numeric" data-label="Items">{{ part.lines.length }}</td>
+                <td class="numeric kh-cards-extra" data-label="Items">{{ part.lines.length }}</td>
                 <td data-label="Dispatch due">
                   {{ when(part.dispatchDueAt) }}
                   @if (part.dispatchDueAt && isPast(part.dispatchDueAt)) {

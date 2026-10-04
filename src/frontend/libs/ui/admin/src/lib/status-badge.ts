@@ -25,7 +25,9 @@ import { BadgeTone } from './admin.model';
 @Component({
   selector: 'kh-status-badge',
   imports: [Badge],
-  template: `<kh-badge [tone]="resolvedTone()"><span class="dot" aria-hidden="true"></span>{{ label() ?? text() }}</kh-badge>`,
+  template: `<kh-badge [tone]="resolvedTone()"
+    ><span class="dot" aria-hidden="true"></span>{{ label() ?? text() }}</kh-badge
+  >`,
   styles: `
     .dot {
       flex: none;
@@ -59,7 +61,17 @@ export function humanise(status: string | null | undefined): string {
 }
 
 /** Finished with or switched off. Checked first: `partially refunded` must not read as "partial". */
-const NEUTRAL = ['cancelled', 'canceled', 'archived', 'expired', 'disabled', 'inactive', 'refunded', 'closed', 'void'];
+const NEUTRAL = [
+  'cancelled',
+  'canceled',
+  'archived',
+  'expired',
+  'disabled',
+  'inactive',
+  'refunded',
+  'closed',
+  'void',
+];
 const DANGER = [
   'failed',
   'rejected',

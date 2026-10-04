@@ -84,3 +84,73 @@ Status: ☐ open · ☑ done · ⏳ parked (needs API work or is a feature, not 
 | F6 | Return detail has no timeline; order detail and product detail do | return-detail | ⏳ |
 | F7 | Product listings capped at 50 with no pager; adjustments search capped at 10 with no count; failed courier events fixed at 10 | product-detail, adjustments, shipments | ☐ |
 | F8 | No Seller column on the moderation queue or product offers; no supplier/warehouse columns on the PO list; no warehouse column on stock takes | moderation, product-detail, purchase-orders, stock-takes | ☐ |
+
+---
+
+# Second audit — 2026-10-05, `feat/admin-revamp` (after the prototype-matching revamp)
+
+Walked every screen signed in as `platform-admin` at 1366 px and at 390 px (Playwright, real UI
+sign-in). Forty-six screens incl. detail pages. Severity: **P1** misleads or blocks · **P2** real
+friction · **P3** polish. Owner: [FE] frontend · [BE] API/read model · [BOTH].
+
+## G. Cross-cutting (fix once, lands everywhere)
+
+| # | Sev | Gap | Where | Status |
+|---|-----|-----|-------|--------|
+| G1 | P2 [FE] | Filtered-empty copy with no filter applied: every list says "No <thing> matches these filters" (and sometimes offers "Clear filters") when the user has filtered nothing — banners, collections, price lists, purchase orders, stock takes, suppliers, moderation, tax rates. Honest copy is "No banners yet" + the create CTA. Where a *default* filter is on (returns, sellers) say what it is: "No returns are waiting for a decision · Show all". | `kh-data-table` empty state + callers | ☑ Done: empty copy derived honest when unfiltered; default-filter pages (returns, sellers) say so + "Show all". |
+| G2 | P1 [FE] | Phone card rows render *every* column as a label/value line, so one order is ~440 px, one product ~200 px and ten rows fill 2000 px. Card view needs a compact mapping — title column, status, one or two key values — with the rest behind the row link. | `kh-data-table` card mode; orders, products, stock, shipments, fulfilment | ☑ Done: `DataTableColumn.card` / `.kh-cards-extra` compact phone cards on orders, products, stock, shipments, returns, to-pack. |
+| G3 | P2 [FE] | Danger-weight controls everywhere a secondary one would do: spec-row delete ×4 (solid red), profile "End" ×9, page composer "Delete" at primary weight beside Save, feature-flag "Switch on" ×12 as filled primaries. One primary per view. | product-detail, profile, page-composer, feature-flags | ☐ |
+| G4 | P3 [FE] | Native `<input type=date>` shows mm/dd/yyyy from the browser locale; India expects dd/mm. Hint text, or the shared date control. | returns, ledger, reports, tax-rates | ☐ |
+| G5 | P2 [FE] | Phone top bar has seven controls (menu, home, search, create, theme, bell, avatar). Theme toggle and the home pill move into the avatar menu on < 768 px. | `admin-top-bar` | ☐ |
+| G6 | P3 [FE] | Status quick-chip row clips on the right at 390 px with no scroll affordance (fade or arrow). | `kh-filter-bar` | ☑ Done: right-edge fade on the chip row while tabs are scrolled out of view. |
+
+## H. Dashboard and orders
+
+| # | Sev | Gap | Where | Status |
+|---|-----|-----|-------|--------|
+| H1 | P1 [FE] | Six attention tiles stack one per row on a phone (1250 px of scrolling before Recent orders); 4+2 orphan row on desktop; zero-count tiles carry the same weight as the one with work. 2-column compact grid on phone, 3×2 on desktop, muted zero tiles. | dashboard | ☐ |
+| H2 | P2 [BOTH] | No commercial KPIs on the dashboard (orders today, revenue today, pending COD, low stock). Reporting facts already answer "Sales by day"; a `GET /admin/dashboard/summary` built on them, or a client-side run of the sales-by-day report for today, would do. | dashboard, reporting | ☐ |
+| H3 | P1 [BOTH] | To-pack queue semantics contradict the dashboard: the tile says "Awaiting packing — Confirmed, not yet packed", the queue shows parts in "New — to accept" with a "Pack" button. Verify what Pack does to a New part; either accept implicitly (and say so on the button) or exclude unaccepted parts and surface "To accept" as its own count. | fulfilment, dashboard, ordering | ☐ |
+| H4 | P2 [FE] | Orders list: raw enum `CashOnDelivery` in the Payment column; "Net total" and "Ordered" show the same figure on every row; nine columns overflow at 1366 so "Placed" is clipped. | orders | ☑ Done: "Cash on delivery"; items/sellers folded into the order cell; "Ordered" renamed and (now genuinely) hidden by default — hiddenByDefault was ignored on tables with a storageKey. |
+| H5 | P2 [BOTH] | Customer identity is a phone number on the dashboard, orders list and order header; the order already holds the delivery name. Expose `customerName` on the order summary, show name first. | orders, dashboard, order-detail | ☐ |
+| H6 | P2 [FE] | Order detail: address prints the state as its code ("Hyderabad, 36 500081"); Money card lists "Tax ₹214.18" above "Ordered ₹1,999" (= Items) with nothing saying tax is inclusive; phone number repeated in the Customer card. | order-detail | ☐ |
+| H7 | P3 [FE] | Shipments: "Not booked yet" chip and "Not booked" tracking cell say the same thing; "0 g" weight and "—" expected for unbooked parcels; failed-courier-messages table narrower than its card with a header row over an empty body. | shipments | ☑ Done: unbooked "0 g" → "—", duplicate "Not booked" dropped, failed-messages table full width / no header over empty body. |
+| H8 | P1 [FE] | Returns: filter panel open by default with the Status select showing "Any" while the applied chip says "Awaiting a decision" — the panel does not mirror the applied value. | returns | ☑ Done: status is the quick tab row, panel stays closed; filter selects now mirror applied value. |
+| H9 | P3 [FE] | To pack: "Refresh the pick list" styled as the page's primary action; pick-list Order cell is plain text; pager with no count. | fulfilment | ☐ |
+
+## I. Catalogue and inventory
+
+| # | Sev | Gap | Where | Status |
+|---|-----|-----|-------|--------|
+| I1 | P2 [FE] | Product detail: Images, Variants and Offers sit at the bottom of a ~3,500 px page under Specifications and SEO. Move them up after Product details, or add a section index. New-product form needs a one-liner that photos, variants and prices come after Create. | product-detail | ☐ |
+| I2 | P2 [FE] | GST rate is free text (five legal slabs — a select); Country of origin free text and shows the raw "IN". | product-detail | ☐ |
+| I3 | P2 [FE] | No "View on storefront" link on a published product. | product-detail | ☐ |
+| I4 | P2 [BOTH] | Stock rows show SKU + warehouse *code* only ("DEMO-CC-0002 / DEMO-WH-JAI") — no product name, no warehouse name, no link. Stock summary needs `productId`, `productName`, `warehouseName`. | stock, inventory API | ☐ |
+| I5 | P2 [FE] | Adjustments & transfers is a lone "Search by SKU" box: no explanation of the two flows, no recent movements, no path from the Stock list. | adjustments | ☐ |
+| I6 | P2 [FE] | Attributes: two empty sections with no CTA in the empty state; sets are read-only (F2). | attributes | ☐ |
+| I7 | P3 [FE] | Products list: "Rating —" on every row (hide until reviews exist); Created-at-seconds beside Published. Variant "Name —" on single-variant products. Stock "Tracking: None" unexplained. | products, product-detail, stock | ☐ |
+| I8 | P3 [BE] | Product History says "Nothing recorded yet" for a product that was created and published — catalog audit not reaching the trail. Demo products are all "Keep out of search engines" — seeder. | catalog audit, demo seeder | ☐ |
+
+## J. Grow (promotions, storefront content)
+
+| # | Sev | Gap | Where | Status |
+|---|-----|-----|-------|--------|
+| J1 | P1 [FE] | Page composer on a phone: block labels wrap per character ("Categor / y tiles", "Prod / uct / carou / sel"). | page-composer | ☐ |
+| J2 | P2 [FE] | Page composer lists blocks twice (sortable list, then a second collapsed editor list with the same names) and shows developer type codes ("RichText", "CategoryTiles") beside the labels. | page-composer | ☐ |
+| J3 | P2 [BOTH] | Header says "Published · v0 · published 5 Oct" while Version history says "This page has never been published" (seeded page has no version row). | page-composer, content seeder | ☐ |
+| J4 | P2 [FE] | New promotion: the basket simulator takes the right column before a rule exists; listings/sellers are "one id per line" textareas (GUIDs, F3) under a search box; categories/brands are native multi-select listboxes (ctrl-click). | promotion-detail | ☐ |
+| J5 | P3 [FE] | Promotions list "Combine with other offers" header clipped at 1366. | promotions | ☐ |
+
+## K. Marketplace, reports, settings, system
+
+| # | Sev | Gap | Where | Status |
+|---|-----|-----|-------|--------|
+| K1 | P1 [FE] | Commission plans table is clipped to two columns (Plan, How) at 1366 by the side panel — Default rate, Fee, Exceptions, Sellers, State are invisible with no scroll affordance. | commission-plans | ☐ |
+| K2 | P2 [FE] | Seller detail readiness panel prints raw document enums ("Pan, IncorporationCertificate, AddressProof"). | vendor-detail | ☐ |
+| K3 | P2 [data] | Demo seller is Active and trading while its readiness panel says "Not ready to trade yet" (no PAN, plan, docs, bank, pickup). Seed the readiness or label the override. | demo seeder | ☐ |
+| K4 | P3 [FE] | Commission simulator and report runner still take a pasted Seller id; the ledger already has a seller-by-name picker — reuse it (F3). | commission-plans, report-detail | ☐ |
+| K5 | P2 [FE] | Report runner: From/To blank while a default 30-day period is applied; chart y-axis has fractional ticks for an integer count; "The store's own" badge unexplained. | report-detail, report-chart, reports | ☐ |
+| K6 | P2 [FE] | Feature flags: 28 flags in one flat list keyed by code, twelve filled "Switch on" primaries; group by area, lead with the description, toggle control, confirm on the two "permanent gap" flags. | feature-flags | ☐ |
+| K7 | P2 [BOTH] | Audit log entries are unreadable: actor "Staff user 01a10867", target "User · <guid> · <ip> · <correlation guid>", changes hidden behind "2 field(s)". Read model needs an actor display name and a target label; FE shows ≤3 changed fields inline. | audit-log, platform audit read model | ☐ |
+| K8 | P3 [FE] | Users list shows "2FA off · Email unverified" on every customer row (customers never have 2FA); Store settings sub-nav does not track the active section on scroll; sidebar label "Adjustments & transf…" truncates. | users, store-settings, sidebar | ☐ |
+| K9 | P3 [FE] | Login: no show/hide password; 2FA code field not focused after the password step. | login | ☐ |

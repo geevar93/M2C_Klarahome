@@ -183,6 +183,12 @@ hr {
   display: none;
 }
 
+// A cell left off the phone card: the card keeps the heading, the status and one or two figures,
+// and the rest is a table column from `md`. (Same idea as `DataTableColumn.card`.)
+.kh-cards td.kh-cards-extra {
+  display: none;
+}
+
 @media (min-width: 768px) {
   .kh-cards {
     display: table;
@@ -209,7 +215,8 @@ hr {
   }
 
   .kh-cards td,
-  .kh-cards td.kh-cards-title {
+  .kh-cards td.kh-cards-title,
+  .kh-cards td.kh-cards-extra {
     display: table-cell;
     font-weight: inherit;
   }

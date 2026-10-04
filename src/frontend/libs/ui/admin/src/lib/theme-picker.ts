@@ -106,7 +106,9 @@ import { ThemePreset } from '@klarahome/util';
 
     .card.current {
       border-color: var(--color-primary);
-      box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-sm);
+      box-shadow:
+        0 0 0 1px var(--color-primary),
+        var(--shadow-sm);
     }
 
     .card:has(input:focus-visible) {

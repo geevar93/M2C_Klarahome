@@ -383,9 +383,9 @@ export class ProductsPage implements OnDestroy {
 
   protected readonly columns: readonly DataTableColumn<ProductListItem>[] = [
     { key: 'name', label: 'Product', kind: 'custom' },
-    { key: 'status', label: 'Status', kind: 'custom' },
-    { key: 'variantCount', label: 'Variants', kind: 'number', value: (row) => row.variantCount },
-    { key: 'listingCount', label: 'Offers', kind: 'number', value: (row) => row.listingCount },
+    { key: 'status', label: 'Status', kind: 'custom', card: true },
+    { key: 'variantCount', label: 'Variants', kind: 'number', value: (row) => row.variantCount, card: true },
+    { key: 'listingCount', label: 'Offers', kind: 'number', value: (row) => row.listingCount, card: true },
     {
       key: 'ratingAverage',
       label: 'Rating',

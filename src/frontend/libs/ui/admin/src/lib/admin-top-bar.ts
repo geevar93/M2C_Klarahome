@@ -60,12 +60,7 @@ type Popover = 'create' | 'account';
       <span class="wordmark">{{ title() }}</span>
     </a>
 
-    <button
-      type="button"
-      class="search"
-      aria-keyshortcuts="Control+K Meta+K"
-      (click)="searchOpened.emit()"
-    >
+    <button type="button" class="search" aria-keyshortcuts="Control+K Meta+K" (click)="searchOpened.emit()">
       <kh-icon name="search" size="sm" />
       <span class="search-label">Search orders, products, sellers…</span>
       <kbd aria-hidden="true">Ctrl K</kbd>
@@ -470,13 +465,14 @@ export class AdminTopBar {
 
   protected readonly open = signal<Popover | null>(null);
 
-  protected readonly initials = computed(() =>
-    this.identity()
-      .name.split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join('') || '?',
+  protected readonly initials = computed(
+    () =>
+      this.identity()
+        .name.split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word[0]?.toUpperCase() ?? '')
+        .join('') || '?',
   );
 
   protected readonly roleLine = computed(() => {
@@ -510,7 +506,8 @@ export class AdminTopBar {
   }
 
   protected onMenuKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End')
+      return;
     const items = Array.from(
       (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role="menuitem"]'),
     );

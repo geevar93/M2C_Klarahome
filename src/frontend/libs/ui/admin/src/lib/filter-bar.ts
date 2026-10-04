@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { Badge, Button, Chip, Control, Icon } from '@klarahome/ui-primitives';
 
 /** One value a select-shaped filter offers. */
@@ -94,7 +105,13 @@ const QUICK_CHIP_LIMIT = 8;
     @if (quick(); as filter) {
       <!-- The workflow tabs: one underlined tab per status, "All" first. Buttons that set a filter,
            not a tablist, because nothing here swaps a panel; the page below is the same table. -->
-      <div class="quick" role="group" [attr.aria-label]="filter.label">
+      <div
+        class="quick"
+        [class.more]="quickMore()"
+        role="group"
+        [attr.aria-label]="filter.label"
+        (scroll)="measureQuick($any($event.target))"
+      >
         <button
           type="button"
           class="tab"
@@ -129,9 +146,13 @@ const QUICK_CHIP_LIMIT = 8;
                 [value]="valueOf(filter.key)"
                 (change)="apply(filter.key, $any($event.target).value)"
               >
-                <option value="">Any</option>
+                <option value="" [selected]="valueOf(filter.key) === ''">Any</option>
                 @for (option of filter.options ?? []; track option.value) {
-                  <option [value]="option.value">{{ option.label }}</option>
+                  <!-- [selected] rather than the select's own [value]: the value is applied before
+                       the options exist, so a filter that arrived on read "Any". -->
+                  <option [value]="option.value" [selected]="option.value === valueOf(filter.key)">
+                    {{ option.label }}
+                  </option>
                 }
               </select>
             } @else {
@@ -207,6 +228,12 @@ const QUICK_CHIP_LIMIT = 8;
       scrollbar-width: none;
     }
 
+    /* A fade on the right edge while there are tabs scrolled out of sight: the row used to end
+       mid-word at 390px with nothing to say it went on. Dropped once the last tab is reached. */
+    .quick.more {
+      mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+    }
+
     .quick::-webkit-scrollbar {
       display: none;
     }
@@ -275,9 +302,11 @@ const QUICK_CHIP_LIMIT = 8;
         max-width: 28rem;
       }
 
-      .quick {
+      .quick,
+      .quick.more {
         flex-wrap: wrap;
         overflow-x: visible;
+        mask-image: none;
       }
 
       .panel {
@@ -291,6 +320,8 @@ export class FilterBar {
   private static sequence = 0;
   protected readonly panelId = `kh-filters-${(FilterBar.sequence += 1)}`;
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   readonly filters = input<readonly FilterDefinition[]>([]);
   readonly values = input<FilterValues>({});
   readonly searchable = input(true);
@@ -303,6 +334,8 @@ export class FilterBar {
 
   protected readonly draft = signal('');
   protected readonly panelOpen = signal(false);
+  /** Whether the chip row has tabs beyond its right edge (phone only; it wraps from `md`). */
+  protected readonly quickMore = signal(false);
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /** The filter drawn as chips: the one marked `quick`, else the first select that fits. */
@@ -351,6 +384,11 @@ export class FilterBar {
   });
 
   constructor() {
+    afterNextRender(() => {
+      const row = this.host.nativeElement.querySelector<HTMLElement>('.quick');
+      if (row) this.measureQuick(row);
+    });
+
     // The box follows the URL when the page navigates — a back gesture that restored the list but
     // not the words in the search box would be a box that lies about what is on screen. It must
     // not fight the user's typing, which is why it reads the input rather than the draft.
@@ -364,6 +402,10 @@ export class FilterBar {
     effect(() => {
       if (this.foldedOnCount() > 0) this.panelOpen.set(true);
     });
+  }
+
+  protected measureQuick(row: HTMLElement): void {
+    this.quickMore.set(row.scrollLeft + row.clientWidth < row.scrollWidth - 2);
   }
 
   protected valueOf(key: string): string {

@@ -235,6 +235,7 @@ export class CellTemplate {
                     [class.numeric]="isNumeric(column)"
                     [class.sticky-end]="isSticky(column)"
                     [class.title]="first"
+                    [class.card-hidden]="!first && hasCardMap() && !column.card"
                     [attr.data-label]="first ? null : column.label"
                   >
                     @if (cellTemplate(column.key); as template) {
@@ -256,10 +257,10 @@ export class CellTemplate {
               <tr>
                 <td class="empty" [attr.colspan]="columnCount()">
                   <span class="empty-glyph" aria-hidden="true"><kh-icon name="search" /></span>
-                  <span class="empty-message">{{ emptyMessage() }}</span>
+                  <span class="empty-message">{{ emptyText() }}</span>
                   @if (canClear()) {
                     <button khButton type="button" size="sm" variant="secondary" (click)="clearFilters()">
-                      Clear filters
+                      {{ clearLabel() }}
                     </button>
                   }
                 </td>
@@ -464,6 +465,11 @@ export class CellTemplate {
       color: var(--color-text-muted);
     }
 
+    /* Left off the phone card (\`DataTableColumn.card\`); a cell again from \`md\`, below. */
+    td.card-hidden {
+      display: none;
+    }
+
     td.title {
       display: block;
       padding-block-start: var(--space-2);
@@ -535,7 +541,8 @@ export class CellTemplate {
 
       th,
       td,
-      td.title {
+      td.title,
+      td.card-hidden {
         display: table-cell;
         padding: var(--space-2) var(--space-3);
         text-align: start;
@@ -720,6 +727,10 @@ export class DataTable<TRow> {
   readonly sort = input<TableSort | null>(null);
   readonly loading = input(false);
   readonly emptyMessage = input('Nothing matches these filters.');
+  /** What an empty table says when nothing is filtering it; derived from `emptyMessage` when unset. */
+  /** The label of the reset offered by an empty, filtered table — "Show all" where a default filter is on. */
+  readonly clearLabel = input('Clear filters');
+  readonly emptyUnfilteredMessage = input<string | null>(null);
   /**
    * Whether a filter is narrowing the list. With it, an empty table offers to clear the filters,
    * because "nothing matches" and "there is nothing" call for different next moves and the table
@@ -781,6 +792,22 @@ export class DataTable<TRow> {
   protected readonly visibleColumns = computed(() =>
     this.columns().filter((column) => !this.hidden().has(column.key)),
   );
+  /** Whether this table chose which columns its phone cards carry — see `DataTableColumn.card`. */
+  protected readonly hasCardMap = computed(() => this.columns().some((column) => column.card));
+  /**
+   * The empty-state sentence. A page words it for the filtered case ("No banner matches these
+   * filters."), which is a lie about a list nobody has filtered: with nothing narrowing it, the
+   * honest message is that there are none yet. A page can say it itself with
+   * `emptyUnfilteredMessage`; otherwise the "No X matches…" wording is turned into "No Xs yet.".
+   */
+  protected readonly emptyText = computed(() => {
+    const message = this.emptyMessage();
+    if (this.canClear()) return message;
+    const explicit = this.emptyUnfilteredMessage();
+    if (explicit) return explicit;
+    const match = /^No (.+?) matche?s? (?:these filters|this search)\.$/.exec(message);
+    return match ? `No ${pluralise(match[1])} yet.` : message;
+  });
   protected readonly columnCount = computed(() => this.visibleColumns().length + (this.selectable() ? 1 : 0));
   protected readonly selectedCount = computed(() => this.selection().size);
   protected readonly selectedIds = computed(() => [...this.selection()]);
@@ -801,22 +828,17 @@ export class DataTable<TRow> {
   );
 
   constructor() {
-    // The remembered column choice, read per storage key. Read in an effect rather than in the
-    // constructor, which is what lets the key be an input at all.
-    effect(() => {
-      const key = this.storageKey();
-      if (!key) return;
-      this.hidden.set(new Set(this.storage.getJson<string[]>(`kh.columns.${key}`, [])));
-    });
-
-    // A column marked `hiddenByDefault` starts hidden — but only where nothing is remembered,
-    // otherwise the remembered choice above would be overwritten on every render.
+    // The columns that start hidden: remembered per storage key where the user has chosen, else the
+    // `hiddenByDefault` ones. Read in an effect rather than in the constructor, which is what lets
+    // the key be an input at all. (The defaults used to apply only to a table with no storage key,
+    // so every persisted list showed the columns that were meant to start off.)
     effect(() => {
       const defaults = this.columns()
         .filter((column) => column.hiddenByDefault)
         .map((column) => column.key);
-      if (defaults.length === 0 || this.storageKey()) return;
-      this.hidden.set(new Set(defaults));
+      const key = this.storageKey();
+      const remembered = key ? this.storage.getJson<string[] | null>(`kh.columns.${key}`, null) : null;
+      this.hidden.set(new Set(remembered ?? defaults));
     });
 
     // Rows changing means a new filter, a new page or a refresh. Anything still selected refers
@@ -965,6 +987,14 @@ export class DataTable<TRow> {
     link.click();
     URL.revokeObjectURL(url);
   }
+}
+
+/** Good enough for the nouns the back office lists; "stock" and "messages" do not take an s. */
+function pluralise(noun: string): string {
+  if (/^stock$/i.test(noun)) return noun;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  if (/(s|x|ch|sh)$/i.test(noun)) return `${noun}es`;
+  return `${noun}s`;
 }
 
 function quoteCsv(value: string): string {

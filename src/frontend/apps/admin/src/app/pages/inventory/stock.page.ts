@@ -653,9 +653,9 @@ export class StockPage {
 
   protected readonly columns: readonly DataTableColumn<StockItemResponse>[] = [
     { key: 'sku', label: 'SKU', kind: 'custom' },
-    { key: 'quantityOnHand', label: 'On hand', kind: 'number', value: (row) => row.quantityOnHand },
+    { key: 'quantityOnHand', label: 'On hand', kind: 'number', value: (row) => row.quantityOnHand, card: true },
     { key: 'quantityReserved', label: 'Reserved', kind: 'number', value: (row) => row.quantityReserved },
-    { key: 'available', label: 'Available', kind: 'custom', numeric: true },
+    { key: 'available', label: 'Available', kind: 'custom', numeric: true, card: true },
     {
       key: 'reorderLevel',
       label: 'Reorder at',
@@ -665,7 +665,7 @@ export class StockPage {
     },
     { key: 'trackingMode', label: 'Tracking', value: (row) => row.trackingMode, hiddenByDefault: true },
     { key: 'updatedAt', label: 'Last moved', kind: 'date', value: (row) => tableDateTime(row.updatedAt) },
-    { key: 'actions', label: 'Actions', kind: 'custom', width: '16rem' },
+    { key: 'actions', label: 'Actions', kind: 'custom', width: '16rem', card: true },
   ];
 
   /** The warehouse options come from the API, so the filter cannot offer one that is not there. */

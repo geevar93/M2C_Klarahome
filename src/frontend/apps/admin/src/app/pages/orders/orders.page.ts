@@ -18,6 +18,7 @@ import {
   ORDER_STATUS_VOCAB,
   PAYMENT_STATUS_VOCAB,
   SUB_ORDER_STATUS_VOCAB,
+  paymentMethodLabel,
   statusFilterOptions,
   statusLabel,
 } from './order-vocabulary';
@@ -80,6 +81,12 @@ const FILTER_KEYS = ['status', 'paymentStatus', 'q', 'from', 'to'] as const;
       <ng-template khCell="orderNumber" let-row>
         <a class="link" [routerLink]="['/orders', row.id]">{{ row.orderNumber }}</a>
         <span class="who">{{ row.customerName }}</span>
+        <!-- Items and sellers used to be two columns of their own; at 1366 they pushed "Placed" off
+             the edge, and neither is a figure anybody sorts by. -->
+        <span class="who"
+          >{{ row.itemCount }} {{ row.itemCount === 1 ? 'item' : 'items' }} · {{ row.vendorCount }}
+          {{ row.vendorCount === 1 ? 'seller' : 'sellers' }}</span
+        >
       </ng-template>
 
       <ng-template khCell="subOrderStatuses" let-row>
@@ -145,37 +152,41 @@ export class OrdersPage {
       value: (row) => statusLabel(ORDER_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
+      card: true,
     },
     { key: 'subOrderStatuses', label: 'Sellers’ shares', kind: 'custom' },
     {
       key: 'paymentStatus',
       label: 'Payment',
       kind: 'badge',
-      value: (row) => `${row.paymentMethod} · ${statusLabel(PAYMENT_STATUS_VOCAB, row.paymentStatus)}`,
+      value: (row) =>
+        `${paymentMethodLabel(row.paymentMethod)} · ${statusLabel(PAYMENT_STATUS_VOCAB, row.paymentStatus)}`,
       tone: (row) => toneFor(row.paymentStatus),
-    },
-    { key: 'itemCount', label: 'Items', kind: 'number', value: (row) => row.itemCount },
-    {
-      key: 'vendorCount',
-      label: 'Sellers',
-      kind: 'number',
-      value: (row) => row.vendorCount,
-      hiddenByDefault: true,
+      card: true,
     },
     {
       key: 'netTotal',
       label: 'Net total',
       kind: 'number',
       value: (row) => tableMoney(row.netTotal, row.currencyCode),
+      card: true,
     },
     {
+      // The same figure as the net total until something is cancelled or returned, which is why it
+      // is off by default and named for what it is rather than a second "Total".
       key: 'grandTotal',
-      label: 'Ordered',
+      label: 'Originally ordered',
       kind: 'number',
       value: (row) => tableMoney(row.grandTotal, row.currencyCode),
       hiddenByDefault: true,
     },
-    { key: 'placedAt', label: 'Placed', kind: 'date', value: (row) => tableDateTime(row.placedAt) },
+    {
+      key: 'placedAt',
+      label: 'Placed',
+      kind: 'date',
+      value: (row) => tableDateTime(row.placedAt),
+      card: true,
+    },
   ];
 
   protected readonly filters: readonly FilterDefinition[] = [

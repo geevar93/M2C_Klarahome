@@ -53,7 +53,8 @@ import { RETURN_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orders
       [configurable]="true"
       storageKey="returns-list"
       exportMode="page"
-      emptyMessage="No return matches these filters."
+      [emptyMessage]="emptyMessage()"
+      [clearLabel]="onlyDefault() ? 'Show all returns' : 'Clear filters'"
       (nextPage)="list.next()"
       (previousPage)="list.previous()"
     >
@@ -105,6 +106,15 @@ export class ReturnsPage {
   protected readonly list = this.returns.returns();
   protected readonly values = signal<FilterValues>({ status: 'Requested' });
 
+  /** Only the default "awaiting a decision" filter is on — an empty list then means good news, not a bad filter. */
+  protected readonly onlyDefault = computed(() => {
+    const keys = Object.keys(this.values());
+    return keys.length === 1 && this.values()['status'] === 'Requested';
+  });
+  protected readonly emptyMessage = computed(() =>
+    this.onlyDefault() ? 'No returns are waiting for a decision.' : 'No return matches these filters.',
+  );
+
   protected readonly page = computed(() => ({
     nextCursor: this.list.nextCursor(),
     hasPrevious: this.list.hasPrevious(),
@@ -124,6 +134,7 @@ export class ReturnsPage {
       value: (row) => statusLabel(RETURN_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
+      card: true,
     },
     { key: 'type', label: 'Kind', value: (row) => row.type, width: '8rem' },
     { key: 'reasonCode', label: 'Reason', value: (row) => row.reasonCode },
@@ -133,6 +144,7 @@ export class ReturnsPage {
       label: 'Estimated',
       kind: 'number',
       value: (row) => tableMoney(row.estimatedRefund, row.currencyCode),
+      card: true,
     },
     {
       key: 'refundAmount',
@@ -140,7 +152,7 @@ export class ReturnsPage {
       kind: 'number',
       value: (row) => (row.refundAmount > 0 ? tableMoney(row.refundAmount, row.currencyCode) : '—'),
     },
-    { key: 'age', label: 'Waiting', kind: 'custom', width: '8rem' },
+    { key: 'age', label: 'Waiting', kind: 'custom', width: '8rem', card: true },
     {
       key: 'requestedAt',
       label: 'Requested',
@@ -156,6 +168,9 @@ export class ReturnsPage {
       label: 'Status',
       kind: 'select',
       options: statusFilterOptions(RETURN_STATUS_VOCAB),
+      // Thirteen states: more than the quick row picks up by itself, but it is the one question
+      // this list asks, and the filter panel mirrored it badly (H8).
+      quick: true,
     },
     { key: 'from', label: 'Requested from', kind: 'date' },
     { key: 'to', label: 'Requested to', kind: 'date' },

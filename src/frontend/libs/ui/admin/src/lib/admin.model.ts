@@ -129,6 +129,14 @@ export interface DataTableColumn<TRow> {
    * be the thing that scrolls out of reach.
    */
   readonly sticky?: 'end';
+  /**
+   * Kept on the phone card. The first column is always the card's heading; once *any* column of a
+   * table sets `card`, the columns that do not are left off the card (they are still in the table
+   * from 768px, in the column chooser and in the CSV). A table where no column sets it keeps every
+   * column on its cards, as before. A card that repeats every one of nine columns is 440px tall;
+   * the status and one or two figures are what a phone user scans for.
+   */
+  readonly card?: boolean;
 }
 
 /** Re-declared rather than imported from `ui-primitives` so a column definition is data. */

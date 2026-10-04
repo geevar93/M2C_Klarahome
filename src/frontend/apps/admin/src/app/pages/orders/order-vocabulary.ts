@@ -243,6 +243,14 @@ export const SHIPMENT_STATUS_VOCAB: Record<string, StatusDisplay> = {
   },
 };
 
+/** How the order's payment method reads. `CashOnDelivery` is the API's enum name, not a phrase. */
+export function paymentMethodLabel(method: string | null | undefined): string {
+  if (!method) return '—';
+  if (method === 'CashOnDelivery') return 'Cash on delivery';
+  if (method === 'Prepaid') return 'Prepaid';
+  return spaceOut(method);
+}
+
 /**
  * Looks a status up in the given vocabulary. An unknown value — one the API added after this file
  * was written — is spaced out ("SomeNewStatus" → "Some new status") rather than shown raw.
@@ -253,7 +261,10 @@ export function statusLabel(vocab: Record<string, StatusDisplay>, status: string
 }
 
 /** The explanation shown on hover, or nothing for an unknown value. */
-export function statusTooltip(vocab: Record<string, StatusDisplay>, status: string | null | undefined): string {
+export function statusTooltip(
+  vocab: Record<string, StatusDisplay>,
+  status: string | null | undefined,
+): string {
   return (status && vocab[status]?.tooltip) || '';
 }
 

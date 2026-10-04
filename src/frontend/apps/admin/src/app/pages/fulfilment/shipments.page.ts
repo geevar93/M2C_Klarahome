@@ -119,7 +119,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
           <span class="awb">{{ row.awb }}</span>
           <span class="note">{{ row.courier ?? 'courier unknown' }}</span>
         } @else {
-          <span class="note">Not booked</span>
+          <span class="note">—</span>
         }
       </ng-template>
     </kh-data-table>
@@ -141,55 +141,56 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
         <kh-alert tone="danger" heading="The failed messages could not be loaded">{{ message }}</kh-alert>
       }
 
-      <table [attr.aria-busy]="events.loading()">
-        <thead>
-          <tr>
-            <th scope="col">Received</th>
-            <th scope="col">Courier</th>
-            <th scope="col">Tracking number</th>
-            <th scope="col">Event</th>
-            <th scope="col">Why it failed</th>
-            <th scope="col"><span class="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          @if (events.loading() && events.rows().length === 0) {
+      @if (!events.loading() && events.rows().length === 0) {
+        <!-- No header row over an empty body: the answer is the sentence. -->
+        <p class="hint">Nothing has failed. That is the answer you want.</p>
+      } @else {
+        <table [attr.aria-busy]="events.loading()">
+          <thead>
             <tr>
-              <td colspan="6" class="hint">Loading…</td>
+              <th scope="col">Received</th>
+              <th scope="col">Courier</th>
+              <th scope="col">Tracking number</th>
+              <th scope="col">Event</th>
+              <th scope="col">Why it failed</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
-          }
-          @for (event of events.rows(); track event.id) {
-            <tr>
-              <td>{{ when(event.receivedAt) }}</td>
-              <td>{{ event.provider }}</td>
-              <td>{{ event.awb ?? '—' }}</td>
-              <td>
-                {{ event.eventType }}
-                @if (!event.signatureValid) {
-                  <kh-badge tone="danger">Signature invalid</kh-badge>
-                }
-              </td>
-              <td class="note">{{ event.processError ?? event.status }} · {{ event.attempts }} attempts</td>
-              <td>
-                <button
-                  *khHasPermission="'shipping.shipment.manage'"
-                  khButton
-                  type="button"
-                  size="sm"
-                  [disabled]="busy()"
-                  (click)="replay(event.id)"
-                >
-                  Replay
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="6" class="hint">Nothing has failed. That is the answer you want.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @if (events.loading() && events.rows().length === 0) {
+              <tr>
+                <td colspan="6" class="hint">Loading…</td>
+              </tr>
+            }
+            @for (event of events.rows(); track event.id) {
+              <tr>
+                <td>{{ when(event.receivedAt) }}</td>
+                <td>{{ event.provider }}</td>
+                <td>{{ event.awb ?? '—' }}</td>
+                <td>
+                  {{ event.eventType }}
+                  @if (!event.signatureValid) {
+                    <kh-badge tone="danger">Signature invalid</kh-badge>
+                  }
+                </td>
+                <td class="note">{{ event.processError ?? event.status }} · {{ event.attempts }} attempts</td>
+                <td>
+                  <button
+                    *khHasPermission="'shipping.shipment.manage'"
+                    khButton
+                    type="button"
+                    size="sm"
+                    [disabled]="busy()"
+                    (click)="replay(event.id)"
+                  >
+                    Replay
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
     </section>
 
     @if (viewing(); as parcel) {
@@ -438,6 +439,12 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
       font-size: var(--text-sm);
     }
 
+    @media (min-width: 768px) {
+      table {
+        display: table;
+      }
+    }
+
     @media (pointer: coarse) {
       button[khButton] {
         min-block-size: 44px;
@@ -573,10 +580,17 @@ export class ShipmentsPage {
       value: (row) => statusLabel(SHIPMENT_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
+      card: true,
     },
-    { key: 'awb', label: 'Tracking number', kind: 'custom' },
+    { key: 'awb', label: 'Tracking number', kind: 'custom', card: true },
     { key: 'destinationPincode', label: 'To', value: (row) => row.destinationPincode, width: '7rem' },
-    { key: 'weightGrams', label: 'Weight', kind: 'number', value: (row) => `${row.weightGrams} g` },
+    {
+      key: 'weightGrams',
+      label: 'Weight',
+      kind: 'number',
+      // An unbooked parcel has no weight yet; "0 g" read as a measurement.
+      value: (row) => (row.weightGrams ? `${row.weightGrams} g` : '—'),
+    },
     {
       key: 'codAmount',
       label: 'To collect',
@@ -588,6 +602,7 @@ export class ShipmentsPage {
       label: 'Expected',
       kind: 'date',
       value: (row) => tableDateTime(row.expectedDeliveryAt),
+      card: true,
     },
     {
       key: 'createdAt',

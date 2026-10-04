@@ -57,7 +57,9 @@ import { AdminAttentionItem } from './admin.model';
             @for (item of items(); track item.key) {
               <li>
                 <a [routerLink]="item.path" (click)="open.set(false)">
-                  <span class="glyph" aria-hidden="true"><kh-icon [name]="iconFor(item.icon)" size="sm" /></span>
+                  <span class="glyph" aria-hidden="true"
+                    ><kh-icon [name]="iconFor(item.icon)" size="sm"
+                  /></span>
                   <span class="text">
                     <span class="title">{{ item.label }}</span>
                     <span class="hint">{{ item.hint }}</span>
@@ -272,8 +274,8 @@ export class AdminNotifications {
     inject(Router)
       .events.pipe(takeUntilDestroyed())
       .subscribe((event) => {
-      if (event instanceof NavigationStart) this.open.set(false);
-    });
+        if (event instanceof NavigationStart) this.open.set(false);
+      });
   }
 
   protected iconFor(name: string | undefined): IconName {

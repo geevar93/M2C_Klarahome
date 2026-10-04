@@ -49,20 +49,20 @@ import { Button, Icon } from '@klarahome/ui-primitives';
           (keydown)="onKeydown($event)"
         >
           @if (!bare()) {
-          <header>
-            <h2>{{ heading() }}</h2>
-            <button
-              khButton
-              type="button"
-              variant="tertiary"
-              size="sm"
-              [iconOnly]="true"
-              aria-label="Close"
-              (click)="requestClose()"
-            >
-              <kh-icon name="close" size="sm" />
-            </button>
-          </header>
+            <header>
+              <h2>{{ heading() }}</h2>
+              <button
+                khButton
+                type="button"
+                variant="tertiary"
+                size="sm"
+                [iconOnly]="true"
+                aria-label="Close"
+                (click)="requestClose()"
+              >
+                <kh-icon name="close" size="sm" />
+              </button>
+            </header>
           }
 
           <div class="body">
