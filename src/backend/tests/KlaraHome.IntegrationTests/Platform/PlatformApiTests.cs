@@ -126,6 +126,23 @@ public sealed class PlatformApiTests(KlaraHomeSchemaFixture fixture) : IDisposab
 
         // Written from the request, not passed in by the caller.
         Assert.False(string.IsNullOrWhiteSpace(entry.GetProperty("correlationId").GetString()));
+
+        // The actor is named in words, resolved from Identity in a batch; a settings section has no
+        // owner offering a label, so its target stays null rather than echoing the key.
+        Assert.False(string.IsNullOrWhiteSpace(entry.GetProperty("actorDisplay").GetString()));
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("targetLabel").ValueKind);
+
+        // A user target is named by the same lookup: the sign-in entries label themselves.
+        var signIns = await client.GetFromJsonAsync<JsonElement>(
+            "/api/v1/admin/audit-logs?entityType=User&size=5",
+            TestContext.Current.CancellationToken);
+
+        var signIn = signIns.GetProperty("items").EnumerateArray().FirstOrDefault();
+
+        if (signIn.ValueKind == JsonValueKind.Object)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(signIn.GetProperty("targetLabel").GetString()));
+        }
     }
 
     [Fact]
