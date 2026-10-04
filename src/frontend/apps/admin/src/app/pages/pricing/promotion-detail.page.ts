@@ -412,37 +412,39 @@ const NEW = 'new';
               Everything left empty means "no restriction". An exclusion always beats an inclusion.
             </p>
 
-            <kh-field label="Categories" for="promo-categories" [optional]="true">
-              <select
-                khControl
-                id="promo-categories"
-                multiple
-                size="6"
-                (change)="setCategoryIds($any($event.target))"
-              >
+            <!-- Tick boxes rather than a native multi-select listbox: ctrl-click is not something a
+                 phone or a first-time operator discovers, and a listbox hides what is chosen. -->
+            <div class="check-field">
+              <span class="check-label" id="promo-categories-label">Categories <em>(optional)</em></span>
+              <div class="check-list" role="group" aria-labelledby="promo-categories-label">
                 @for (node of categoryOptions(); track node.id) {
-                  <option [value]="node.id" [selected]="categoryIds().includes(node.id)">
-                    {{ node.label }}
-                  </option>
+                  <kh-checkbox
+                    [label]="node.label"
+                    [inputId]="'promo-category-' + node.id"
+                    [checked]="categoryIds().includes(node.id)"
+                    (checkedChange)="toggleId(categoryIds, node.id, $event)"
+                  />
+                } @empty {
+                  <span class="hint">No categories.</span>
                 }
-              </select>
-            </kh-field>
+              </div>
+            </div>
 
-            <kh-field label="Brands" for="promo-brands" [optional]="true">
-              <select
-                khControl
-                id="promo-brands"
-                multiple
-                size="6"
-                (change)="setBrandIds($any($event.target))"
-              >
+            <div class="check-field">
+              <span class="check-label" id="promo-brands-label">Brands <em>(optional)</em></span>
+              <div class="check-list" role="group" aria-labelledby="promo-brands-label">
                 @for (brand of brands.rows(); track brand.id) {
-                  <option [value]="brand.id" [selected]="brandIds().includes(brand.id)">
-                    {{ brand.name }}
-                  </option>
+                  <kh-checkbox
+                    [label]="brand.name"
+                    [inputId]="'promo-brand-' + brand.id"
+                    [checked]="brandIds().includes(brand.id)"
+                    (checkedChange)="toggleId(brandIds, brand.id, $event)"
+                  />
+                } @empty {
+                  <span class="hint">No brands.</span>
                 }
-              </select>
-            </kh-field>
+              </div>
+            </div>
 
             <!--
               A picker beside the list rather than instead of it. A scope is genuinely a *set* of
@@ -592,6 +594,14 @@ const NEW = 'new';
         <!-- ---- The simulator ---- -->
 
         <aside>
+          @if (isNew()) {
+            <!-- Nothing to try until there is a rule to try it on: the panel would sit in the right
+                 column beside an empty form. -->
+            <section class="panel">
+              <h2>Try it on a basket</h2>
+              <p class="hint">Create the promotion first, then price a basket here to see exactly what it does.</p>
+            </section>
+          } @else {
           <section class="panel">
             <h2>Try it on a basket</h2>
             <p class="hint">
@@ -748,6 +758,7 @@ const NEW = 'new';
               }
             }
           </section>
+          }
 
           @if (!isNew()) {
             <section class="panel">
@@ -854,6 +865,34 @@ const NEW = 'new';
        button lines its edge up with the input's. */
     .row > [khButton] {
       margin-block-end: var(--space-4);
+    }
+
+    .check-field {
+      margin-block-end: var(--space-3);
+    }
+
+    .check-label {
+      display: block;
+      margin-block-end: var(--space-1);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+
+    .check-label em {
+      color: var(--color-text-muted);
+      font-style: normal;
+      font-weight: var(--weight-regular);
+    }
+
+    .check-list {
+      display: grid;
+      gap: var(--space-1);
+      max-block-size: 12rem;
+      padding: var(--space-2) var(--space-3);
+      overflow-y: auto;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
     }
 
     .hint {
@@ -1136,12 +1175,9 @@ export class PromotionDetailPage implements HasUnsavedChanges {
 
   // ---- Scope pickers ----------------------------------------------------------------------------
 
-  protected setCategoryIds(select: HTMLSelectElement): void {
-    this.categoryIds.set(selectedValues(select));
-  }
-
-  protected setBrandIds(select: HTMLSelectElement): void {
-    this.brandIds.set(selectedValues(select));
+  /** Adds or removes one id from a scope list. */
+  protected toggleId(target: WritableSignal<readonly string[]>, id: string, on: boolean): void {
+    target.update((current) => (on ? [...current.filter((entry) => entry !== id), id] : current.filter((entry) => entry !== id)));
   }
 
   protected togglePaymentMethod(method: QuotePaymentMethod, on: boolean): void {
@@ -1415,9 +1451,6 @@ function hintFor(choices: readonly { value: string; hint?: string }[], value: st
   return choices.find((choice) => choice.value === value)?.hint ?? '';
 }
 
-function selectedValues(select: HTMLSelectElement): readonly string[] {
-  return Array.from(select.selectedOptions).map((option) => option.value);
-}
 
 /** A textarea of identifiers, one per line. Null rather than an empty array means "unrestricted". */
 function lines(value: string): string[] | null {

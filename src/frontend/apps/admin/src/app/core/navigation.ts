@@ -316,8 +316,9 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   // managing users and tax rates.
   {
     path: 'inventory/adjustments',
-    // The screen's own heading, because a transfer between warehouses is half of what it does.
-    label: 'Adjustments & transfers',
+    // Short, because the sidebar truncated "Adjustments & transfers"; the screen's own heading still
+    // says both, since a transfer between warehouses is half of what it does.
+    label: 'Adjustments',
     section: 'Inventory',
     icon: 'edit',
     permissions: ['inventory.stock.adjust'],

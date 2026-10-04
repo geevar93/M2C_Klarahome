@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import {
   PlatformSettingsService,
   SettingsFieldSchema,
@@ -498,6 +506,30 @@ export class StoreSettingsPage implements HasUnsavedChanges {
 
   constructor() {
     this.load();
+
+    // The sub-nav follows the page: the section crossing a band near the top of the viewport is the
+    // current one, so it is highlighted while scrolling and not only after a click on it.
+    let observer: IntersectionObserver | null = null;
+    inject(DestroyRef).onDestroy(() => observer?.disconnect());
+    effect(() => {
+      const keys = this.sections().map((section) => section.key);
+      observer?.disconnect();
+      if (keys.length === 0 || typeof IntersectionObserver === 'undefined') return;
+      // After the sections have rendered for these keys.
+      setTimeout(() => {
+        observer = new IntersectionObserver(
+          (entries) => {
+            const visible = entries.find((entry) => entry.isIntersecting);
+            if (visible) this.current.set(visible.target.id.replace(/^settings-/, ''));
+          },
+          { rootMargin: '-15% 0px -75% 0px' },
+        );
+        for (const key of keys) {
+          const element = document.getElementById(`settings-${key}`);
+          if (element) observer.observe(element);
+        }
+      });
+    });
   }
 
   protected humanise(key: string): string {

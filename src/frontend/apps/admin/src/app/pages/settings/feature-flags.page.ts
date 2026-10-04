@@ -229,8 +229,8 @@ const PERMANENT_GAP = /permanent gap/i;
 
     .knob {
       position: relative;
-      inline-size: 2.25rem;
-      block-size: 1.25rem;
+      inline-size: 2.5rem;
+      block-size: 1.5rem;
       border-radius: var(--radius-full);
       background: var(--color-border-strong);
       transition: background var(--duration-fast) var(--ease-standard);
@@ -239,8 +239,8 @@ const PERMANENT_GAP = /permanent gap/i;
     .knob::after {
       content: '';
       position: absolute;
-      inset-block-start: 0.125rem;
-      inset-inline-start: 0.125rem;
+      inset-block-start: var(--space-1);
+      inset-inline-start: var(--space-1);
       inline-size: 1rem;
       block-size: 1rem;
       border-radius: var(--radius-full);

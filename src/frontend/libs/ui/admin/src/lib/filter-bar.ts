@@ -231,7 +231,7 @@ const QUICK_CHIP_LIMIT = 8;
     /* A fade on the right edge while there are tabs scrolled out of sight: the row used to end
        mid-word at 390px with nothing to say it went on. Dropped once the last tab is reached. */
     .quick.more {
-      mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+      mask-image: linear-gradient(to right, var(--color-text) calc(100% - 2.5rem), transparent);
     }
 
     .quick::-webkit-scrollbar {
