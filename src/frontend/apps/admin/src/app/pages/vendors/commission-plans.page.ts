@@ -410,7 +410,9 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 1024px) {
+    /* Side by side only where the table keeps its seven columns: at 1366 the panel left it two
+       (Plan, How) with the rest scrolled out of sight. Below this it stacks under the table. */
+    @media (min-width: 1440px) {
       .layout {
         grid-template-columns: minmax(0, 3fr) minmax(18rem, 1fr);
         align-items: start;

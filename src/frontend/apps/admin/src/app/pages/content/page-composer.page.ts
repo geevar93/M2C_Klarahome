@@ -146,10 +146,6 @@ interface BlockDraft {
               {{ transitionLabel(status) }}
             </button>
           }
-
-          <button khButton type="button" size="sm" variant="danger" (click)="deleting.set(true)">
-            Delete
-          </button>
         </ng-container>
       }
     </kh-page-header>
@@ -555,6 +551,14 @@ interface BlockDraft {
               </ul>
             }
           </section>
+
+          <!-- Deleting is rare and cannot be undone: after a divider at the foot of the page, not
+               beside Save at the top where a thumb lands. -->
+          <section *khHasPermission="'content.content.manage'" class="danger-zone">
+            <button khButton type="button" size="sm" variant="tertiary" (click)="deleting.set(true)">
+              Delete this page…
+            </button>
+          </section>
         </aside>
       </div>
     }
@@ -750,6 +754,12 @@ interface BlockDraft {
 
     kh-alert {
       margin-block-end: var(--space-4);
+    }
+
+    .danger-zone {
+      margin-block-start: var(--space-4);
+      padding-block-start: var(--space-4);
+      border-block-start: 1px solid var(--color-border);
     }
 
     .layout {
@@ -991,7 +1001,6 @@ export class PageComposerPage implements HasUnsavedChanges {
       id: draft.id,
       label: this.labelFor(draft.type),
       sublabel: draft.isVisible ? null : 'Hidden',
-      meta: draft.type,
     })),
   );
 

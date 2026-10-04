@@ -211,7 +211,7 @@ export class PromotionsPage {
     },
     {
       key: 'stacking',
-      label: 'Combine with other offers',
+      label: 'Combines with others',
       value: (row) => row.stacking,
       hiddenByDefault: true,
     },

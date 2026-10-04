@@ -135,17 +135,17 @@ friction · **P3** polish. Owner: [FE] frontend · [BE] API/read model · [BOTH]
 
 | # | Sev | Gap | Where | Status |
 |---|-----|-----|-------|--------|
-| J1 | P1 [FE] | Page composer on a phone: block labels wrap per character ("Categor / y tiles", "Prod / uct / carou / sel"). | page-composer | ☐ |
-| J2 | P2 [FE] | Page composer lists blocks twice (sortable list, then a second collapsed editor list with the same names) and shows developer type codes ("RichText", "CategoryTiles") beside the labels. | page-composer | ☐ |
+| J1 | P1 [FE] | Page composer on a phone: block labels wrap per character ("Categor / y tiles", "Prod / uct / carou / sel"). | page-composer | ☑ Done: reorder-list rows wrap, controls drop to their own line. |
+| J2 | P2 [FE] | Page composer lists blocks twice (sortable list, then a second collapsed editor list with the same names) and shows developer type codes ("RichText", "CategoryTiles") beside the labels. | page-composer | ◐ Type codes removed; Delete moved to a foot-of-page "Delete this page…" after a divider. Merging the two block lists parked (larger than ~1h: the editors hang off per-block disclosures). |
 | J3 | P2 [BOTH] | Header says "Published · v0 · published 5 Oct" while Version history says "This page has never been published" (seeded page has no version row). | page-composer, content seeder | ☐ |
 | J4 | P2 [FE] | New promotion: the basket simulator takes the right column before a rule exists; listings/sellers are "one id per line" textareas (GUIDs, F3) under a search box; categories/brands are native multi-select listboxes (ctrl-click). | promotion-detail | ☐ |
-| J5 | P3 [FE] | Promotions list "Combine with other offers" header clipped at 1366. | promotions | ☐ |
+| J5 | P3 [FE] | Promotions list "Combine with other offers" header clipped at 1366. | promotions | ☑ Done: column is hidden by default again (the storageKey bug showed it) and renamed "Combines with others". |
 
 ## K. Marketplace, reports, settings, system
 
 | # | Sev | Gap | Where | Status |
 |---|-----|-----|-------|--------|
-| K1 | P1 [FE] | Commission plans table is clipped to two columns (Plan, How) at 1366 by the side panel — Default rate, Fee, Exceptions, Sellers, State are invisible with no scroll affordance. | commission-plans | ☐ |
+| K1 | P1 [FE] | Commission plans table is clipped to two columns (Plan, How) at 1366 by the side panel — Default rate, Fee, Exceptions, Sellers, State are invisible with no scroll affordance. | commission-plans | ☑ Done: panel stacks under the table until 1440px. |
 | K2 | P2 [FE] | Seller detail readiness panel prints raw document enums ("Pan, IncorporationCertificate, AddressProof"). | vendor-detail | ☐ |
 | K3 | P2 [data] | Demo seller is Active and trading while its readiness panel says "Not ready to trade yet" (no PAN, plan, docs, bank, pickup). Seed the readiness or label the override. | demo seeder | ☐ |
 | K4 | P3 [FE] | Commission simulator and report runner still take a pasted Seller id; the ledger already has a seller-by-name picker — reuse it (F3). | commission-plans, report-detail | ☐ |
