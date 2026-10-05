@@ -9,7 +9,7 @@ import { filter, map } from 'rxjs';
 
 import { breadcrumbsFor } from './breadcrumbs';
 import { ColourSchemeService } from './colour-scheme';
-import { sidebarGroups } from './navigation';
+import { navCategories } from './navigation';
 import { GlobalSearchPanel } from './global-search.panel';
 import { ProductQuickAdd } from './product-quick-add';
 import { QueueCountsStore } from './queue-counts.store';
@@ -37,9 +37,10 @@ const ATTENTION_ICONS: Readonly<Record<string, string>> = {
  * palette is up, whether the product quick-add sheet is, and the colour scheme — and nothing else.
  * Everything a page needs, a page fetches.
  *
- * The **sidebar comes off the session**, through the same declaration the route guards are built
- * from (`navigation.ts`), so the shell cannot offer a screen the guard will refuse. The counts on
- * it, and in the notifications panel, come off `QueueCountsStore`, the same numbers the dashboard
+ * The **navigation comes off the session** (the sidebar's categories and the tabs above the page),
+ * through the same declaration the route guards are built from (`navigation.ts`), so the shell
+ * cannot offer a screen the guard will refuse. The counts on it, and in the notifications panel,
+ * come off `QueueCountsStore`, the same numbers the dashboard
  * shows, refreshed on navigation at the store's own pace. The breadcrumb trail is derived from
  * the same declaration and the current URL (`breadcrumbs.ts`).
  */
@@ -48,7 +49,7 @@ const ATTENTION_ICONS: Readonly<Record<string, string>> = {
   imports: [AdminShell, GlobalSearchPanel, ProductQuickAdd, RouterOutlet, ToastHost],
   template: `
     <kh-admin-shell
-      [groups]="groups()"
+      [categories]="categories()"
       [crumbs]="crumbs()"
       [identity]="identity()"
       [showNotifications]="true"
@@ -113,8 +114,8 @@ export class ShellLayout {
     if (action) this.openQuickAction(action);
   }
 
-  protected readonly groups = computed(() =>
-    sidebarGroups(this.session.session(), this.queues.countsByPath()),
+  protected readonly categories = computed(() =>
+    navCategories(this.session.session(), this.queues.countsByPath()),
   );
   protected readonly quickActions = computed(() => quickActionsFor(this.session.session()));
 

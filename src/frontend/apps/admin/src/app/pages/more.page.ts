@@ -4,30 +4,29 @@ import { SessionStore } from '@klarahome/data-access-auth';
 import { PageHeader } from '@klarahome/ui-admin';
 import { EmptyState, ICON_NAMES, Icon, IconName } from '@klarahome/ui-primitives';
 
-import { sidebarGroups } from '../core/navigation';
+import { navCategories } from '../core/navigation';
 
 /**
- * Every screen this account can open, in one place: the page behind "All screens" in the sidebar
- * (and the old `More` door's route, which is unchanged).
+ * Every screen this account can open, in one place: the page behind "All screens" in the sidebar.
  *
- * The sidebar folds its secondary sections away to stay short; this page is the unfolded version
- * of the same list, grouped under the same headings, with each section's screens as full-width
- * rows a thumb can hit. It renders from `sidebarGroups()`, the declaration the route guards are
- * built from, so it cannot list a screen the session cannot open.
+ * The sidebar lists only categories and the tabs above a page only the open category's screens;
+ * this page is the whole list, grouped under the same category names, with each section's screens
+ * as full-width rows a thumb can hit. It renders from `navCategories()`, the declaration the route
+ * guards are built from, so it cannot list a screen the session cannot open.
  */
 @Component({
   selector: 'kh-more-page',
   imports: [EmptyState, Icon, PageHeader, RouterLink],
   template: `
-    <kh-page-header heading="All screens" description="Everything your account can open, grouped as in the sidebar." />
+    <kh-page-header heading="All screens" description="Everything your account can open, grouped by category." />
 
-    @if (groups().length > 0) {
+    @if (categories().length > 0) {
       <div class="groups">
-        @for (group of groups(); track $index) {
+        @for (category of categories(); track category.key) {
           <section class="card">
-            <h2>{{ group.label ?? 'Overview' }}</h2>
-            @for (section of group.sections; track section.label) {
-              @if (group.sections.length > 1) {
+            <h2>{{ category.label }}</h2>
+            @for (section of category.sections; track section.label) {
+              @if (category.sections.length > 1) {
                 <h3>{{ section.label }}</h3>
               }
               <ul>
@@ -135,7 +134,7 @@ import { sidebarGroups } from '../core/navigation';
 export class MorePage {
   private readonly session = inject(SessionStore);
 
-  protected readonly groups = computed(() => sidebarGroups(this.session.session(), new Map()));
+  protected readonly categories = computed(() => navCategories(this.session.session(), new Map()));
 
   protected iconFor(name: string | undefined): IconName {
     return name && (ICON_NAMES as readonly string[]).includes(name) ? (name as IconName) : 'chevron-right';

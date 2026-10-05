@@ -34,9 +34,9 @@ import { QuickAction } from './quick-actions';
  * finds *records* — an order, a product, a seller — because that is what the four list endpoints
  * it fans out to return. It never finds a *screen*, so a person typing "shipping" hoping to land
  * on delivery zones gets nothing, and has to already know that screen lives under Settings. The
- * "Go to" group is computed locally, from the same `visibleSections()` the sidebar renders — so it
- * can never offer a screen this session's sidebar does not also show — matched against the term by
- * label and by a short list of synonyms for the handful of screens whose sidebar label is not the
+ * "Go to" group is computed locally, from the same `visibleSections()` the navigation is built from — so it
+ * can never offer a screen this session's navigation does not also list — matched against the term by
+ * label and by a short list of synonyms for the handful of screens whose navigation label is not the
  * word most people type (`SCREEN_SYNONYMS` below). It costs no request and no debounce: unlike
  * the record groups, it is recomputed synchronously on every keystroke.
  */
@@ -220,8 +220,8 @@ export class GlobalSearchPanel {
   private inFlight: Subscription | null = null;
 
   /**
-   * The sidebar screens this session's own labels rather than the module's — synonyms for the few
-   * whose sidebar wording is not the word a person searching for it types. Keyed by the word,
+   * The navigation labels screens in this session's own words rather than the module's — synonyms for the few
+   * whose navigation wording is not the word a person searching for it types. Keyed by the word,
    * valued by the exact `AdminNavItem.label` it should surface (see `navigation.ts`).
    */
   private static readonly SCREEN_SYNONYMS: Record<string, string> = {
@@ -242,11 +242,11 @@ export class GlobalSearchPanel {
     homepage: 'Pages',
   };
 
-  /** The screens this session's sidebar shows, flattened once per search rather than per group. */
+  /** The screens this session's navigation lists, flattened once per search rather than per group. */
   private readonly screens = computed(() => visibleSections(this.session.session()).flatMap((section) => section.items));
 
   /**
-   * The "Go to" group, matched locally against the sidebar's own labels — see the class doc for
+   * The "Go to" group, matched locally against the navigation's own labels — see the class doc for
    * why this exists as well as the record groups the service fetches.
    */
   protected readonly screenGroup = computed<SearchGroup | null>(() => {

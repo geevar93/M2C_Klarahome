@@ -3,14 +3,14 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map } from 'rxjs';
 
-import { AdminNavHub, AdminNavItem, AdminNavSection } from './admin.model';
+import { AdminNavCategory, AdminNavItem, AdminNavSection } from './admin.model';
 
 /**
  * Where the back office is right now, as a path with no query or fragment.
  *
- * Both halves of the navigation — the five doors and the row of tabs behind the open one — need
- * to know the same thing: which destination the current URL belongs to. Neither can use
- * `routerLinkActive` for it, because a door is active when *any* screen behind it is, and a
+ * Both halves of the navigation — the sidebar's categories and the tabs above the page — need to
+ * know the same thing: which destination the current URL belongs to. Neither can use
+ * `routerLinkActive` for it, because a category is active when *any* screen in it is, and a
  * detail route (`/orders/123`) has no link of its own anywhere. So the membership test is written
  * once, here, and both read it.
  */
@@ -38,15 +38,11 @@ export function sectionFor(sections: readonly AdminNavSection[], path: string): 
 }
 
 /**
- * The door the current path is behind, or null when no hub owns it.
+ * The category the current path is in, or null (`/more`, `/403`, a page nothing lists).
  *
- * Membership first — a screen behind a door lights that door — and the hub's own landing path
- * second, which is how `/more` lights More although no item in it is `/more`.
+ * Membership is by screen, and a detail route belongs to its list's screen by prefix, so
+ * `/orders/123` keeps Sell lit and keeps the Orders tab as the active one.
  */
-export function hubFor(hubs: readonly AdminNavHub[], path: string): AdminNavHub | null {
-  return (
-    hubs.find((hub) => sectionFor(hub.sections, path) !== null) ??
-    hubs.find((hub) => path === hub.path || path.startsWith(`${hub.path}/`)) ??
-    null
-  );
+export function categoryFor(categories: readonly AdminNavCategory[], path: string): AdminNavCategory | null {
+  return categories.find((category) => sectionFor(category.sections, path) !== null) ?? null;
 }

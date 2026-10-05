@@ -16,7 +16,7 @@
 // Navigation
 // -------------------------------------------------------------------------------------------------
 
-/** One destination in the sidebar. */
+/** One screen in the navigation: a tab in the sub-nav, a row on the "All screens" page. */
 export interface AdminNavItem {
   readonly label: string;
   /** An internal router path. Every admin destination is internal; there are no outbound links. */
@@ -29,40 +29,29 @@ export interface AdminNavItem {
   readonly badge?: number | string | null;
 }
 
-/** A labelled group of destinations. A section with no visible items is not rendered at all. */
+/** A labelled group of screens. A section with no visible items is not rendered at all. */
 export interface AdminNavSection {
   readonly label: string;
   readonly items: readonly AdminNavItem[];
-  /**
-   * In the sidebar: drawn as a disclosure that opens onto its items, rather than as a flat list.
-   * The first section of each group is flat (it is what people come for); the rest fold away so
-   * forty-odd destinations do not become forty-odd rows.
-   */
-  readonly collapsible?: boolean;
-  /** The sidebar disclosure's own count: its items' counts added up. Zero and null show nothing. */
+  /** The section's own count: its items' counts added up. Zero and null show nothing. */
   readonly badge?: number | string | null;
 }
 
-/** A heading in the sidebar, with the sections filed under it. A null label draws no heading. */
-export interface AdminNavGroup {
-  readonly label: string | null;
-  readonly sections: readonly AdminNavSection[];
-}
-
 /**
- * One of the five doors: a top-level destination in the tab bar and the rail.
+ * One entry in the sidebar, and everything behind it.
  *
- * `path` is where the door opens — the first screen behind it that the session can reach, or a
- * landing page for a hub too broad for a row of tabs. `sections` are the groups behind it, and the
- * sub-nav draws them as a row of secondary tabs. A hub with no sections is not rendered.
+ * The sidebar draws only `label`, `icon` and `badge`; the sub-nav above the page draws the open
+ * category's `sections` (a row of them when there is more than one, then the screens of the
+ * current one as tabs). `path` is where the entry opens — the first screen in it that the session
+ * can reach. A category with no sections is not rendered.
  */
-export interface AdminNavHub {
+export interface AdminNavCategory {
   readonly key: string;
   readonly label: string;
   readonly icon?: string;
   readonly path: string;
   readonly sections: readonly AdminNavSection[];
-  /** Everything waiting behind this door, added up. Zero and null show nothing. */
+  /** Everything waiting in this category, added up. Zero and null show nothing. */
   readonly badge?: number | string | null;
 }
 

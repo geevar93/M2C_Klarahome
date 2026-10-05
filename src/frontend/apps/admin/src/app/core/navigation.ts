@@ -8,7 +8,7 @@ import {
   platformPermissionGuard,
   vendorOnlyGuard,
 } from '@klarahome/data-access-auth';
-import { AdminNavGroup, AdminNavHub, AdminNavSection, unsavedChangesGuard } from '@klarahome/ui-admin';
+import { AdminNavCategory, AdminNavItem, AdminNavSection, unsavedChangesGuard } from '@klarahome/ui-admin';
 
 /**
  * Every destination in the back office, declared once.
@@ -21,7 +21,7 @@ import { AdminNavGroup, AdminNavHub, AdminNavSection, unsavedChangesGuard } from
  * item is a screen nobody can find.
  *
  * So there is one list. `adminRoutes()` builds the router configuration from it and
- * `visibleSections()` builds the sidebar from it, and neither can describe a destination the other
+ * `navCategories()` builds the navigation from it, and neither can describe a destination the other
  * does not.
  *
  * Two kinds of gate, and the difference matters:
@@ -50,20 +50,20 @@ import { AdminNavGroup, AdminNavHub, AdminNavSection, unsavedChangesGuard } from
  * renamed, the reason is a merchant word for what platform staff called it internally (`Fulfilment`
  * → "To pack", `Ledger` → "Seller ledger", and so on) — the comment above each moved block says why.
  *
- * **Phase 2 of the admin UX work put five doors in front of those sections.** Eight headings and
- * thirty-odd items was still a directory, and on a phone it was a drawer that opened onto eight
- * collapsed headings and nothing else. The shell now has exactly five top-level destinations —
- * Home, Orders, Products, Grow, More — drawn as a bottom tab bar on a phone and a narrow rail on
- * a desktop, and everything else lives *inside* one of them as a row of secondary tabs. A section
- * is still the unit of grouping; what changed is that each section now belongs to a hub
- * (`SECTION_HUB`), and `visibleHubs()` builds the shell's navigation from that, the same way
- * `visibleSections()` always did. Every `path` is, again, byte-for-byte what it was.
+ * **The navigation is two levels, and only the first is in the sidebar.** Eleven sections and
+ * thirty-odd items in one sidebar was a directory, and it read as clutter. The sidebar now lists
+ * the six categories in `NAV_CATEGORIES` (Home, Sell, Catalogue, Grow, Marketplace, Business) and
+ * nothing else; opening one shows that category's screens as a row of tabs above the page, with a
+ * row of sections ahead of it when the category has more than one (Catalogue's Products, Organise
+ * and Inventory). A section is still the unit of grouping - the categories only say which sections
+ * share a sidebar entry - and `navCategories()` builds both levels from `DESTINATIONS`, the same
+ * way `visibleSections()` always did. Every `path` is, again, byte-for-byte what it was.
  */
 export interface AdminDestination {
   /** The router path, without a leading slash. */
   readonly path: string;
   readonly label: string;
-  /** The secondary heading this is filed under; `SECTION_HUB` says which door that is behind. */
+  /** The section this is filed under; `NAV_CATEGORIES` says which sidebar category that is in. */
   readonly section: NavSection;
   /** A name from the `kh-icon` registry. An unknown one falls back rather than throwing. */
   readonly icon?: string;
@@ -90,36 +90,12 @@ export interface AdminDestination {
   readonly step?: string;
 }
 
-/** The five doors. Everything in the back office is behind exactly one of them. */
-export type HubKey = 'home' | 'orders' | 'products' | 'grow' | 'more';
-
 /**
- * The five top-level destinations, in the order the tab bar and the rail draw them.
- *
- * Five and not eight, because a tab bar has room for five and a person has attention for about
- * that many. `Grow` is the storefront-facing work — promotions, price lists, pages, banners — and
- * is named for what the merchant is doing rather than for the modules that own the screens.
- * `More` is the door to everything that is set up once or looked at occasionally: the marketplace's
- * commercial side, settings, and the platform's own diagnostics.
- *
- * `path` is where the door opens *by default*. The hub bar prefers the first reachable item in the
- * hub, so a seller whose only "Grow" screen is Price lists lands there rather than on a 403; the
- * declared path is the fallback and, for `More`, the landing page that lists its groups.
- */
-export const HUBS: readonly { readonly key: HubKey; readonly label: string; readonly icon: string; readonly path: string }[] = [
-  { key: 'home', label: 'Home', icon: 'home', path: '/dashboard' },
-  { key: 'orders', label: 'Orders', icon: 'cart', path: '/orders' },
-  { key: 'products', label: 'Products', icon: 'package', path: '/catalog/products' },
-  { key: 'grow', label: 'Grow', icon: 'megaphone', path: '/promotions' },
-  { key: 'more', label: 'More', icon: 'grid', path: '/more' },
-];
-
-/**
- * The secondary headings, in the order they appear within their hub.
+ * The sections, in the order they appear within their category.
  *
  * `System` is deliberately last: feature flags, the audit log and the notification message log are
- * tools for diagnosing the platform, not for running the shop, and they sit at the bottom of the
- * `More` page for the same reason they used to sit at the bottom of the sidebar.
+ * tools for diagnosing the platform, not for running the shop, so they are the last section of the
+ * last category.
  */
 export const NAV_SECTIONS = [
   'Home',
@@ -137,36 +113,26 @@ export const NAV_SECTIONS = [
 
 export type NavSection = (typeof NAV_SECTIONS)[number];
 
-/** Which door each section is behind. A section that is not here cannot be declared. */
-export const SECTION_HUB: Readonly<Record<NavSection, HubKey>> = {
-  Home: 'home',
-  Orders: 'orders',
-  Products: 'products',
-  Organise: 'products',
-  Inventory: 'products',
-  Promotions: 'grow',
-  Storefront: 'grow',
-  Marketplace: 'more',
-  'Your business': 'more',
-  Settings: 'more',
-  System: 'more',
-};
-
 /**
- * The sidebar's headings, and which sections are filed under each.
+ * The sidebar's entries, and which sections are filed under each.
  *
- * The same eleven sections as ever, grouped for a sidebar rather than for a tab bar: a heading is
- * a static label, the first section under it is a flat list, and any further sections fold away
- * until they are the one you are in. Every `NavSection` appears in exactly one group (the spec
- * checks), so nothing declared in `DESTINATIONS` can be missing from the sidebar.
+ * The same eleven sections as ever, grouped for a sidebar of six rather than a list of thirty-five.
+ * Every `NavSection` appears in exactly one category (the spec checks), so nothing declared in
+ * `DESTINATIONS` can be missing from the navigation. `icon` is a name from the `kh-icon` registry.
+ * The category's own link opens on the first screen in it that the session can reach.
  */
-export const SIDEBAR_GROUPS: readonly { readonly label: string | null; readonly sections: readonly NavSection[] }[] = [
-  { label: null, sections: ['Home'] },
-  { label: 'Sell', sections: ['Orders'] },
-  { label: 'Catalogue', sections: ['Products', 'Organise', 'Inventory'] },
-  { label: 'Grow', sections: ['Promotions', 'Storefront'] },
-  { label: 'Marketplace', sections: ['Marketplace'] },
-  { label: 'Business', sections: ['Your business', 'Settings', 'System'] },
+export const NAV_CATEGORIES: readonly {
+  readonly key: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly sections: readonly NavSection[];
+}[] = [
+  { key: 'home', label: 'Home', icon: 'home', sections: ['Home'] },
+  { key: 'sell', label: 'Sell', icon: 'cart', sections: ['Orders'] },
+  { key: 'catalogue', label: 'Catalogue', icon: 'package', sections: ['Products', 'Organise', 'Inventory'] },
+  { key: 'grow', label: 'Grow', icon: 'megaphone', sections: ['Promotions', 'Storefront'] },
+  { key: 'marketplace', label: 'Marketplace', icon: 'wallet', sections: ['Marketplace'] },
+  { key: 'business', label: 'Business', icon: 'settings', sections: ['Your business', 'Settings', 'System'] },
 ];
 
 export const DESTINATIONS: readonly AdminDestination[] = [
@@ -358,7 +324,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   },
 
   // ---- Grow: Storefront -------------------------------------------------------------------------
-  // What shoppers see. The CMS screens, filed under the door named for what the merchant is doing
+  // What shoppers see. The CMS screens, filed under the category named for what the merchant is doing
   // with them rather than for the module that owns them.
   {
     path: 'content/pages',
@@ -430,8 +396,8 @@ export const DESTINATIONS: readonly AdminDestination[] = [
     load: () => import('../pages/content/collection-detail.page').then((m) => m.CollectionDetailPage),
   },
   // ---- Grow: Promotions -------------------------------------------------------------------------
-  // What makes shoppers buy. The first row of the Grow hub, because a promotion is the thing a
-  // merchant opens this door to run.
+  // What makes shoppers buy. The first row of the Grow category, because a promotion is the thing a
+  // merchant opens this category to run.
   {
     path: 'promotions',
     label: 'Promotions',
@@ -700,11 +666,11 @@ export function canReach(session: Session | null, destination: AdminDestination)
 }
 
 /**
- * The secondary groups this session should see, in order, regardless of hub.
+ * The sections this session should see, in order, regardless of category.
  *
- * Sections with nothing in them are dropped, so a seller does not get an empty "Storefront" heading
+ * Sections with nothing in them are dropped, so a seller does not get an empty "Storefront" section
  * where the platform's four items would be. Global search's "Go to" group and the dashboard's
- * "do you have any screen at all" check read this flat list; the shell reads `visibleHubs()`.
+ * "do you have any screen at all" check read this flat list; the shell reads `navCategories()`.
  */
 export function visibleSections(session: Session | null): readonly AdminNavSection[] {
   return NAV_SECTIONS.map((section) => ({
@@ -721,101 +687,65 @@ export function visibleSections(session: Session | null): readonly AdminNavSecti
 }
 
 /**
- * The five doors this session should see, each with its groups behind it.
+ * The navigation: the categories this session should see, each with its sections and screens.
  *
- * A hub with nothing reachable behind it is dropped, which is what makes the tab bar honest for a
- * support user whose whole world is Users and the message log: they get Home and More, not five
- * tabs three of which lead nowhere. `Home` is never empty because the dashboard needs no
- * permission.
+ * The sidebar draws only the categories; the shell draws the open one's sections and screens above
+ * the page. Built from `visibleSections()`, the same list the route guards, global search and the
+ * "All screens" page read, so the navigation cannot offer a screen the guard would refuse. A
+ * category with nothing reachable in it is dropped, which is what keeps a support user's sidebar
+ * to Home and Business rather than six entries four of which lead nowhere. `Home` is never empty
+ * because the dashboard needs no permission.
  *
- * Each hub's `path` is the first reachable item in it, so the door opens on a real screen for
- * *this* session. `More` is the exception: its door is its own landing page, which lists the
- * groups, because a row of twenty secondary tabs is not navigation.
+ * A category's `path` is the first reachable screen in it, so its sidebar link opens on a real
+ * page for *this* session: a seller with no promotions permission gets Grow opening on Price
+ * lists, not on a 403.
+ *
+ * `counts` is keyed by path (`/fulfilment` -> 8) and each screen whose path has a count wears it as
+ * a badge. A section wears the sum of its screens and the category the sum of everything behind it,
+ * so a person on Home can see that eleven things are waiting behind Sell before opening it. A
+ * capped count (`50+`) makes every sum above it a cap too: adding an unknown to anything gives an
+ * unknown, and `58` would be a number nobody counted.
  */
-export function visibleHubs(session: Session | null): readonly AdminNavHub[] {
-  const sections = visibleSections(session);
-
-  return HUBS.map((hub) => {
-    const own = sections.filter((section) => SECTION_HUB[section.label as NavSection] === hub.key);
-    const first = own[0]?.items[0];
-
-    return {
-      key: hub.key,
-      label: hub.label,
-      icon: hub.icon,
-      path: hub.key === 'more' ? hub.path : (first?.path ?? hub.path),
-      sections: own,
-    };
-  }).filter((hub) => hub.sections.length > 0);
-}
-
-/**
- * The same hubs, with the work queues counted onto them.
- *
- * `counts` is keyed by path — `/fulfilment` → 8 — and each tab whose path has a count wears it as
- * a badge. The door then wears the sum of its tabs, so a person on Home can see that six things
- * are waiting behind Orders before opening it. A capped count (`50+`) makes the door's sum a cap
- * too: adding an unknown to anything gives an unknown, and `58` would be a number nobody counted.
- */
-export function withQueueCounts(
-  hubs: readonly AdminNavHub[],
-  counts: ReadonlyMap<string, number | string>,
-): readonly AdminNavHub[] {
-  return hubs.map((hub) => {
-    let total = 0;
-    let capped = false;
-
-    const sections = hub.sections.map((section) => ({
-      ...section,
-      items: section.items.map((item) => {
-        const count = counts.get(item.path);
-        if (typeof count === 'number') total += count;
-        if (typeof count === 'string') capped = true;
-        return count === undefined ? item : { ...item, badge: count };
-      }),
-    }));
-
-    const badge = capped ? `${Math.max(total, QUEUE_CAP)}+` : total;
-    return { ...hub, sections, badge };
-  });
-}
-
-/**
- * The sidebar: headed groups of sections, with the queue counts on the items and added up on any
- * section that folds away (so a closed "Inventory" can still say that something is waiting in it).
- *
- * Built from `visibleSections()`, the same list the route guards and global search read, so the
- * sidebar cannot offer a screen the guard would refuse. A group with nothing reachable in it is
- * dropped, and the first *reachable* section in a group is the flat one.
- */
-export function sidebarGroups(
+export function navCategories(
   session: Session | null,
   counts: ReadonlyMap<string, number | string>,
-): readonly AdminNavGroup[] {
+): readonly AdminNavCategory[] {
   const sections = visibleSections(session);
 
-  return SIDEBAR_GROUPS.map((group) => {
-    const own = sections.filter((section) => group.sections.includes(section.label as NavSection));
+  return NAV_CATEGORIES.map((category): AdminNavCategory => {
+    const own = sections
+      .filter((section) => category.sections.includes(section.label as NavSection))
+      .map((section) => {
+        const tally = tallyQueues(section.items, counts);
+        return { ...section, items: tally.items, badge: tally.badge };
+      });
+    const all = tallyQueues(own.flatMap((section) => section.items), counts);
+
     return {
-      label: group.label,
-      sections: own.map((section, index): AdminNavSection => {
-        let total = 0;
-        let capped = false;
-        const items = section.items.map((item) => {
-          const count = counts.get(item.path);
-          if (typeof count === 'number') total += count;
-          if (typeof count === 'string') capped = true;
-          return count === undefined ? item : { ...item, badge: count };
-        });
-        return {
-          ...section,
-          items,
-          collapsible: index > 0,
-          badge: capped ? `${Math.max(total, QUEUE_CAP)}+` : total,
-        };
-      }),
+      key: category.key,
+      label: category.label,
+      icon: category.icon,
+      path: own[0]?.items[0]?.path ?? '/dashboard',
+      sections: own,
+      badge: all.badge,
     };
-  }).filter((group) => group.sections.length > 0);
+  }).filter((category) => category.sections.length > 0);
+}
+
+/** Puts each item's queue count on it and adds them up; a capped count caps the sum. */
+function tallyQueues(
+  items: readonly AdminNavItem[],
+  counts: ReadonlyMap<string, number | string>,
+): { readonly items: readonly AdminNavItem[]; readonly badge: number | string } {
+  let total = 0;
+  let capped = false;
+  const counted = items.map((item) => {
+    const count = counts.get(item.path);
+    if (typeof count === 'number') total += count;
+    if (typeof count === 'string') capped = true;
+    return count === undefined ? item : { ...item, badge: count };
+  });
+  return { items: counted, badge: capped ? `${Math.max(total, QUEUE_CAP)}+` : total };
 }
 
 /** The page the counts are read from; a capped queue is at least this long. Matches `DashboardService`. */

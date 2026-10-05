@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   effect,
   inject,
   input,
@@ -13,14 +14,17 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { Icon } from '@klarahome/ui-primitives';
 import { filter } from 'rxjs';
 
-import { AdminAttentionItem, AdminCreateAction, AdminNavGroup } from './admin.model';
+import { AdminAttentionItem, AdminCreateAction, AdminNavCategory } from './admin.model';
 import { AdminSidebar } from './admin-sidebar';
+import { AdminSubNav } from './admin-sub-nav';
 import { AdminIdentityView, AdminTopBar } from './admin-top-bar';
 import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
+import { categoryFor, currentPath } from './nav-location';
 import { AdminCrumb } from './page-header';
 
 /**
- * The frame the whole back office sits in: top bar, sidebar, breadcrumbs, then the page.
+ * The frame the whole back office sits in: top bar, sidebar, the open category's tabs, breadcrumbs,
+ * then the page.
  *
  * **One layout break, and it is a real one.** From 1024px (`lg`) the sidebar is a fixed column in
  * the page grid, always visible. Below it the same sidebar is a drawer: a menu button in the top
@@ -29,7 +33,7 @@ import { AdminCrumb } from './page-header';
  * be tabbed to. Focus moves into the drawer when it opens and back to the menu button when it
  * closes.
  *
- * The shell owns no data. The groups, the trail, the identity and the impersonation are inputs,
+ * The shell owns no data. The categories, the trail, the identity and the impersonation are inputs,
  * and every control emits; the app holds the state, so a sign-out or a route change can move it.
  * The one thing it does hold is whether the drawer is open, which is nobody else's business.
  *
@@ -39,7 +43,7 @@ import { AdminCrumb } from './page-header';
  */
 @Component({
   selector: 'kh-admin-shell',
-  imports: [AdminSidebar, AdminTopBar, Icon, ImpersonationBanner, RouterLink],
+  imports: [AdminSidebar, AdminSubNav, AdminTopBar, Icon, ImpersonationBanner, RouterLink],
   template: `
     <a class="kh-skip-link" href="#main-content">Skip to main content</a>
 
@@ -74,11 +78,13 @@ import { AdminCrumb } from './page-header';
 
     <div class="layout">
       <aside id="admin-sidebar" [class.open]="menuOpen()" (keydown.escape)="closeMenu(true)">
-        <kh-admin-sidebar [groups]="groups()" (navigated)="closeMenu(false)" />
+        <kh-admin-sidebar [categories]="categories()" (navigated)="closeMenu(false)" />
       </aside>
 
       <main id="main-content" tabindex="-1">
         <div class="content">
+          <kh-admin-sub-nav [category]="activeCategory()" />
+
           @if (crumbs().length > 1) {
             <nav aria-label="Breadcrumb">
               <ol>
@@ -227,7 +233,8 @@ import { AdminCrumb } from './page-header';
 export class AdminShell {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
-  readonly groups = input.required<readonly AdminNavGroup[]>();
+  /** The categories the session can reach: the sidebar draws them, the sub-nav draws the open one. */
+  readonly categories = input.required<readonly AdminNavCategory[]>();
   readonly crumbs = input<readonly AdminCrumb[]>([]);
   readonly identity = input.required<AdminIdentityView>();
   readonly showNotifications = input(false);
@@ -253,6 +260,11 @@ export class AdminShell {
   readonly impersonationExited = output<void>();
 
   protected readonly menuOpen = signal(false);
+
+  private readonly path = currentPath();
+
+  /** The category the current page is in; its screens are the tabs above the page. */
+  protected readonly activeCategory = computed(() => categoryFor(this.categories(), this.path()));
 
   constructor() {
     // Any navigation closes the drawer: it is a way to get somewhere, and the page has changed.
