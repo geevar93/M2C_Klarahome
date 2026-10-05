@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { of, switchMap } from 'rxjs';
 import {
   DocumentPrintService,
   FulfilmentService,
@@ -23,6 +24,19 @@ interface PackLine {
   readonly name: string;
   readonly ordered: number;
   quantity: string;
+}
+
+/** Parcel statuses that mean it is packed or booked but has not left the building. */
+const OPEN_PARCEL_STATUSES: ReadonlySet<string> = new Set(['Draft', 'Created', 'LabelGenerated', 'PickupScheduled']);
+
+/** The newest parcel that has not left and is not cancelled, or null. Exported for the spec. */
+export function pickOpenParcel(
+  parcels: readonly { readonly id: string; readonly status: string; readonly createdAt: string }[],
+): { readonly id: string } | null {
+  const open = parcels
+    .filter((parcel) => OPEN_PARCEL_STATUSES.has(parcel.status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return open[0] ?? null;
 }
 
 /**
@@ -124,9 +138,10 @@ interface PackLine {
 
     <section class="panel">
       <div class="panel-head">
-        <h2>Waiting to be packed</h2>
+        <h2>Waiting to leave</h2>
         <p class="hint">
-          Confirmed parts with no parcel yet. Overdue ones are past the seller's dispatch cut-off.
+          Parts not yet handed to the courier, at whatever step they have reached. Overdue ones are past the
+          seller's dispatch cut-off.
         </p>
       </div>
 
@@ -173,13 +188,13 @@ interface PackLine {
                     [disabled]="busy()"
                     (click)="startPack(part)"
                   >
-                    Pack
+                    {{ part.status === 'Confirmed' ? 'Pack' : 'Continue' }}
                   </button>
                 </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="6" class="hint">Nothing is waiting to be packed.</td>
+                <td colspan="6" class="hint">Nothing is waiting to leave the building.</td>
               </tr>
             }
           </tbody>
@@ -223,7 +238,10 @@ interface PackLine {
           <li>4. Hand over</li>
         </ol>
 
-        @if (!shipment()) {
+        @if (resuming()) {
+          <p class="hint">Looking up the parcel for {{ part.subOrderNumber }}…</p>
+          <kh-skeleton height="6rem" />
+        } @else if (!shipment()) {
           <p class="hint">
             {{ part.subOrderNumber }} — reduce a quantity if it is not all going in this box. What is left
             behind stays on the part and can be shipped separately.
@@ -378,7 +396,7 @@ interface PackLine {
         </button>
 
         @if (!shipment()) {
-          <button khButton type="button" variant="primary" [disabled]="busy()" (click)="createAndPack()">
+          <button khButton type="button" variant="primary" [disabled]="busy() || resuming()" (click)="createAndPack()">
             Pack it
           </button>
         } @else if (!weighed()) {
@@ -527,8 +545,12 @@ export class FulfilmentPage {
   private readonly documents = inject(DocumentPrintService);
   private readonly toasts = inject(ToastService);
 
-  /** Confirmed parts are the ones with stock held and nothing packed. */
-  protected readonly queue = this.orders.subOrders({ status: 'Confirmed' });
+  /**
+   * Everything not yet handed over. Packing and booking move the part's own status on, so a queue
+   * of `Confirmed` alone would lose a part the moment it was packed — and with it the way back to
+   * the waybill and the handover.
+   */
+  protected readonly queue = this.orders.subOrders({ status: 'Confirmed,Processing,Packed' });
 
   protected readonly pickList = signal<readonly PickListLineResponse[]>([]);
   protected readonly pickLoading = signal(false);
@@ -539,6 +561,10 @@ export class FulfilmentPage {
   /** Every warehouse, for the filter. There are few enough that paging one is a control nobody uses. */
   protected readonly warehouses = inject(InventoryAdminService).warehouses({}, 100);
   protected readonly busy = signal(false);
+  /** Looking up the parcel of a part that is already under way. */
+  protected readonly resuming = signal(false);
+  /** Bumped on every open and close, so a slow lookup cannot land in a modal that has moved on. */
+  private openToken = 0;
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly packing = signal<SubOrderResponse | null>(null);
@@ -618,8 +644,10 @@ export class FulfilmentPage {
   // ---- The four steps ---------------------------------------------------------------------------
 
   protected startPack(part: SubOrderResponse): void {
+    const token = ++this.openToken;
     this.packing.set(part);
     this.shipment.set(null);
+    this.resuming.set(false);
     this.weight.set('');
     this.lengthCm.set('');
     this.widthCm.set('');
@@ -640,10 +668,48 @@ export class FulfilmentPage {
         })
         .filter((line) => line.ordered > 0),
     );
+
+    // A part that is not Confirmed already has a parcel. Offering "Pack it" again would open a
+    // second one, so pick the existing one up at whichever step it has reached.
+    if (part.status !== 'Confirmed') this.resume(part, token);
+  }
+
+  /**
+   * Finds the part's parcel that is still in the building — the newest of Draft, Created,
+   * LabelGenerated or PickupScheduled — and loads it in full, so `weighed()` and `booked()` put the
+   * modal on the right step. No such parcel is not an error: the pack step stays. A failed lookup
+   * is, because "Pack it" would then risk a duplicate.
+   */
+  private resume(part: SubOrderResponse, token: number): void {
+    this.resuming.set(true);
+    this.actionError.set(null);
+
+    this.fulfilment
+      .parcelsFor(part.id)
+      .pipe(
+        switchMap((parcels) => {
+          const open = pickOpenParcel(parcels);
+          return open ? this.fulfilment.shipment(open.id) : of(null);
+        }),
+      )
+      .subscribe({
+        next: (parcel) => {
+          if (token !== this.openToken) return;
+          this.resuming.set(false);
+          this.shipment.set(parcel);
+        },
+        error: (error: unknown) => {
+          if (token !== this.openToken) return;
+          this.resuming.set(false);
+          this.actionError.set(describeError(error, 'The parcel for this part could not be looked up.'));
+        },
+      });
   }
 
   protected closePack(): void {
     if (this.busy()) return;
+    this.openToken++;
+    this.resuming.set(false);
     this.packing.set(null);
     this.shipment.set(null);
   }

@@ -44,6 +44,14 @@ internal sealed partial class OrderFulfilmentService(
     IClock clock,
     ILogger<OrderFulfilmentService> logger) : IOrderFulfilment
 {
+    /// <summary>The stages a sub-order passes through between being paid for and being collected.</summary>
+    private static readonly SubOrderStatus[] WarehouseStages =
+    [
+        SubOrderStatus.Confirmed,
+        SubOrderStatus.Processing,
+        SubOrderStatus.Packed,
+    ];
+
     /// <inheritdoc />
     public async Task<Result<SubOrderFulfilmentView>> GetAsync(
         Guid subOrderId,
@@ -144,6 +152,81 @@ internal sealed partial class OrderFulfilmentService(
         }
 
         CourierMoved(logger, subOrder.SubOrderNumber, from, next);
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> PrepareAsync(
+        Guid subOrderId,
+        string stage,
+        CancellationToken cancellationToken = default)
+    {
+        var target = Enum.TryParse<SubOrderStatus>(stage, ignoreCase: true, out var parsed)
+            ? Array.IndexOf(WarehouseStages, parsed)
+            : -1;
+
+        // Confirmed is where the walk starts, not somewhere it can be asked to go.
+        if (target < 1)
+        {
+            return Result.Failure(OrdersErrors.UnknownStatus);
+        }
+
+        var (order, subOrder) = await LoadAsync(subOrderId, cancellationToken).ConfigureAwait(false);
+
+        if (order is null || subOrder is null)
+        {
+            return Result.Failure(OrdersErrors.NotFound("sub-order"));
+        }
+
+        var at = Array.IndexOf(WarehouseStages, subOrder.Status);
+
+        // Already there, already past it, or not in the warehouse at all. Nothing to bring forward,
+        // and the caller was not asking for anything that is not already true.
+        if (at < 0 || at >= target)
+        {
+            return Result.Success();
+        }
+
+        var from = subOrder.Status;
+
+        // One transaction for the whole walk, for the reason AdvanceAsync has one: reaching Packed
+        // raises the tax invoice, and its number comes from a counter row held for the transaction.
+        var moved = await OrdersTransaction
+            .RunAsync(
+                context,
+                async token =>
+                {
+                    for (var step = at + 1; step <= target; step++)
+                    {
+                        var taken = await workflow
+                            .TransitionAsync(
+                                order,
+                                subOrder,
+                                WarehouseStages[step],
+                                OrderActor.Platform,
+                                actorId: null,
+                                reason: null,
+                                token)
+                            .ConfigureAwait(false);
+
+                        if (taken.IsFailure)
+                        {
+                            return taken;
+                        }
+                    }
+
+                    return Result.Success();
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (moved.IsFailure)
+        {
+            return moved;
+        }
+
+        WarehouseMoved(logger, subOrder.SubOrderNumber, from, subOrder.Status);
 
         return Result.Success();
     }
@@ -266,6 +349,14 @@ internal sealed partial class OrderFulfilmentService(
                         line.WarehouseId)),
             ]);
     }
+
+    [LoggerMessage(EventId = 1461, Level = LogLevel.Information,
+        Message = "Packing moved sub-order {SubOrderNumber} from {FromStatus} to {ToStatus}.")]
+    private static partial void WarehouseMoved(
+        ILogger logger,
+        string subOrderNumber,
+        SubOrderStatus fromStatus,
+        SubOrderStatus toStatus);
 
     [LoggerMessage(EventId = 1460, Level = LogLevel.Information,
         Message = "Courier movement moved sub-order {SubOrderNumber} from {FromStatus} to {ToStatus}.")]
