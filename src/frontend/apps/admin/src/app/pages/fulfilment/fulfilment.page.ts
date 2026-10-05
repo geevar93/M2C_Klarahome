@@ -27,16 +27,44 @@ interface PackLine {
 }
 
 /** Parcel statuses that mean it is packed or booked but has not left the building. */
-const OPEN_PARCEL_STATUSES: ReadonlySet<string> = new Set(['Draft', 'Created', 'LabelGenerated', 'PickupScheduled']);
+const OPEN_PARCEL_STATUSES: ReadonlySet<string> = new Set([
+  'Draft',
+  'Created',
+  'LabelGenerated',
+  'PickupScheduled',
+]);
+
+interface ParcelSummary {
+  readonly id: string;
+  readonly status: string;
+  readonly createdAt: string;
+  readonly awb: string | null;
+  readonly weightGrams: number;
+}
 
 /** The newest parcel that has not left and is not cancelled, or null. Exported for the spec. */
-export function pickOpenParcel(
-  parcels: readonly { readonly id: string; readonly status: string; readonly createdAt: string }[],
-): { readonly id: string } | null {
+export function pickOpenParcel(parcels: readonly ParcelSummary[]): ParcelSummary | null {
   const open = parcels
     .filter((parcel) => OPEN_PARCEL_STATUSES.has(parcel.status))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return open[0] ?? null;
+}
+
+/**
+ * The parcel to pick the modal up with, or null to start at the pack step.
+ *
+ * A Confirmed part normally already has an empty Draft parcel (weight 0, no waybill) opened for it
+ * when the order was confirmed, so a parcel existing is not proof anything was done. Work counts as
+ * done when the parcel has a weight or a waybill, or when the part has moved past Confirmed. The
+ * part's status is only a hint — the queue row it came from can be stale — so the parcel decides.
+ */
+export function pickResumableParcel(
+  parcels: readonly ParcelSummary[],
+  partStatus: string,
+): ParcelSummary | null {
+  const open = pickOpenParcel(parcels);
+  if (!open) return null;
+  return open.awb || open.weightGrams > 0 || partStatus !== 'Confirmed' ? open : null;
 }
 
 /**
@@ -66,7 +94,19 @@ export function pickOpenParcel(
  */
 @Component({
   selector: 'kh-fulfilment-page',
-  imports: [HasPermission, Alert, Badge, Button, Control, Field, Icon, Modal, PageHeader, Skeleton, StatusBadge],
+  imports: [
+    HasPermission,
+    Alert,
+    Badge,
+    Button,
+    Control,
+    Field,
+    Icon,
+    Modal,
+    PageHeader,
+    Skeleton,
+    StatusBadge,
+  ],
   template: `
     <kh-page-header
       heading="Fulfilment"
@@ -396,7 +436,13 @@ export function pickOpenParcel(
         </button>
 
         @if (!shipment()) {
-          <button khButton type="button" variant="primary" [disabled]="busy() || resuming()" (click)="createAndPack()">
+          <button
+            khButton
+            type="button"
+            variant="primary"
+            [disabled]="busy() || resuming()"
+            (click)="createAndPack()"
+          >
             Pack it
           </button>
         } @else if (!weighed()) {
@@ -669,14 +715,13 @@ export class FulfilmentPage {
         .filter((line) => line.ordered > 0),
     );
 
-    // A part that is not Confirmed already has a parcel. Offering "Pack it" again would open a
-    // second one, so pick the existing one up at whichever step it has reached.
-    if (part.status !== 'Confirmed') this.resume(part, token);
+    // The row may be stale, so the status alone cannot say there is nothing to resume. Always look.
+    this.resume(part, token);
   }
 
   /**
    * Finds the part's parcel that is still in the building — the newest of Draft, Created,
-   * LabelGenerated or PickupScheduled — and loads it in full, so `weighed()` and `booked()` put the
+   * LabelGenerated or PickupScheduled — when it shows work already done (see `pickResumableParcel`), and loads it in full, so `weighed()` and `booked()` put the
    * modal on the right step. No such parcel is not an error: the pack step stays. A failed lookup
    * is, because "Pack it" would then risk a duplicate.
    */
@@ -688,7 +733,7 @@ export class FulfilmentPage {
       .parcelsFor(part.id)
       .pipe(
         switchMap((parcels) => {
-          const open = pickOpenParcel(parcels);
+          const open = pickResumableParcel(parcels, part.status);
           return open ? this.fulfilment.shipment(open.id) : of(null);
         }),
       )
@@ -758,6 +803,8 @@ export class FulfilmentPage {
         next: (parcel) => {
           this.busy.set(false);
           this.shipment.set(parcel);
+          // The part is now Processing; the row behind the modal should say so.
+          this.queue.refresh();
           this.toasts.success('Packed. Now weigh the box.');
         },
         error: (error: unknown) => {
@@ -823,6 +870,8 @@ export class FulfilmentPage {
         next: (updated) => {
           this.busy.set(false);
           this.shipment.set(updated);
+          // Booking moves the part to Packed.
+          this.queue.refresh();
           this.toasts.success(updated.awb ? `Waybill ${updated.awb}.` : 'Booked.');
         },
         error: (error: unknown) => {
