@@ -88,7 +88,7 @@ internal sealed record CaptureWeightCommand(
 /// </remarks>
 /// <param name="SubOrderId">The seller's part being dispatched.</param>
 /// <param name="Lines">What to pack. Empty means "everything still unsent".</param>
-/// <param name="WeightGrams">What the scale said.</param>
+/// <param name="WeightGrams">What the scale said. Zero packs the parcel and stops short of booking it.</param>
 /// <param name="Dimensions">The box.</param>
 /// <param name="Method">The service, or null to use whatever the shopper chose at checkout.</param>
 /// <param name="PickupLocationId">The address to collect from, or null for the seller's default.</param>
@@ -170,7 +170,9 @@ internal sealed class CreateShipmentValidator : AbstractValidator<CreateShipment
     public CreateShipmentValidator()
     {
         RuleFor(command => command.SubOrderId).NotEmpty();
-        RuleFor(command => command.WeightGrams).InclusiveBetween(1, 500_000);
+
+        // Zero is allowed and means "not weighed yet": the parcel is packed and left as a draft.
+        RuleFor(command => command.WeightGrams).InclusiveBetween(0, 500_000);
         RuleForEach(command => command.Lines).Must(line => line.Quantity > 0);
     }
 }
@@ -424,6 +426,13 @@ internal sealed class PackShipmentCommandHandler(ShippingDbContext context, IOrd
             return Result.Failure<ShipmentResponse>(packed.Error);
         }
 
+        var told = await ShipmentPacker.TellOrderAsync(orders, shipment, cancellationToken).ConfigureAwait(false);
+
+        if (told.IsFailure)
+        {
+            return Result.Failure<ShipmentResponse>(told.Error);
+        }
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(ShippingProjection.ToShipment(shipment, []));
@@ -535,6 +544,23 @@ internal sealed class CreateShipmentCommandHandler(
         if (packed.IsFailure)
         {
             return Result.Failure<ShipmentResponse>(packed.Error);
+        }
+
+        var told = await ShipmentPacker.TellOrderAsync(orders, shipment, cancellationToken).ConfigureAwait(false);
+
+        if (told.IsFailure)
+        {
+            return Result.Failure<ShipmentResponse>(told.Error);
+        }
+
+        // No weight yet is the admin screen's pack step: the box is closed but has not been on the
+        // scale. The parcel stays a draft, and weighing and booking follow on their own routes -
+        // booking it here would ask a courier to price a parcel that weighs nothing.
+        if (command.WeightGrams == 0)
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            return Result.Success(ShippingProjection.ToShipment(shipment, []));
         }
 
         var box = command.Dimensions;
@@ -925,6 +951,27 @@ internal static class ShipmentLoader
 /// </remarks>
 internal static class ShipmentPacker
 {
+    /// <summary>Tells the order its seller's part is being prepared, now that a box has been packed.</summary>
+    /// <remarks>
+    /// A part still waiting at <c>Confirmed</c> moves to <c>Processing</c>; one already there or
+    /// further along is left alone. A reverse pickup is not a dispatch and says nothing.
+    /// </remarks>
+    /// <param name="orders">The seam to ordering.</param>
+    /// <param name="shipment">The consignment that was just packed.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static Task<Result> TellOrderAsync(
+        IOrderFulfilment orders,
+        Shipment shipment,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(orders);
+        ArgumentNullException.ThrowIfNull(shipment);
+
+        return shipment.IsReturn
+            ? Task.FromResult(Result.Success())
+            : orders.PrepareAsync(shipment.SubOrderId, "Processing", cancellationToken);
+    }
+
     /// <summary>Replaces a parcel's contents.</summary>
     /// <param name="context">The Shipping data context.</param>
     /// <param name="orders">Supplies what the seller's part contains.</param>

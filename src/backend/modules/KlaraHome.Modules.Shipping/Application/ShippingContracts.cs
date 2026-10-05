@@ -130,7 +130,8 @@ internal sealed record ShipmentLineResponse(
 
 /// <summary>A parcel, as a list shows it.</summary>
 /// <param name="Id">The consignment.</param>
-/// <param name="OrderNumber">The order it belongs to.</param>
+/// <param name="OrderId">The order it belongs to, which is what a list links to.</param>
+/// <param name="OrderNumber">That order's number.</param>
 /// <param name="SubOrderNumber">The seller's part.</param>
 /// <param name="VendorId">The seller.</param>
 /// <param name="Status">Where the parcel is.</param>
@@ -144,6 +145,7 @@ internal sealed record ShipmentLineResponse(
 /// <param name="CreatedAt">When the parcel was opened.</param>
 internal sealed record ShipmentSummaryResponse(
     Guid Id,
+    Guid OrderId,
     string OrderNumber,
     string SubOrderNumber,
     Guid? VendorId,
@@ -435,6 +437,7 @@ internal static class ShippingProjection
 
         return new ShipmentSummaryResponse(
             shipment.Id,
+            shipment.OrderId,
             shipment.OrderNumber,
             shipment.SubOrderNumber,
             shipment.VendorId,

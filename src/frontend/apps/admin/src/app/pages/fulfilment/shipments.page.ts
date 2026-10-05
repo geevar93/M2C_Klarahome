@@ -108,12 +108,12 @@ import { tableDateTime, tableMoney } from '../../core/format';
         (changed)="applyFilters($event)"
       />
 
-      <ng-template khCell="orderNumber" let-row>
+      <ng-template khCell="orderNumber" [khCellOf]="list.rows()" let-row>
         <a class="link" [routerLink]="['/orders', row.orderId]">{{ row.orderNumber }}</a>
         <button type="button" class="link note" (click)="open(row)">{{ row.subOrderNumber }} · parcel</button>
       </ng-template>
 
-      <ng-template khCell="awb" let-row>
+      <ng-template khCell="awb" [khCellOf]="list.rows()" let-row>
         @if (row.awb) {
           <span class="awb">{{ row.awb }}</span>
           <span class="note">{{ row.courier ?? 'courier unknown' }}</span>

@@ -151,6 +151,29 @@ public interface IOrderFulfilment
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Brings the seller's part forward to a warehouse stage, on the word of whoever is packing it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The warehouse stages are <c>Processing</c> and <c>Packed</c>, and the packing bench is where
+    /// they actually happen: closing the box is "processing", and a waybill on it is "packed". An
+    /// operator working a parcel should not also have to walk the order through the same two steps
+    /// on another screen before the courier may take it.
+    /// </para>
+    /// <para>
+    /// It only ever moves forward, one named stage at a time, so the timeline reads as it would had
+    /// each been clicked. A sub-order already at the stage or past it — moved by hand, or shipped —
+    /// is left exactly where it is and that is a success; so is one that is not in the warehouse at
+    /// all. The moves are taken as <c>Platform</c>, because a person at the bench is who made them;
+    /// <see cref="AdvanceAsync"/> stays the courier's word and stays refused these edges.
+    /// </para>
+    /// </remarks>
+    /// <param name="subOrderId">The seller's part.</param>
+    /// <param name="stage">The stage to reach: <c>Processing</c> or <c>Packed</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<Result> PrepareAsync(Guid subOrderId, string stage, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Writes a line on the order's timeline without moving it.
     /// </summary>
     /// <remarks>
