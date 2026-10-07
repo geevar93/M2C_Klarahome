@@ -107,6 +107,7 @@ public sealed class ContentModule : IModule
         // A published home page for the demonstration catalogue, so a freshly seeded stack does not
         // open on an empty shop. Registered only outside Production and only when
         // DemoData:SeedCatalog is on; it never touches a home page somebody else authored.
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoMenuSeeder>(configuration);
         services.AddDemoDataSeeder<Infrastructure.Seeding.DemoHomePageSeeder>(configuration);
 
         services.AddHostedService<ContentSchedulerWorker>();

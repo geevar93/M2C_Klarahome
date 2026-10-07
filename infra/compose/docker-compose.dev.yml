@@ -823,6 +823,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       APP_ROLE: migrator
@@ -854,6 +856,21 @@ services:
       # default, refused outright in Production, and idempotent: every row it writes is keyed on a
       # DEMO-/demo- prefix, so re-running adds only what is missing.
       DemoData__SeedCatalog: ${DEMO_SEED_CATALOG:-false}
+      # The demonstration seeders upload their pictures through the same media pipeline the admin
+      # does, so the migrator needs the object store too. Only the endpoint, credentials and
+      # buckets matter to a write; the public base URL and imgproxy address are here because the
+      # upload's result is projected into URLs before it is discarded. Unused when demo data is off.
+      Storage__Endpoint: http://minio:9000
+      Storage__AccessKey: ${MINIO_ROOT_USER:-klarahome}
+      Storage__SecretKey: ${MINIO_ROOT_PASSWORD:-klarahome_dev_password}
+      Storage__Bucket: ${STORAGE_PUBLIC_BUCKET:-media-public}
+      Storage__PrivateBucket: ${STORAGE_PRIVATE_BUCKET:-docs-private}
+      Storage__ForcePathStyle: "true"
+      Storage__PublicBaseUrl: https://s3.${DEV_DOMAIN:-klarahome.localhost}/${STORAGE_PUBLIC_BUCKET:-media-public}
+      Media__Imgproxy__BaseUrl: https://img.${DEV_DOMAIN:-klarahome.localhost}
+      Media__Imgproxy__SourceBaseUrl: http://minio:9000/${STORAGE_PUBLIC_BUCKET:-media-public}
+      Media__Imgproxy__Key: ${IMGPROXY_KEY:-}
+      Media__Imgproxy__Salt: ${IMGPROXY_SALT:-}
       Observability__ServiceName: klarahome-migrator
       Observability__ConsoleJson: ${OBSERVABILITY_CONSOLE_JSON:-true}
     volumes:

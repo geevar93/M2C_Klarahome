@@ -123,6 +123,7 @@ public sealed class CatalogModule : IModule
         // The demonstration catalogue. Registered only outside Production and only when
         // DemoData:SeedCatalog is on — see DemoDataOptions for what that fences.
         services.AddDemoDataSeeder<Infrastructure.Seeding.DemoCatalogSeeder>(configuration);
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoCatalogMediaSeeder>(configuration);
 
         services.AddHostedService<CatalogJobDispatcher>();
     }
