@@ -382,7 +382,7 @@ interface BlockDraft {
         </section>
 
         <aside>
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>The page</h2>
 
             <kh-field label="Title" for="page-title">
@@ -450,7 +450,7 @@ interface BlockDraft {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Search engines</h2>
             <p class="hint">Left blank, the storefront falls back to the title and the summary.</p>
 
@@ -500,7 +500,7 @@ interface BlockDraft {
             </kh-disclosure>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Version history</h2>
             <p class="hint">
               A copy is kept every time this page is published. Restoring one replaces the current draft; the
@@ -798,7 +798,7 @@ interface BlockDraft {
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     @media (min-width: 768px) {

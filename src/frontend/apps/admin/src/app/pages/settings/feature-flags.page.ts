@@ -96,7 +96,7 @@ const PERMANENT_GAP = /permanent gap/i;
       }
 
       @if (editing(); as flag) {
-        <section class="panel">
+        <section class="panel kh-panel">
           <h2>
             Rollout for <code>{{ flag.key }}</code>
           </h2>
@@ -311,10 +311,6 @@ const PERMANENT_GAP = /permanent gap/i;
 
     .panel {
       margin-block-start: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     h2 {

@@ -144,7 +144,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker }
         </div>
 
         <div class="column">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>The legal record</h2>
             <dl>
               <dt>Code</dt>
@@ -270,7 +270,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker }
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Trading terms</h2>
             <dl>
               <dt>Dispatch promise</dt>
@@ -296,7 +296,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker }
             </dl>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Commission</h2>
             <p class="hint">
               What the platform charges on each sale. Left on the default, the store's default plan applies.
@@ -328,7 +328,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker }
             </button>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>People</h2>
             <p class="hint">Who may sign in as this seller. Add a user under Settings first.</p>
 
@@ -439,14 +439,6 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker }
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     h2 {

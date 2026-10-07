@@ -71,6 +71,11 @@ import { ConfirmDialog } from './confirm-dialog';
     />
   `,
   styles: `
+    /* Wide enough for a five-column history table; a form is no worse for the extra width. */
+    :host {
+      --drawer-width: 28rem;
+    }
+
     header {
       display: flex;
       gap: var(--space-3);

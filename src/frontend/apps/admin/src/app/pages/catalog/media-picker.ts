@@ -197,7 +197,7 @@ import { describeError } from '../../core/describe-error';
       background: var(--color-surface-raised);
       text-align: start;
       cursor: pointer;
-      box-shadow: var(--shadow-sm);
+      box-shadow: none;
     }
 
     .tile.chosen {

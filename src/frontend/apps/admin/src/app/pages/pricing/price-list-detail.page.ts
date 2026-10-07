@@ -120,7 +120,7 @@ interface DraftItem {
         </section>
 
         <aside>
-          <section class="panel" *khHasPermission="'pricing.price-list.manage'">
+          <section class="panel kh-panel" *khHasPermission="'pricing.price-list.manage'">
             <h2>Add or change prices</h2>
             <p class="hint">
               Rows are merged on listing and minimum quantity. Sending an existing pair changes it; a new pair
@@ -173,7 +173,7 @@ interface DraftItem {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>What does a listing actually sell for?</h2>
             <p class="hint">
               Checks every price list and shows what a shopper would actually pay. The answer names the list
@@ -262,18 +262,6 @@ interface DraftItem {
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {

@@ -197,7 +197,7 @@ interface ZoneView {
               No rate band on this zone — an address matching it has no price and cannot be checked out.
             </p>
           } @else {
-            <table>
+            <table class="kh-table">
               <caption class="kh-visually-hidden">
                 Rate bands for
                 {{
@@ -646,25 +646,6 @@ interface ZoneView {
 
     dd {
       margin: 0;
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      white-space: nowrap;
-    }
-
-    th {
-      color: var(--color-text-muted);
-      font-weight: var(--weight-medium);
     }
 
     tr.inactive {

@@ -167,8 +167,9 @@ type Popover = 'create' | 'account';
       align-items: center;
       height: 100%;
       padding-inline: var(--space-3);
-      border-block-end: 1px solid var(--color-border);
-      background: var(--color-surface-raised);
+      border-block-end: 1px solid var(--header-border, var(--color-border));
+      background: var(--header-bg, var(--color-surface-raised));
+      color: var(--header-text, var(--color-text));
     }
 
     .icon-btn,
@@ -188,13 +189,13 @@ type Popover = 'create' | 'account';
       width: 2.5rem;
       height: 2.5rem;
       border-radius: var(--radius-md);
-      color: var(--color-text-muted);
+      color: var(--header-text-muted, var(--color-text-muted));
     }
 
     .icon-btn:hover,
     .icon-btn[aria-expanded='true'] {
-      background: var(--color-surface);
-      color: var(--color-text);
+      background: color-mix(in srgb, var(--header-text, var(--color-text)) 8%, transparent);
+      color: var(--header-text, var(--color-text));
     }
 
     /* The home pill and the colour-scheme toggle live in the account menu on a phone. */
@@ -202,7 +203,7 @@ type Popover = 'create' | 'account';
       display: none;
       gap: var(--space-2);
       align-items: center;
-      color: var(--color-text);
+      color: var(--header-text, var(--color-text));
       font-weight: var(--weight-bold);
       text-decoration: none;
       white-space: nowrap;
@@ -226,8 +227,8 @@ type Popover = 'create' | 'account';
       width: 2rem;
       height: 2rem;
       border-radius: var(--radius-md);
-      background: var(--color-primary);
-      color: var(--color-on-primary);
+      background: var(--header-button-bg, var(--color-primary));
+      color: var(--header-button-text, var(--color-on-primary));
     }
 
     .wordmark {
@@ -245,16 +246,16 @@ type Popover = 'create' | 'account';
       height: 2.5rem;
       margin-inline-start: var(--space-2);
       padding-inline: var(--space-3);
-      border: 1px solid var(--color-border-strong);
+      border: 1px solid var(--header-control-border, var(--color-border-strong));
       border-radius: var(--radius-md);
-      background: var(--color-surface);
-      color: var(--color-text-muted);
+      background: var(--header-control-bg, var(--color-surface));
+      color: var(--header-control-text, var(--header-text-muted, var(--color-text-muted)));
       font-size: var(--text-sm);
       text-align: start;
     }
 
     .search:hover {
-      border-color: var(--color-text-muted);
+      border-color: var(--header-control-text, var(--header-text-muted, var(--color-text-muted)));
     }
 
     .search-label {
@@ -266,9 +267,9 @@ type Popover = 'create' | 'account';
 
     kbd {
       padding: 0 var(--space-1);
-      border: 1px solid var(--color-border-strong);
+      border: 1px solid var(--header-control-border, var(--color-border-strong));
       border-radius: var(--radius-sm);
-      background: var(--color-surface-raised);
+      background: var(--header-control-bg, var(--color-surface-raised));
       font-family: var(--font-sans);
       font-size: var(--text-xs);
       font-weight: var(--weight-medium);
@@ -289,14 +290,24 @@ type Popover = 'create' | 'account';
       height: 2.5rem;
       padding-inline: var(--space-3);
       border-radius: var(--radius-md);
-      background: var(--color-primary);
-      color: var(--color-on-primary);
+      background: var(--header-button-bg, var(--color-primary));
+      color: var(--header-button-text, var(--color-on-primary));
       font-size: var(--text-sm);
       font-weight: var(--weight-medium);
     }
 
     .create:hover {
-      background: var(--color-primary-hover);
+      background: var(--header-button-hover, var(--color-primary-hover));
+    }
+
+    /* Controls sitting directly on the header band take the header's own ring; the popover
+       panels float on cream and keep the page ring. */
+    .brand:focus-visible,
+    .icon-btn:focus-visible,
+    .search:focus-visible,
+    .create:focus-visible,
+    .account:focus-visible {
+      outline-color: var(--header-focus-ring, var(--color-focus-ring));
     }
 
     .create-label,
@@ -320,8 +331,8 @@ type Popover = 'create' | 'account';
       width: 2rem;
       height: 2rem;
       border-radius: var(--radius-full);
-      background: var(--color-primary);
-      color: var(--color-on-primary);
+      background: var(--header-button-bg, var(--color-primary));
+      color: var(--header-button-text, var(--color-on-primary));
       font-size: var(--text-xs);
       font-weight: var(--weight-semibold);
     }
@@ -341,7 +352,7 @@ type Popover = 'create' | 'account';
 
     .scope {
       font-size: var(--text-xs);
-      color: var(--color-text-muted);
+      color: var(--header-text-muted, var(--color-text-muted));
     }
 
     .menu {

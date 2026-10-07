@@ -289,7 +289,7 @@ import { describeError, fieldErrors } from '../core/describe-error';
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     .section-head {

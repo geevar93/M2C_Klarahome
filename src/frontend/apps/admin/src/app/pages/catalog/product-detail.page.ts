@@ -640,7 +640,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
       </kh-form-shell>
 
       @if (product(); as current) {
-        <section class="panel" id="section-images">
+        <section class="panel kh-panel" id="section-images">
           <h2>Images</h2>
           <p class="hint">Saved together with the details above by "Save changes".</p>
           <kh-media-manager
@@ -653,7 +653,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
           />
         </section>
 
-        <section class="panel" id="section-variants">
+        <section class="panel kh-panel" id="section-variants">
           <div class="panel-head">
             <h2>Variants</h2>
             <button khButton type="button" size="sm" (click)="editVariant(null)">
@@ -668,7 +668,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
               size is one variant, not none.
             </p>
           } @else {
-            <table>
+            <table class="kh-table">
               <thead>
                 <tr>
                   <th scope="col">SKU</th>
@@ -703,7 +703,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
           }
         </section>
 
-        <section class="panel" id="section-offers">
+        <section class="panel kh-panel" id="section-offers">
           <div class="panel-head">
             <h2>Offers</h2>
             <button
@@ -861,7 +861,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
           } @else if (listings.rows().length === 0) {
             <p class="hint">No seller has listed this product yet.</p>
           } @else {
-            <table>
+            <table class="kh-table">
               <thead>
                 <tr>
                   <th scope="col">SKU</th>
@@ -911,7 +911,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
           }
         </section>
 
-        <section class="panel" id="section-history">
+        <section class="panel kh-panel" id="section-history">
           <h2>History</h2>
           <kh-audit-trail [entries]="auditEntries()" [loading]="audit.loading()" />
         </section>
@@ -967,7 +967,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     legend {
@@ -1006,7 +1006,7 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
       scrollbar-width: none;
     }
 
@@ -1047,11 +1047,6 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
 
     .panel {
       margin-block-start: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     .panel-head {
@@ -1082,32 +1077,6 @@ const COUNTRIES: readonly { code: string; name: string }[] = [
       display: flex;
       justify-content: flex-end;
       gap: var(--space-2);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-    }
-
-    th {
-      color: var(--color-text-muted);
-      font-size: var(--text-xs);
-      font-weight: var(--weight-semibold);
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
     }
 
     .numeric {

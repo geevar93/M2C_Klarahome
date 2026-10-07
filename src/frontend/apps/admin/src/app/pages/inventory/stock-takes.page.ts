@@ -178,7 +178,7 @@ interface CountLine {
           </kh-alert>
         }
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">SKU</th>
@@ -317,19 +317,6 @@ interface CountLine {
     .hint {
       color: var(--color-text-muted);
       font-size: var(--text-sm);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
     }
 
     .numeric {

@@ -118,8 +118,10 @@ import { AdminCrumb } from './page-header';
     header {
       position: sticky;
       inset-block-start: 0;
-      /* Above the drawer's backdrop, so the menu button that opened the drawer can close it. */
-      z-index: calc(var(--z-drawer) + 1);
+      /* Above the navigation drawer's backdrop, so the menu button that opened it can close it, and
+         below --z-drawer, so a page's own drawer (kh-entity-drawer) covers the bar instead of
+         hiding its title and close button underneath it. */
+      z-index: calc(var(--z-drawer) - 1);
       height: var(--header-height);
     }
 
@@ -134,8 +136,8 @@ import { AdminCrumb } from './page-header';
       inset-inline-start: 0;
       z-index: var(--z-drawer);
       width: min(var(--sidebar-width), 85vw);
-      border-inline-end: 1px solid var(--color-border);
-      background: var(--color-surface-raised);
+      border-inline-end: 1px solid var(--sidebar-border, var(--color-border));
+      background: var(--sidebar-bg, var(--color-surface-raised));
       box-shadow: var(--shadow-lg);
       transform: translateX(-100%);
       visibility: hidden;
@@ -153,7 +155,7 @@ import { AdminCrumb } from './page-header';
     .backdrop {
       position: fixed;
       inset: 0;
-      z-index: calc(var(--z-drawer) - 1);
+      z-index: calc(var(--z-drawer) - 2);
       background: var(--color-overlay);
     }
 

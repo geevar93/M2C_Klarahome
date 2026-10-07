@@ -222,7 +222,7 @@ import { tableDateTime } from '../../core/format';
           <kh-alert tone="danger" heading="Couldn't load the history">{{ message }}</kh-alert>
         }
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -240,7 +240,7 @@ import { tableDateTime } from '../../core/format';
             }
             @for (entry of ledgerRows(); track entry.id) {
               <tr>
-                <td>{{ when(entry) }}</td>
+                <td class="nowrap">{{ when(entry) }}</td>
                 <td>
                   {{ entry.reason }}
                   @if (entry.note; as note) {
@@ -533,19 +533,6 @@ import { tableDateTime } from '../../core/format';
     .hint {
       color: var(--color-text-muted);
       font-size: var(--text-sm);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
     }
 
     .numeric {

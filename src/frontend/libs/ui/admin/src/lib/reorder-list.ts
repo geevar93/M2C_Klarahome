@@ -155,7 +155,8 @@ export class ReorderItemTemplate {
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      /* A row inside a panel: flat, the panel owns the elevation. */
+      box-shadow: none;
     }
 
     li.dragging {

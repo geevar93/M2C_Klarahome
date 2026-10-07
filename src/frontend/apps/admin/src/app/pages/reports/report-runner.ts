@@ -184,7 +184,7 @@ const CHARTABLE_ROWS = 60;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     .period {
@@ -216,7 +216,7 @@ const CHARTABLE_ROWS = 60;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     .totals {
@@ -225,7 +225,7 @@ const CHARTABLE_ROWS = 60;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     h2 {

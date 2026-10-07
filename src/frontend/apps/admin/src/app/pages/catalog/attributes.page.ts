@@ -85,9 +85,9 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
     @if (loading()) {
       <kh-skeleton height="16rem" />
     } @else {
-      <section class="panel">
+      <section class="panel kh-panel">
         <h2>Attributes</h2>
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Name</th>
@@ -155,7 +155,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
         </table>
       </section>
 
-      <section class="panel">
+      <section class="panel kh-panel">
         <h2>Attribute sets</h2>
         <p class="hint">
           A set is the group of attributes a category asks for. Sets are assigned to a category on the
@@ -367,30 +367,6 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
 
     .panel {
       margin-block-end: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-3);
-      font-size: var(--text-lg);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

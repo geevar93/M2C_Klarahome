@@ -93,7 +93,7 @@ import { categoryFor, currentPath } from './nav-location';
       border: 0;
       border-radius: var(--radius-md);
       background: none;
-      color: var(--color-text-subtle);
+      color: var(--sidebar-text-muted, var(--color-text-subtle));
       font-size: var(--text-sm);
       font-weight: var(--weight-medium);
       text-align: start;
@@ -102,20 +102,20 @@ import { categoryFor, currentPath } from './nav-location';
     }
 
     a:hover {
-      background: var(--color-surface);
-      color: var(--color-text);
+      background: var(--sidebar-hover, var(--color-surface));
+      color: var(--sidebar-text, var(--color-text));
     }
 
     a:focus-visible {
-      outline: 2px solid var(--color-focus-ring);
+      outline: 2px solid var(--sidebar-focus-ring, var(--color-focus-ring));
       outline-offset: -2px;
     }
 
     a.active {
-      background: var(--color-primary-subtle);
-      color: var(--color-primary);
+      background: var(--sidebar-active-bg, var(--color-primary-subtle));
+      color: var(--sidebar-active-text, var(--color-primary));
       font-weight: var(--weight-semibold);
-      box-shadow: inset 3px 0 0 var(--color-primary);
+      box-shadow: inset 3px 0 0 var(--sidebar-count-bg, var(--color-primary));
     }
 
     .label {
@@ -129,8 +129,8 @@ import { categoryFor, currentPath } from './nav-location';
     .count {
       padding: 0 var(--space-2);
       border-radius: var(--radius-full);
-      background: var(--color-warning-subtle);
-      color: var(--color-warning-text);
+      background: var(--sidebar-count-bg, var(--color-warning-subtle));
+      color: var(--sidebar-count-text, var(--color-warning-text));
       font-size: var(--text-xs);
       font-weight: var(--weight-semibold);
       line-height: 1.25rem;
@@ -140,10 +140,10 @@ import { categoryFor, currentPath } from './nav-location';
       flex: none;
       width: auto;
       margin: 0 var(--space-3) var(--space-3);
-      background: var(--color-surface-raised);
-      border-block-start: 1px solid var(--color-border);
+      background: var(--sidebar-hover, var(--color-surface-raised));
+      border-block-start: 1px solid var(--sidebar-border, var(--color-border));
       border-radius: var(--radius-md);
-      color: var(--color-text-muted);
+      color: var(--sidebar-text-muted, var(--color-text-muted));
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

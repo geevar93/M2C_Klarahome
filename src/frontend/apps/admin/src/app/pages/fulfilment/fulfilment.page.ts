@@ -118,7 +118,7 @@ export function pickResumableParcel(
       <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
-    <section class="panel">
+    <section class="panel kh-panel">
       <div class="panel-head">
         <h2>Pick list</h2>
         <p class="hint">{{ pickList().length }} lines to take off the shelves.</p>
@@ -151,7 +151,7 @@ export function pickResumableParcel(
         <!-- Cards on a phone (kh-cards, _base.scss): a picker walks the shelves with the phone in
              one hand, and a seven-column table that scrolls sideways is not a pick list there.
              The item leads because it is what they are looking for; the SKU is what they check. -->
-        <table class="kh-cards">
+        <table class="kh-table kh-cards">
           <thead>
             <tr>
               <th scope="col">Item</th>
@@ -180,7 +180,7 @@ export function pickResumableParcel(
       }
     </section>
 
-    <section class="panel">
+    <section class="panel kh-panel">
       <div class="panel-head">
         <h2>Waiting to leave</h2>
         <p class="hint">
@@ -196,7 +196,7 @@ export function pickResumableParcel(
       @if (queue.loading() && queue.rows().length === 0) {
         <kh-skeleton height="10rem" />
       } @else {
-        <table class="kh-cards">
+        <table class="kh-table kh-cards">
           <thead>
             <tr>
               <th scope="col">Part</th>
@@ -296,7 +296,7 @@ export function pickResumableParcel(
             behind stays on the part and can be shipped separately.
           </p>
 
-          <table>
+          <table class="kh-table">
             <thead>
               <tr>
                 <th scope="col">Item</th>
@@ -484,10 +484,6 @@ export function pickResumableParcel(
 
     .panel {
       margin-block-end: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     /* Wraps: on a phone the heading, its hint and the warehouse select stack rather than share a
@@ -527,11 +523,6 @@ export function pickResumableParcel(
       font-size: var(--text-xs);
     }
 
-    table {
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
     /* On a card the Pack button is the whole width and the last thing on it: the one action,
        under the thumb. From \`md\` it is a cell again. */
     .action {
@@ -544,12 +535,6 @@ export function pickResumableParcel(
     }
 
     @media (min-width: 768px) {
-      table {
-        display: block;
-        overflow-x: auto;
-        inline-size: 100%;
-      }
-
       .action {
         display: table-cell;
       }
@@ -563,14 +548,6 @@ export function pickResumableParcel(
       button[khButton] {
         min-block-size: 44px;
       }
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

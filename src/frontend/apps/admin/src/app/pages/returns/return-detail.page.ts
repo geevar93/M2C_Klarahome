@@ -118,9 +118,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     } @else if (rma(); as current) {
       <div class="layout">
         <div class="main">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>What is coming back</h2>
-            <table>
+            <table class="kh-table">
               <thead>
                 <tr>
                   <th scope="col">Item</th>
@@ -153,7 +153,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             </table>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>What can be done now</h2>
             <p class="hint">Only the actions this return can move to next are shown.</p>
 
@@ -256,7 +256,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
           </section>
 
           @if (creditNote(); as note) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <h2>Credit note {{ note.creditNoteNumber }}</h2>
               <p class="hint">
                 Reduces the seller's output tax for {{ note.financialYear }}. It exists whether or not money
@@ -293,7 +293,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
         </div>
 
         <aside class="side">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Why</h2>
             <p>
               <strong>{{ reason()?.label ?? current.reasonCode }}</strong>
@@ -315,7 +315,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Money</h2>
             <dl class="facts">
               <div>
@@ -347,7 +347,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             </dl>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Where it is</h2>
             <dl class="facts">
               <div>
@@ -501,7 +501,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
         <strong>Back on the shelf</strong> puts stock back on sale — the rest are recorded and do not.
       </p>
 
-      <table>
+      <table class="kh-table">
         <thead>
           <tr>
             <th scope="col">Item</th>
@@ -691,15 +691,6 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {
@@ -722,26 +713,10 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       gap: var(--space-2);
     }
 
-    table {
-      display: block;
-      overflow-x: auto;
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
     @media (pointer: coarse) {
       button[khButton] {
         min-block-size: 44px;
       }
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

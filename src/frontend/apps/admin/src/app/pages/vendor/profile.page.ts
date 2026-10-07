@@ -206,7 +206,7 @@ import { MediaPicker } from '../catalog/media-picker';
             />
           </kh-form-shell>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Your legal record</h2>
             <p class="hint">
               Verified by the store. Changing any of it means talking to us — a unilateral change would
@@ -262,14 +262,6 @@ import { MediaPicker } from '../catalog/media-picker';
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     h2 {

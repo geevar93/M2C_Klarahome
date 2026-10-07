@@ -30,7 +30,7 @@ export class ColourSchemeService {
       // The browser chrome on a phone follows the page rather than the brand.
       this.document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', scheme === 'dark' ? '#0b1120' : '#4338ca');
+        ?.setAttribute('content', scheme === 'dark' ? '#121826' : '#a84f33');
     });
   }
 

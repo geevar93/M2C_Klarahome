@@ -1,7 +1,7 @@
 // Global styles.
 //
 // The shared tokens and the accessibility baseline, then the back office's own skin over them
-// (`_admin-theme.scss`: teal brand, cool neutrals, light and dark). Every value a component uses
+// (`_admin-theme.scss`: teal brand, warm neutrals, light and dark). Every value a component uses
 // is still a custom property, so the skin is a token re-map and not a rewrite.
 @use 'ui/primitives/src/styles';
 @use './styles/admin-theme';

@@ -597,12 +597,12 @@ const NEW = 'new';
           @if (isNew()) {
             <!-- Nothing to try until there is a rule to try it on: the panel would sit in the right
                  column beside an empty form. -->
-            <section class="panel">
+            <section class="panel kh-panel">
               <h2>Try it on a basket</h2>
               <p class="hint">Create the promotion first, then price a basket here to see exactly what it does.</p>
             </section>
           } @else {
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Try it on a basket</h2>
             <p class="hint">
               Prices a basket the same way a real checkout would. Nothing is saved, and the promotion does not
@@ -761,7 +761,7 @@ const NEW = 'new';
           }
 
           @if (!isNew()) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <h2>Who has used it</h2>
               @if (redemptions(); as list) {
                 <kh-data-table
@@ -815,18 +815,6 @@ const NEW = 'new';
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .panel h3 {

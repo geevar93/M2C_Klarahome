@@ -110,7 +110,7 @@ interface CancelDraft {
       <div class="layout">
         <div class="main">
           @for (part of current.subOrders; track part.id) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <header class="part-head">
                 <div>
                   <h2>{{ part.subOrderNumber }}</h2>
@@ -134,7 +134,7 @@ interface CancelDraft {
                 </span>
               </header>
 
-              <table>
+              <table class="kh-table">
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
@@ -230,7 +230,7 @@ interface CancelDraft {
             </section>
           }
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Timeline</h2>
             <ol class="timeline">
               @for (event of timeline(); track event.id) {
@@ -252,7 +252,7 @@ interface CancelDraft {
             </ol>
           </section>
 
-          <section class="panel" *khHasPermission="'orders.order.note'">
+          <section class="panel kh-panel" *khHasPermission="'orders.order.note'">
             <h2>Add a note</h2>
             <kh-field label="Note" for="order-note">
               <textarea
@@ -286,7 +286,7 @@ interface CancelDraft {
         </div>
 
         <aside class="side">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Customer</h2>
             <p>{{ current.customerName }}</p>
             @if (current.customerEmail; as email) {
@@ -301,7 +301,7 @@ interface CancelDraft {
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Delivering to</h2>
             <p>{{ current.shippingAddress.recipientName }}</p>
             <p class="note">
@@ -318,7 +318,7 @@ interface CancelDraft {
             </p>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Money</h2>
             <dl>
               <div>
@@ -387,7 +387,7 @@ interface CancelDraft {
           them to cancel some of it. Stock is released and any payment refunded by the platform, in one step.
         </p>
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Item</th>
@@ -463,16 +463,6 @@ interface CancelDraft {
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-base);
     }
 
     .part-head {
@@ -507,39 +497,10 @@ interface CancelDraft {
       display: block;
     }
 
-    table {
-      display: block;
-      overflow-x: auto;
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    @media (min-width: 768px) {
-      table {
-        display: table;
-      }
-    }
-
     @media (pointer: coarse) {
       button[khButton] {
         min-block-size: 44px;
       }
-    }
-
-    th {
-      color: var(--color-text-muted);
-      font-size: var(--text-xs);
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

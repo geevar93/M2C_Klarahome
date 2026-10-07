@@ -138,7 +138,7 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
         </kh-data-table>
       }
 
-      <aside class="panel">
+      <aside class="panel kh-panel">
         <h2>What would this cost a seller?</h2>
         <p class="hint">
           Locks in the commission rate for that order line, so the answer here is the answer a statement will
@@ -417,19 +417,6 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
         grid-template-columns: minmax(0, 3fr) minmax(18rem, 1fr);
         align-items: start;
       }
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {

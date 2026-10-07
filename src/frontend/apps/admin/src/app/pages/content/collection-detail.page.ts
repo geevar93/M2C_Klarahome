@@ -167,7 +167,7 @@ interface ConditionDraft {
             </ng-template>
           </kh-data-table>
 
-          <section class="panel" *khHasPermission="'content.content.manage'">
+          <section class="panel kh-panel" *khHasPermission="'content.content.manage'">
             <h3>Pin a product</h3>
             <p class="hint">A pinned product stays whatever the rule decides.</p>
             <div class="row">
@@ -186,7 +186,7 @@ interface ConditionDraft {
         </section>
 
         <aside>
-          <section class="panel" *khHasPermission="'content.content.manage'">
+          <section class="panel kh-panel" *khHasPermission="'content.content.manage'">
             <h2>The rule</h2>
             <p class="hint">
               Conditions are about facts the catalogue already holds. Leaving the rule off keeps the
@@ -327,7 +327,7 @@ interface ConditionDraft {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>
               The collection
               @if (detailsDirty()) {
@@ -496,11 +496,6 @@ interface ConditionDraft {
 
     .panel {
       margin-block-start: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     aside .panel {

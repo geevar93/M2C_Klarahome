@@ -67,7 +67,7 @@ import { ICON_NAMES, Icon, IconName, Skeleton } from '@klarahome/ui-primitives';
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
       color: inherit;
       text-decoration: none;
     }

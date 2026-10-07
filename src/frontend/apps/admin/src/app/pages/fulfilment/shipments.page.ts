@@ -124,7 +124,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
       </ng-template>
     </kh-data-table>
 
-    <section class="panel">
+    <section class="panel kh-panel">
       <div class="panel-head">
         <h2>Courier messages that failed</h2>
         <button khButton type="button" size="sm" [disabled]="events.loading()" (click)="events.refresh()">
@@ -145,7 +145,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
         <!-- No header row over an empty body: the answer is the sentence. -->
         <p class="hint">Nothing has failed. That is the answer you want.</p>
       } @else {
-        <table [attr.aria-busy]="events.loading()">
+        <table class="kh-table" [attr.aria-busy]="events.loading()">
           <thead>
             <tr>
               <th scope="col">Received</th>
@@ -164,7 +164,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
             }
             @for (event of events.rows(); track event.id) {
               <tr>
-                <td>{{ when(event.receivedAt) }}</td>
+                <td class="nowrap">{{ when(event.receivedAt) }}</td>
                 <td>{{ event.provider }}</td>
                 <td>{{ event.awb ?? '—' }}</td>
                 <td>
@@ -258,7 +258,7 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
         </dl>
 
         <h3>What is in it</h3>
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Item</th>
@@ -409,10 +409,6 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
 
     .panel {
       margin-block-start: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     .panel-head {
@@ -431,32 +427,10 @@ import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orde
       font-size: var(--text-base);
     }
 
-    table {
-      display: block;
-      overflow-x: auto;
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    @media (min-width: 768px) {
-      table {
-        display: table;
-      }
-    }
-
     @media (pointer: coarse) {
       button[khButton] {
         min-block-size: 44px;
       }
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

@@ -381,7 +381,15 @@ const WEEKDAYS = [
       background: var(--color-surface-raised);
       color: inherit;
       text-decoration: none;
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
+      transition:
+        border-color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
+    }
+
+    .tile:hover,
+    .tile:focus-visible {
+      box-shadow: var(--shadow-md);
     }
 
     .tile:hover {

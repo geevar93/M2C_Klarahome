@@ -332,7 +332,7 @@ export class CellTemplate<TRow = any> {
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     /* Bottom-aligned, like the filter bar inside it: its fields carry a label above the control,
@@ -619,7 +619,11 @@ export class CellTemplate<TRow = any> {
         background: var(--color-primary-subtle);
       }
 
-      .numeric {
+      /* td.card-hidden and td.title set text-align: start above and would win over a bare
+         .numeric, leaving a figure left-aligned under a right-aligned header. */
+      th.numeric,
+      td.numeric,
+      td.card-hidden.numeric {
         text-align: end;
       }
 

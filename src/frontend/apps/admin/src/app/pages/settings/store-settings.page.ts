@@ -110,7 +110,7 @@ interface SettingField {
 
       <div class="stack">
       @for (section of sections(); track section.key) {
-        <section class="panel" [id]="'settings-' + section.key">
+        <section class="panel kh-panel" [id]="'settings-' + section.key">
           <header>
             <h2>{{ humanise(section.key) }}</h2>
             @if (section.isPublic) {
@@ -353,11 +353,6 @@ interface SettingField {
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-5);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     header {

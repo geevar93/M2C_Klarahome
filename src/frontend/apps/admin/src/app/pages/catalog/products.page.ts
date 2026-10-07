@@ -184,7 +184,7 @@ import { tableDate, tableDateTime } from '../../core/format';
           }
 
           @if (current.errors.length > 0) {
-            <table class="errors">
+            <table class="kh-table errors">
               <caption>
                 Rows that were refused. Fix these in the file and import it again — the rows that were written
                 are not written twice.
@@ -326,23 +326,10 @@ import { tableDate, tableDateTime } from '../../core/format';
       font-size: var(--text-sm);
     }
 
-    .errors {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
     .errors caption {
       margin-block-end: var(--space-2);
       color: var(--color-text-muted);
       font-size: var(--text-xs);
-      text-align: start;
-    }
-
-    .errors th,
-    .errors td {
-      padding: var(--space-1) var(--space-2);
-      border-block-end: 1px solid var(--color-border);
       text-align: start;
     }
   `,

@@ -225,7 +225,7 @@ interface ItemDraft {
           }
         </section>
 
-        <aside class="panel">
+        <aside class="panel kh-panel">
           <h2>The menu</h2>
 
           <kh-field label="Name" for="menu-name">
@@ -322,7 +322,7 @@ interface ItemDraft {
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     .item {

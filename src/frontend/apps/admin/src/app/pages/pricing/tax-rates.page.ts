@@ -123,7 +123,7 @@ import { tableDate } from '../../core/format';
         </ng-template>
       </kh-data-table>
 
-      <aside class="panel">
+      <aside class="panel kh-panel">
         <h2>What rate applies?</h2>
         <p class="hint">
           Looks up the rate for one HSN code on one date — the only question with a single answer, since
@@ -319,18 +319,6 @@ import { tableDate } from '../../core/format';
         grid-template-columns: minmax(0, 3fr) minmax(18rem, 1fr);
         align-items: start;
       }
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {

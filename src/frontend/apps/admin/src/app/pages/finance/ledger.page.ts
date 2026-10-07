@@ -237,7 +237,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     </kh-data-table>
 
     <section class="panels" *khHasPermission="'settlements.settlement.read'">
-      <div class="panel">
+      <div class="panel kh-panel">
         <header>
           <h2>What the platform kept</h2>
           <button khButton type="button" size="sm" [disabled]="loadingRevenue()" (click)="loadRevenue()">
@@ -270,7 +270,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
         }
       </div>
 
-      <div class="panel">
+      <div class="panel kh-panel">
         <header>
           <h2>TCS and TDS</h2>
           <div class="header-actions">
@@ -395,7 +395,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-card);
     }
 
     .row {
@@ -462,14 +462,6 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       gap: var(--space-4);
       grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
       margin-block-start: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
     }
 
     .panel header {

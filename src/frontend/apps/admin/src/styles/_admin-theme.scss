@@ -1,83 +1,100 @@
-// The back office's own skin.
+// The back office's own skin: "Navy & Terracotta".
 //
 // The shared primitives (`libs/ui/primitives`) declare every colour, radius and shadow as a
 // semantic custom property, and the storefront re-skins them per tenant. The back office does
-// not: its look is fixed (indigo brand on slate neutrals, one status vocabulary), so this file
-// re-maps the *same semantic tokens* for the admin bundle only. Nothing in `libs/` changed to make
-// this happen, which is what keeps the storefront exactly as it was.
+// not: its look is fixed, so this file re-maps the *same semantic tokens* for the admin bundle
+// only. Nothing in `libs/` changed to make this happen, which is what keeps the storefront
+// exactly as it was.
+//
+// Direction: a navy sidebar and a saturated terracotta header frame a warm sand ground with cream
+// cards on it. Navy blue (never terracotta) carries actions, links and focus; peach is the small
+// accent for count pills and the active nav marker. Controls on the terracotta header are white,
+// so the primary button there has its own `--header-button-*` tokens. Status colours all differ in
+// hue from the brand (info is teal, success green, danger red, warning amber). Dark is a
+// navy-black, not warm.
 //
 // Two palettes: light (the default) and dark, switched by `html.dark` (see `AdminColourScheme`).
 // Contrast was computed per pairing (WCAG 2.x), light / dark:
-//  - body text 17.1:1 / 15.7:1 on the raised surface; muted text 7.2:1 / 6.7:1 on the page ground
-//  - brand as text and links 7.1:1 (on primary-subtle) / 5.8:1 (on raised); on-primary 7.9:1 / 5.9:1
-//  - status text on its own tint: success 4.8 / 8.9, warning 4.7 / 9.1, danger 5.9 / 5.9, info 5.5 / 7.0
-//  - the input border (`--color-border-strong`) is 3.3:1 (on the sunken surface) / 3.2:1 (on raised),
-//    above the 3:1 UI-boundary floor; the focus ring is 7.6:1 / 9.5:1 on the page ground
+//  - body text 15.6:1 / 14.0:1 on the raised surface (13.6 / 15.7 on the page ground); muted text
+//    5.4:1 / 8.1:1 on the page ground (6.2:1 / 7.2:1 on raised)
+//  - brand as text and links 8.4:1 / 6.8:1 (on raised), 7.3:1 / 7.6:1 (on the page ground) and
+//    7.1:1 / 5.5:1 (on primary-subtle); on-primary 8.5:1 / 7.4:1
+//  - accent text on the accent surface 6.8:1 / 9.6:1
+//  - status text on its own tint: success 4.6 / 7.5, warning 5.1 / 8.5, danger 5.0 / 6.3, info 4.7 / 8.3
+//  - the input border (`--color-border-strong`) is 3.3:1 / 4.4:1 (on the sunken surface) and
+//    4.1:1 / 3.7:1 (on raised), above the 3:1 UI-boundary floor
+//  - sidebar: text 12.7:1 / 16.5:1 and muted text 6.5:1 / 7.1:1 on the sidebar ground; active
+//    text on the active row 10.8:1 / 14.3:1; count badge text on its fill 7.9:1 / 7.9:1
+//  - header: text 5.5:1 / 8.3:1 and muted text 4.7:1 / 6.3:1 on the header ground; control text
+//    on the cream control fill 10.1:1 / 12.1:1; button text on the button fill 15.9:1 / 13.6:1;
+//    the button fill against the header ground 5.5:1 / 7.1:1 (3:1 UI-element floor)
 
 :root {
   color-scheme: light;
 
   // Surfaces
-  --color-bg: #f8fafc;
-  --color-surface-raised: #ffffff;
-  --color-surface: #f1f5f9;
-  --color-surface-sunken: #f1f5f9;
-  --color-surface-muted: #e2e8f0;
-  --color-surface-inverse: #0f172a;
-  --color-overlay: rgb(15 23 42 / 55%);
+  // A sand ground with a cream card on it; the card separates through the shadow rather than a
+  // darker border.
+  --color-bg: #f3ece3;
+  --color-surface-raised: #fffdf9;
+  --color-surface: #f8f3eb;
+  --color-surface-sunken: #ece3d7;
+  --color-surface-muted: #e4dacc;
+  --color-surface-inverse: #1c2a44;
+  --color-overlay: rgb(26 34 52 / 55%);
 
   // Borders
-  --color-border: #e2e8f0;
-  --color-border-strong: #7a889e;
-  --color-border-subtle: #f1f5f9;
+  --color-border: #e1d8cc;
+  --color-border-strong: #827b6e;
+  --color-border-subtle: #efe8de;
   --color-border-inverse: rgb(255 255 255 / 22%);
 
   // Text
-  --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-text-subtle: #334155;
-  --color-text-inverse: #f8fafc;
+  --color-text: #1a2234;
+  --color-text-muted: #55607a;
+  --color-text-subtle: #353f58;
+  --color-text-inverse: #eef1f8;
   --color-text-on-brand: #ffffff;
-  --color-text-on-image: #f8fafc;
+  --color-text-on-image: #eef1f8;
 
-  // Brand: indigo
-  --color-primary: #4338ca;
-  --color-primary-hover: #3730a3;
-  --color-primary-active: #312e81;
-  --color-primary-subtle: #eef2ff;
-  --color-primary-subtle-hover: #e0e7ff;
+  // Brand: navy blue
+  --color-primary: #2d4a8a;
+  --color-primary-hover: #243c70;
+  --color-primary-active: #1c2f58;
+  --color-primary-subtle: #e5ebf7;
+  --color-primary-subtle-hover: #d3ddf1;
   --color-on-primary: #ffffff;
-  --color-link: #4338ca;
+  --color-link: #2d4a8a;
 
-  --color-accent: #4338ca;
-  --color-accent-muted: #c7d2fe;
-  --color-accent-surface: #eef2ff;
-  --color-accent-text: #4338ca;
+  --color-accent: #e8a58f;
+  --color-accent-muted: #f6d9cf;
+  --color-accent-surface: #fbeee8;
+  --color-accent-text: #8a3a1f;
 
-  // Status vocabulary: green done, amber needs action, sky in progress, red problem.
-  --color-success: #15803d;
-  --color-success-subtle: #ecfdf3;
-  --color-success-text: #15803d;
+  // Status vocabulary: green done, amber needs action, blue in progress, red problem.
+  --color-success: #1f7a48;
+  --color-success-subtle: #e3f3e8;
+  --color-success-text: #1f7a48;
 
-  --color-warning: #b45309;
-  --color-warning-subtle: #fef6e0;
-  --color-warning-surface: #fef3d6;
-  --color-warning-text: #b45309;
+  --color-warning: #9a5400;
+  --color-warning-subtle: #fbefd6;
+  --color-warning-surface: #f7e2b8;
+  --color-warning-text: #9a5400;
 
-  --color-danger: #b91c1c;
-  --color-danger-subtle: #fef2f2;
-  --color-danger-text: #b91c1c;
+  --color-danger: #b8302a;
+  --color-danger-subtle: #fbe6e2;
+  --color-danger-text: #b8302a;
 
-  --color-info: #0369a1;
-  --color-info-subtle: #eef8fd;
-  --color-info-text: #0369a1;
+  --color-info: #0e7490;
+  --color-info-subtle: #e0f3f7;
+  --color-info-text: #0e7490;
 
-  --color-price: #0f172a;
-  --color-price-was: #475569;
-  --color-savings: #15803d;
+  --color-price: #1a2234;
+  --color-price-was: #55607a;
+  --color-savings: #1f7a48;
 
-  --color-focus-ring: #4338ca;
-  --color-focus-ring-inverse: #c7d2fe;
+  --color-focus-ring: #2d4a8a;
+  --color-focus-ring-inverse: #a3afc9;
 
   // Type: the back office speaks in the system sans throughout; the storefront's display serif is
   // a shopper-facing voice.
@@ -90,10 +107,15 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --shadow-color: 15 23 42;
+  --shadow-color: 26 34 52;
   --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 6%);
   --shadow-md: 0 2px 4px rgb(var(--shadow-color) / 6%), 0 6px 14px rgb(var(--shadow-color) / 8%);
   --shadow-lg: 0 4px 8px rgb(var(--shadow-color) / 6%), 0 16px 40px rgb(var(--shadow-color) / 14%);
+  // A card at rest: a tight contact shadow and a soft spread that is pulled in (negative spread) so
+  // it lifts off the page without a halo. Built from the text colour so it needs no rgb literal.
+  --shadow-card:
+    0 1px 2px color-mix(in srgb, var(--color-text) 7%, transparent),
+    0 3px 10px -3px color-mix(in srgb, var(--color-text) 11%, transparent);
 
   // Badges: a soft fill with coloured text and no outline (`libs/ui/primitives` badge hooks).
   --badge-radius: var(--radius-sm);
@@ -110,70 +132,132 @@
   --header-height: 64px;
   --sidebar-width: 16rem;
   --bottom-bar-height: 0px;
+
+  // Sidebar
+  // The sidebar is the one deep surface in light mode (navy on a sand page), so it cannot borrow
+  // the page's text and surface tokens and has its own. In dark mode it sits a step below the
+  // page ground. `libs/ui/admin` reads these with the page tokens as fallbacks.
+  --sidebar-bg: #1c2a44;
+  --sidebar-text: #eef1f8;
+  --sidebar-text-muted: #a3afc9;
+  --sidebar-hover: rgb(255 255 255 / 7%);
+  --sidebar-active-bg: #2d3d60;
+  --sidebar-active-text: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  --sidebar-count-bg: #e8a58f;
+  --sidebar-count-text: #3a160a;
+  --sidebar-focus-ring: #e8a58f;
+
+  // Header
+  // A saturated terracotta band with white text and controls, so the frame reads sidebar → header →
+  // ground → card. `libs/ui/admin` reads these with
+  // the page tokens as fallbacks.
+  --header-bg: #a84f33;
+  --header-border: #8e4229;
+  --header-text: #ffffff;
+  --header-text-muted: #fde9e2;
+  --header-control-bg: #fde9e2;
+  --header-control-text: #5a2a18;
+  --header-control-border: rgb(255 255 255 / 60%);
+  // The primary action on the band is a white button (navy on terracotta would be ~1.6:1), and
+  // the avatar mark uses the same fill. The ring is white for the same reason.
+  --header-button-bg: #ffffff;
+  --header-button-text: #1a2234;
+  --header-button-hover: #fde9e2;
+  --header-focus-ring: #ffffff;
 }
 
 :root.dark {
   color-scheme: dark;
 
-  --color-bg: #0b1120;
-  --color-surface-raised: #141b2d;
-  --color-surface: #1a2238;
-  --color-surface-sunken: #0f1626;
-  --color-surface-muted: #263149;
-  --color-surface-inverse: #f1f5f9;
-  --color-overlay: rgb(2 6 23 / 65%);
+  --color-bg: #121826;
+  --color-surface-raised: #1a2235;
+  --color-surface: #232d44;
+  --color-surface-sunken: #0d1220;
+  --color-surface-muted: #2c3750;
+  --color-surface-inverse: #eef1f8;
+  --color-overlay: rgb(0 0 0 / 65%);
 
-  --color-border: #263149;
-  --color-border-strong: #5b6a88;
-  --color-border-subtle: #1a2238;
-  --color-border-inverse: rgb(15 23 42 / 30%);
+  --color-border: #2c3750;
+  --color-border-strong: #6f7a96;
+  --color-border-subtle: #202a40;
+  --color-border-inverse: rgb(18 24 38 / 30%);
 
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
-  --color-text-subtle: #cbd5e1;
-  --color-text-inverse: #0f172a;
-  --color-text-on-brand: #11143a;
-  --color-text-on-image: #f8fafc;
+  --color-text: #eef1f8;
+  --color-text-muted: #a3afc9;
+  --color-text-subtle: #cdd5e6;
+  --color-text-inverse: #1a2234;
+  --color-text-on-brand: #0d1a3a;
+  --color-text-on-image: #eef1f8;
 
-  --color-primary: #818cf8;
-  --color-primary-hover: #a5b4fc;
-  --color-primary-active: #c7d2fe;
-  --color-primary-subtle: #1f2552;
-  --color-primary-subtle-hover: #2a3270;
-  --color-on-primary: #11143a;
-  --color-link: #a5b4fc;
+  --color-primary: #8fa9e8;
+  --color-primary-hover: #a9bdf0;
+  --color-primary-active: #c3d1f5;
+  --color-primary-subtle: #22305a;
+  --color-primary-subtle-hover: #2c3d70;
+  --color-on-primary: #0d1a3a;
+  --color-link: #a9bdf0;
 
-  --color-accent: #818cf8;
-  --color-accent-muted: #3730a3;
-  --color-accent-surface: #1f2552;
-  --color-accent-text: #a5b4fc;
+  --color-accent: #e8a58f;
+  --color-accent-muted: #7e3a24;
+  --color-accent-surface: #3a1f16;
+  --color-accent-text: #f3c4b3;
 
-  --color-success: #4ade80;
+  --color-success: #5fc98c;
   --color-success-subtle: #10291b;
-  --color-success-text: #4ade80;
+  --color-success-text: #5fc98c;
 
-  --color-warning: #fbbf24;
-  --color-warning-subtle: #2f2409;
-  --color-warning-surface: #433310;
-  --color-warning-text: #fbbf24;
+  --color-warning: #f2b650;
+  --color-warning-subtle: #2f2308;
+  --color-warning-surface: #40300c;
+  --color-warning-text: #f2b650;
 
-  --color-danger: #f87171;
-  --color-danger-subtle: #341717;
-  --color-danger-text: #f87171;
+  --color-danger: #f3807a;
+  --color-danger-subtle: #361818;
+  --color-danger-text: #f3807a;
 
-  --color-info: #38bdf8;
-  --color-info-subtle: #0d2a3a;
-  --color-info-text: #38bdf8;
+  --color-info: #5fd0e8;
+  --color-info-subtle: #0f2a33;
+  --color-info-text: #5fd0e8;
 
-  --color-price: #f1f5f9;
-  --color-price-was: #94a3b8;
-  --color-savings: #4ade80;
+  --color-price: #eef1f8;
+  --color-price-was: #a3afc9;
+  --color-savings: #5fc98c;
 
-  --color-focus-ring: #a5b4fc;
-  --color-focus-ring-inverse: #3730a3;
+  --color-focus-ring: #a9bdf0;
+  --color-focus-ring-inverse: #2d4a8a;
 
   --shadow-color: 0 0 0;
   --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 35%);
   --shadow-md: 0 2px 4px rgb(var(--shadow-color) / 30%), 0 6px 14px rgb(var(--shadow-color) / 35%);
   --shadow-lg: 0 4px 8px rgb(var(--shadow-color) / 35%), 0 16px 40px rgb(var(--shadow-color) / 55%);
+  // Dark: depth comes from the raised surface being lighter than the ground; a faint top highlight
+  // catches the edge and a dark drop shadow seats it.
+  --shadow-card:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent),
+    0 1px 2px color-mix(in srgb, black 45%, transparent),
+    0 4px 12px -4px color-mix(in srgb, black 55%, transparent);
+
+  --sidebar-bg: #0d1220;
+  --sidebar-text: #eef1f8;
+  --sidebar-text-muted: #94a0bd;
+  --sidebar-hover: rgb(255 255 255 / 6%);
+  --sidebar-active-bg: #1c2a44;
+  --sidebar-active-text: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 8%);
+  --sidebar-count-bg: #e8a58f;
+  --sidebar-count-text: #3a160a;
+  --sidebar-focus-ring: #e8a58f;
+
+  --header-bg: #7e3a24;
+  --header-border: #652d1c;
+  --header-text: #ffffff;
+  --header-text-muted: #f6d9cf;
+  --header-control-bg: #f6d9cf;
+  --header-control-text: #3a160a;
+  --header-control-border: rgb(255 255 255 / 50%);
+  --header-button-bg: #fde9e2;
+  --header-button-text: #1a2234;
+  --header-button-hover: #ffffff;
+  --header-focus-ring: #ffffff;
 }
