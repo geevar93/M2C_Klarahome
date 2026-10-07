@@ -4,11 +4,19 @@ import { AuthService, SessionStore } from '@klarahome/data-access-auth';
 import { CartStore } from '@klarahome/data-access-cart';
 import { MoneyPipe } from '@klarahome/i18n';
 import { Alert, Button, Control, EmptyState, Field, Icon, PageHeader, Skeleton } from '@klarahome/ui-primitives';
-import { CartLine, CartLineChange, CartLineView, OrderSummary, StickyAction } from '@klarahome/ui-patterns';
+import {
+  CartLine,
+  CartLineChange,
+  CartLineView,
+  OrderSummary,
+  ProductCarousel,
+  StickyAction,
+} from '@klarahome/ui-patterns';
 import { AnalyticsEvents, AnalyticsService, LiveAnnouncer, ToastService } from '@klarahome/util';
 
 import { describeError } from '../core/describe-error';
 import { CommerceMapper } from '../core/commerce.mapper';
+import { RecentlyViewedStore } from '../core/recently-viewed.store';
 
 /**
  * The cart — `/cart`.
@@ -47,6 +55,7 @@ import { CommerceMapper } from '../core/commerce.mapper';
     MoneyPipe,
     OrderSummary,
     PageHeader,
+    ProductCarousel,
     RouterLink,
     Skeleton,
     StickyAction,
@@ -67,6 +76,12 @@ import { CommerceMapper } from '../core/commerce.mapper';
       >
         <a khButton variant="primary" routerLink="/">Start shopping</a>
       </kh-empty-state>
+
+      <!-- Not a second empty state: somewhere to go. Drawn from the browser-only trail the shop
+           already keeps (nothing is fetched), and absent for a first-time visitor, who has none. -->
+      @if (recentlyViewed().length > 0) {
+        <kh-product-carousel heading="Pick up where you left off" [products]="recentlyViewed()" />
+      }
     } @else {
       <div class="layout">
         <div class="lines">
@@ -325,7 +340,9 @@ export class CartPage {
   private readonly toasts = inject(ToastService);
   private readonly announcer = inject(LiveAnnouncer);
   private readonly analytics = inject(AnalyticsService);
+  private readonly recent = inject(RecentlyViewedStore);
 
+  protected readonly recentlyViewed = computed(() => this.recent.items());
   protected readonly couponInput = signal('');
 
   /**

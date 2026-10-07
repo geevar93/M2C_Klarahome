@@ -32,7 +32,16 @@
   transition:
     background-color var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+    box-shadow var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+
+  // The one movement a button is allowed: a 1px press, on `:active` only. It is the physical half of
+  // the "pressed is darker and flatter" state below, and the only feedback a touch screen gets
+  // (there was never a hover). It happens under the finger, so it can never move a target away
+  // from somebody mid-tap. The duration token is 0ms under reduced motion.
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    transform: translateY(1px);
+  }
 
   &:disabled,
   &[aria-disabled='true'] {

@@ -42,6 +42,15 @@ import { MoneyPipe } from '@klarahome/i18n';
        component (see the Commerce block in _tokens.scss): the price is the most-read number on the
        page and a theme must be able to move it without moving body copy with it. This component
        read the generic text and muted-text roles instead, which left both commerce tokens dead. */
+    /* The figures never break internally and never wrap away from each other: the row may only
+       wrap at the badge (\`.off\`), so a narrow card drops the saving under the price rather than
+       the was-price under it. */
+    .now,
+    .mrp,
+    .off {
+      white-space: nowrap;
+    }
+
     .now {
       font-size: var(--kh-price-size, var(--text-lg));
       font-weight: var(--weight-bold);

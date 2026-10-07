@@ -8,6 +8,7 @@ import {
   OnInit,
   Signal,
   TemplateRef,
+  afterRenderEffect,
   booleanAttribute,
   computed,
   inject,
@@ -31,16 +32,36 @@ import {
 export class StickyActionBarService {
   private readonly current = signal<TemplateRef<unknown> | null>(null);
   private readonly phoneOnly = signal(false);
+  private readonly anchor = signal<string | null>(null);
+  private readonly shown = signal(true);
 
   readonly template: Signal<TemplateRef<unknown> | null> = this.current.asReadonly();
-  /** Read by the shell, which reserves the height so the bar never covers the last line of a page. */
-  readonly active = computed(() => this.current() !== null);
+  /**
+   * Read by the shell, which reserves the height so the bar never covers the last line of a page.
+   *
+   * False while a bar that waits for its anchor has not yet appeared: reserving 60px of blank
+   * ground for a bar that is not on screen is the same bug as the bar covering the last line, seen
+   * from the other side.
+   */
+  readonly active = computed(() => this.current() !== null && this.shown());
+  /** CSS selector of the element the bar waits to see leave the viewport, or null for "always". */
+  readonly revealAnchor: Signal<string | null> = this.anchor.asReadonly();
   /** Whether the bar disappears from 'lg' up, because the page already shows the action in place. */
   readonly mobileOnly: Signal<boolean> = this.phoneOnly.asReadonly();
 
-  register(template: TemplateRef<unknown>, mobileOnly = false): void {
+  register(template: TemplateRef<unknown>, mobileOnly = false, revealAfter: string | null = null): void {
     this.current.set(template);
     this.phoneOnly.set(mobileOnly);
+    this.anchor.set(revealAfter);
+    // A bar with an anchor starts hidden (so the server-rendered HTML never shows a duplicate of
+    // the inline button) and `StickyActionBar` shows it once it has looked at the anchor, or at
+    // once if it cannot look.
+    this.shown.set(revealAfter === null);
+  }
+
+  /** Written by `StickyActionBar` only: whether the bar is currently on screen. */
+  setShown(shown: boolean): void {
+    this.shown.set(shown);
   }
 
   /**
@@ -66,10 +87,16 @@ export class StickyActionBarService {
  * `mobileOnly` hides the bar from 'lg' up, for a page whose own layout already shows the same
  * action on a wide screen — the product page's buy box, where a second full-width "Add to cart"
  * pinned under it is just a duplicate. Checkout leaves it off: its bar is the only "Continue".
+ *
+ * `revealAfter` is a CSS selector for the page's own in-place copy of the action. While that
+ * element is on screen the bar stays out of the way, and it slides in once the element has left
+ * the viewport: two "Add to cart" buttons visible at once at the top of a product page was the
+ * thing this exists to stop. Left off (cart, checkout), the bar is always shown, as before.
  */
 @Directive({ selector: 'ng-template[khStickyAction]' })
 export class StickyAction implements OnInit {
   readonly mobileOnly = input(false, { transform: booleanAttribute });
+  readonly revealAfter = input<string | null>(null);
 
   private readonly template = inject(TemplateRef);
   private readonly service = inject(StickyActionBarService);
@@ -80,7 +107,7 @@ export class StickyAction implements OnInit {
 
   // Registered once inputs are bound, so `mobileOnly` is known when the bar first renders.
   ngOnInit(): void {
-    this.service.register(this.template, this.mobileOnly());
+    this.service.register(this.template, this.mobileOnly(), this.revealAfter());
   }
 }
 
@@ -90,7 +117,14 @@ export class StickyAction implements OnInit {
   imports: [NgTemplateOutlet],
   template: `
     @if (template(); as content) {
-      <div class="bar" [class.mobile-only]="mobileOnly()">
+      <!-- \`inert\` while off screen, so the buttons of a hidden bar are not in the tab order and
+           not announced: the page's own copy of the action is the one a keyboard user reaches. -->
+      <div
+        class="bar"
+        [class.mobile-only]="mobileOnly()"
+        [class.is-hidden]="!visible()"
+        [attr.inert]="visible() ? null : ''"
+      >
         <ng-container [ngTemplateOutlet]="content" />
       </div>
     }
@@ -111,6 +145,20 @@ export class StickyAction implements OnInit {
       background: var(--color-surface-raised);
       border-block-start: 1px solid var(--color-border);
       box-shadow: var(--shadow-lg);
+      transform: translateY(0);
+      transition:
+        transform var(--duration-slow) var(--ease-out),
+        visibility 0s linear 0s;
+    }
+
+    /* Slides down out of the thumb zone and is then \`visibility: hidden\`, the latter delayed until
+       the slide has finished. Under reduced motion the duration token is 0ms, so both are instant. */
+    .bar.is-hidden {
+      transform: translateY(100%);
+      visibility: hidden;
+      transition:
+        transform var(--duration-slow) var(--ease-out),
+        visibility 0s linear var(--duration-slow);
     }
 
     /* From the 'lg' breakpoint the action moves back into the page: a fixed bar across a 1440px screen is a lot
@@ -134,4 +182,27 @@ export class StickyActionBar {
   private readonly service = inject(StickyActionBarService);
   protected readonly template = this.service.template;
   protected readonly mobileOnly = this.service.mobileOnly;
+
+  /** Whether the bar is currently on screen. Mirrors the service so the shell reserves space to match. */
+  protected readonly visible = computed(() => this.service.active());
+
+  constructor() {
+    // Watches the page's own copy of the action. Runs only in the browser (after render), so on the
+    // server an anchored bar stays hidden and nothing flashes on hydration.
+    afterRenderEffect((onCleanup) => {
+      const selector = this.service.revealAnchor();
+      if (this.template() === null || selector === null) return;
+
+      const target = document.querySelector(selector);
+      // Cannot look, so do not hide: a bar that never appears is worse than a duplicate button.
+      if (!target || typeof IntersectionObserver === 'undefined') {
+        this.service.setShown(true);
+        return;
+      }
+
+      const observer = new IntersectionObserver(([entry]) => this.service.setShown(!entry.isIntersecting));
+      observer.observe(target);
+      onCleanup(() => observer.disconnect());
+    });
+  }
 }

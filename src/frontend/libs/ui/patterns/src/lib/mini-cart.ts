@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { RouterLink } from '@angular/router';
 import { Money } from '@klarahome/domain';
 import { MoneyPipe } from '@klarahome/i18n';
-import { Button, Drawer, EmptyState, Icon, Skeleton } from '@klarahome/ui-primitives';
+import { Button, Drawer, EmptyState, Icon, ProductImage, Skeleton } from '@klarahome/ui-primitives';
 
 import { MiniCartLine } from './navigation.model';
 
@@ -20,7 +20,7 @@ import { MiniCartLine } from './navigation.model';
  */
 @Component({
   selector: 'kh-mini-cart',
-  imports: [Button, Drawer, EmptyState, Icon, MoneyPipe, RouterLink, Skeleton],
+  imports: [Button, Drawer, EmptyState, Icon, MoneyPipe, ProductImage, RouterLink, Skeleton],
   template: `
     <kh-drawer [open]="open()" side="end" [labelledBy]="'kh-mini-cart-title'" label="Your cart" (closed)="closed.emit()">
       <div class="head">
@@ -51,7 +51,9 @@ import { MiniCartLine } from './navigation.model';
         <ul class="lines">
           @for (line of lines(); track line.id) {
             <li class="line">
-              <span class="kh-placeholder-media thumb" aria-hidden="true">{{ line.reference }}</span>
+              <!-- The basket summary carries no image, so this is the quiet placeholder (glyph only
+                   at this size) rather than the SKU as raw text in a grey box. -->
+              <kh-product-image class="thumb" [source]="null" sizes="4rem" />
               <span class="detail">
                 <span class="name">{{ line.name }}</span>
                 <span class="meta">Qty {{ line.quantity }} · {{ line.lineTotal | khMoney }}</span>
@@ -125,12 +127,11 @@ import { MiniCartLine } from './navigation.model';
     }
 
     .thumb {
-      width: var(--space-16);
-      height: var(--space-16);
+      inline-size: var(--space-16);
       flex: none;
-      font-size: var(--text-xs);
       overflow: hidden;
     }
+
 
     .detail {
       display: flex;

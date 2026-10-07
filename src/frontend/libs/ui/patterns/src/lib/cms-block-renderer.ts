@@ -132,12 +132,17 @@ import { ProductCarousel } from './product-carousel';
             }
             <kh-grid [fixedColumns]="block.columns" minColumnWidth="7rem" [gap]="3">
               @for (tile of block.items; track tile.href) {
-                <a class="tile" [routerLink]="tile.href">
-                  <kh-product-image
-                    [source]="tile.image"
-                    [placeholder]="tile.label"
-                    sizes="(min-width: 768px) 20vw, 45vw"
-                  />
+                <!-- With a photograph: the image and its caption. Without one: a compact, flat tile
+                     that carries the label once. A square placeholder with the name printed inside
+                     it and again beneath it was a tall empty box saying the same thing twice. -->
+                <a class="tile" [class.tile--flat]="!tile.image" [routerLink]="tile.href">
+                  @if (tile.image) {
+                    <kh-product-image
+                      [source]="tile.image"
+                      [placeholder]="tile.label"
+                      sizes="(min-width: 768px) 20vw, 45vw"
+                    />
+                  }
                   <span>{{ tile.label }}</span>
                 </a>
               }
@@ -320,20 +325,32 @@ import { ProductCarousel } from './product-carousel';
       background: color-mix(in srgb, var(--color-surface-inverse) 92%, transparent);
     }
 
-    /* Below 'md' the copy runs close to the full width of the box (see \`.hero-copy\`'s own rule),
-       so the scrim is the same flat, fully-guaranteed tint everywhere — a left/right gradient sized
-       for a narrower desktop column would not still be safely opaque under a full-width mobile one.
-       From 'md' the gradient follows \`align\`: darkest under the copy, fading out on the side
-       nothing sits on. Every stop is a percentage of the box, matched to \`.hero-copy\`'s own
-       percentage width below, not a fixed length — so the relationship holds at any width in this
-       tier, not only at the breakpoint's own edge. */
+    /* The scrim is a desktop layer only. Below 'md' the copy is a full-width block at the bottom of
+       the box and carries its own backing (\`.hero-copy::before\`, below), so the top of the
+       photograph is left alone instead of being washed flat to guarantee the text underneath it. */
+    .scrim {
+      display: none;
+    }
+
+    /* From 'md' the gradient follows \`align\`: darkest under the copy, fading out on the side
+       nothing sits on. The copy is \`max-inline-size: 38%\` of the box, so the 92% plateau stops at
+       exactly 38% (62% for \`right\`, 31–69% for \`centre\`) — the copy's own edge, which is also
+       beyond the edge of its text (the padding sits inside those 38%). Every pixel of text therefore
+       still sits on the full 92% tint, and the 9.8:1 worst-case arithmetic above holds unchanged;
+       only the part of the photograph *beside* the copy is released, fading to nothing by 64% (36%,
+       15–85%). Every stop is a percentage of the box, matched to \`.hero-copy\`'s own percentage
+       width below, not a fixed length, so the relationship holds at any width in this tier. */
     @media (min-width: 768px) {
+      .scrim {
+        display: block;
+      }
+
       .hero[data-align='left'] .scrim {
         background: linear-gradient(
           to right,
           color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 0%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 48%,
-          transparent 80%
+          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 38%,
+          transparent 64%
         );
       }
 
@@ -341,18 +358,18 @@ import { ProductCarousel } from './product-carousel';
         background: linear-gradient(
           to left,
           color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 0%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 48%,
-          transparent 80%
+          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 38%,
+          transparent 64%
         );
       }
 
       .hero[data-align='centre'] .scrim {
         background: linear-gradient(
           to right,
-          transparent 5%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 22%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 78%,
-          transparent 95%
+          transparent 15%,
+          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 31%,
+          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 69%,
+          transparent 85%
         );
       }
     }
@@ -362,30 +379,65 @@ import { ProductCarousel } from './product-carousel';
       z-index: 1;
       display: flex;
       flex-direction: column;
-      align-self: center;
+      /* Phone: the copy sits at the bottom of the box so the top of the photograph shows. */
+      align-self: end;
       justify-self: start;
+      /* The height of the fade above the copy on a phone, inside the copy's own box (see
+         \`::before\`) — it must be padding, not a negative offset, because the box grows to fit the
+         copy and a fade hanging above it would paint outside the hero once the copy is long. */
+      --hero-fade: var(--space-10);
       /* The CTA keeps its own width, as it does in a centred or right-aligned hero, instead of
          stretching across the whole copy column — a 400px button on a desktop left-aligned hero. */
       align-items: flex-start;
       gap: var(--space-3);
       max-inline-size: 100%;
-      padding: var(--space-6) var(--space-5);
+      padding: calc(var(--space-6) + var(--hero-fade)) var(--space-5) var(--space-6);
       color: var(--color-text-on-image);
       text-align: start;
     }
 
+    /* Phone backing. A bottom-up gradient on the copy's own box rather than a percentage of the
+       hero: the copy's height varies with what an editor types, and a box-relative "opaque to 60%"
+       stops covering the first line of a long headline. This one is opaque (the same 92% tint, so
+       the same 9.8:1) exactly as far up as the copy goes, and the \`--hero-fade\` strip above it —
+       which holds no text — is what fades into the photograph. z-index -1 stays above the photo
+       and below the text because \`.hero-copy\` is its own stacking context. */
+    .hero-copy::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      background: linear-gradient(
+        to top,
+        color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) calc(100% - var(--hero-fade)),
+        transparent 100%
+      );
+    }
+
     @media (min-width: 768px) {
       .hero-copy {
-        /* Matched to the scrim's own plateau above: 38% stays inside the 0–48%
-           (left) / 52–100% (right) / 22–78% (centre) guaranteed-opaque zone with margin at every
-           width from here up, because both are the same kind of value (a percentage of the box). */
+        /* The scrim's plateau above ends exactly at this 38%, so the whole copy box (text and its
+           padding) sits on the guaranteed-opaque zone at every width from here up, because both are
+           the same kind of value (a percentage of the box). */
         max-inline-size: 38%;
+        align-self: center;
+        --hero-fade: 0px;
         padding: var(--space-8);
+      }
+
+      .hero-copy::before {
+        display: none;
       }
     }
 
     .hero-media--flat .hero-copy {
+      align-self: center;
       padding: 0;
+    }
+
+    .hero-media--flat .hero-copy::before {
+      display: none;
     }
 
     .hero[data-align='centre'] .hero-copy {
@@ -431,6 +483,30 @@ import { ProductCarousel } from './product-carousel';
       text-decoration: none;
       font-size: var(--text-sm);
       text-align: center;
+    }
+
+    /* The image-less category tile: a short raised chip rather than a square. Depth comes from the
+       soft shadow, not a darker border, and the lift is shadow-only so a grid does not shuffle. */
+    .tile--flat {
+      justify-content: center;
+      min-block-size: 5rem;
+      padding: var(--space-3) var(--space-4);
+      background: var(--color-surface-raised);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      font-family: var(--font-display);
+      font-size: var(--text-base);
+      font-weight: var(--weight-display);
+      letter-spacing: var(--tracking-display);
+      transition:
+        box-shadow var(--duration-base) var(--ease-standard),
+        transform var(--duration-base) var(--ease-standard);
+    }
+
+    .tile--flat:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
     }
 
     /* Three width tiers, all centred the same way — \`narrow\` and \`wide\` inset from the full-width
