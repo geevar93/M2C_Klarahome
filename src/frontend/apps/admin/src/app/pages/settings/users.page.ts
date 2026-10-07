@@ -131,9 +131,12 @@ import { USER_TYPES, userTypeLabel } from './identity-vocabulary';
       </ng-template>
 
       <ng-template khCell="security" let-row>
-        <kh-badge [tone]="row.twoFactorEnabled ? 'success' : 'neutral'">
-          {{ row.twoFactorEnabled ? '2FA on' : '2FA off' }}
-        </kh-badge>
+        <!-- Customers never have two-factor: "2FA off" on every shopper row read as a fault. -->
+        @if (row.userType !== 'Customer') {
+          <kh-badge [tone]="row.twoFactorEnabled ? 'success' : 'neutral'">
+            {{ row.twoFactorEnabled ? '2FA on' : '2FA off' }}
+          </kh-badge>
+        }
         @if (!row.emailVerified && row.email) {
           <span class="note">Email unverified</span>
         }

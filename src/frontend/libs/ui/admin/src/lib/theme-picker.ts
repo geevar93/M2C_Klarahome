@@ -96,7 +96,7 @@ import { ThemePreset } from '@klarahome/util';
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
       background: var(--color-surface-raised);
-      box-shadow: var(--shadow-sm);
+      box-shadow: none;
       cursor: pointer;
     }
 
@@ -106,7 +106,7 @@ import { ThemePreset } from '@klarahome/util';
 
     .card.current {
       border-color: var(--color-primary);
-      box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-sm);
+      box-shadow: 0 0 0 1px var(--color-primary);
     }
 
     .card:has(input:focus-visible) {

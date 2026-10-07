@@ -1,6 +1,8 @@
 // Global styles.
 //
-// The placeholder tokens and the accessibility baseline, and nothing else. Every value a
-// component uses is a custom property declared there, which is what makes Step 30 a token swap
-// rather than a rewrite (docs/10-design-system-placeholder.md §1).
+// The shared tokens and the accessibility baseline, then the back office's own skin over them
+// (`_admin-theme.scss`: teal brand, warm neutrals, light and dark). Every value a component uses
+// is still a custom property, so the skin is a token re-map and not a rewrite.
 @use 'ui/primitives/src/styles';
+@use './styles/admin-theme';
+@use './styles/admin-components';

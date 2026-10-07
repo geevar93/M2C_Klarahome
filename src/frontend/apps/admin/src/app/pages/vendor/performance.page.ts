@@ -38,7 +38,7 @@ import { ReportRunner } from '../reports/report-runner';
   selector: 'kh-vendor-performance-page',
   imports: [Alert, Button, KpiCard, PageHeader, Rating, ReportRunner, RouterLink, Skeleton],
   template: `
-    <kh-page-header heading="How you are doing" description="Your sales, your money and your standing.">
+    <kh-page-header heading="Performance" description="Your sales, your money and your standing.">
       <a khButton routerLink="/ledger" variant="tertiary">Your ledger</a>
     </kh-page-header>
 
@@ -149,8 +149,9 @@ import { ReportRunner } from '../reports/report-runner';
       margin-block-end: var(--space-6);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     .label {

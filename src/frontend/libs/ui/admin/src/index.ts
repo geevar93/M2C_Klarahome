@@ -1,6 +1,9 @@
 export * from './lib/admin.model';
 export * from './lib/admin-shell';
+export * from './lib/admin-notifications';
 export * from './lib/admin-sidebar';
+export * from './lib/admin-sub-nav';
+export { categoryFor } from './lib/nav-location';
 export * from './lib/admin-top-bar';
 export * from './lib/audit-trail';
 export * from './lib/confirm-dialog';

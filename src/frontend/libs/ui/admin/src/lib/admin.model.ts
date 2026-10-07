@@ -16,20 +16,67 @@
 // Navigation
 // -------------------------------------------------------------------------------------------------
 
-/** One destination in the sidebar. */
+/** One screen in the navigation: a tab in the sub-nav, a row on the "All screens" page. */
 export interface AdminNavItem {
   readonly label: string;
   /** An internal router path. Every admin destination is internal; there are no outbound links. */
   readonly path: string;
   readonly icon?: string;
-  /** A count worth showing next to the label — parcels awaiting dispatch, returns to grade. */
-  readonly badge?: number | null;
+  /**
+   * A count worth showing next to the label — parcels awaiting dispatch, returns to grade. A
+   * string is a count the app has already capped (`50+`); zero and null show nothing.
+   */
+  readonly badge?: number | string | null;
 }
 
-/** A labelled group of destinations. A section with no visible items is not rendered at all. */
+/** A labelled group of screens. A section with no visible items is not rendered at all. */
 export interface AdminNavSection {
   readonly label: string;
   readonly items: readonly AdminNavItem[];
+  /** The section's own count: its items' counts added up. Zero and null show nothing. */
+  readonly badge?: number | string | null;
+}
+
+/**
+ * One entry in the sidebar, and everything behind it.
+ *
+ * The sidebar draws only `label`, `icon` and `badge`; the sub-nav above the page draws the open
+ * category's `sections` (a row of them when there is more than one, then the screens of the
+ * current one as tabs). `path` is where the entry opens — the first screen in it that the session
+ * can reach. A category with no sections is not rendered.
+ */
+export interface AdminNavCategory {
+  readonly key: string;
+  readonly label: string;
+  readonly icon?: string;
+  readonly path: string;
+  readonly sections: readonly AdminNavSection[];
+  /** Everything waiting in this category, added up. Zero and null show nothing. */
+  readonly badge?: number | string | null;
+}
+
+/** One thing in the "+ Create" menu. The app decides what it does when it is chosen. */
+export interface AdminCreateAction {
+  readonly key: string;
+  readonly label: string;
+  readonly hint?: string;
+  readonly icon?: string;
+}
+
+/**
+ * One line in the notifications panel: a queue with something waiting in it.
+ *
+ * These are the work queues the dashboard counts (parcels to pack, returns to decide), not a
+ * feed of events, because the API has no event feed. The count is the point; the panel is the
+ * answer to "is anything waiting for me", and every row is a link into the pre-filtered screen.
+ */
+export interface AdminAttentionItem {
+  readonly key: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly count: number | string;
+  readonly path: string;
+  readonly icon?: string;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -65,6 +112,20 @@ export interface DataTableColumn<TRow> {
   readonly numeric?: boolean;
   /** A fixed width, e.g. `12rem`. Omitted means the column takes what it needs. */
   readonly width?: string;
+  /**
+   * Pins the column to the right edge of a table that scrolls sideways (from 768px; below that rows
+   * are cards). A column keyed `actions` is pinned without asking: the row's main action must never
+   * be the thing that scrolls out of reach.
+   */
+  readonly sticky?: 'end';
+  /**
+   * Kept on the phone card. The first column is always the card's heading; once *any* column of a
+   * table sets `card`, the columns that do not are left off the card (they are still in the table
+   * from 768px, in the column chooser and in the CSV). A table where no column sets it keeps every
+   * column on its cards, as before. A card that repeats every one of nine columns is 440px tall;
+   * the status and one or two figures are what a phone user scans for.
+   */
+  readonly card?: boolean;
 }
 
 /** Re-declared rather than imported from `ui-primitives` so a column definition is data. */
@@ -127,6 +188,8 @@ export interface AuditEntryView {
   readonly entityId: string | null;
   /** Who did it: a user's name where one is known, otherwise the actor type. */
   readonly actor: string;
+  /** What it was done to, in words ("Brass Serving Spoons"), when the API could name it. */
+  readonly targetLabel?: string | null;
   readonly ip: string | null;
   readonly correlationId: string | null;
   /** The changed fields, before and after. Empty for an action that changed no field. */

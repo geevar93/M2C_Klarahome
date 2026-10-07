@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Icon } from '@klarahome/ui-primitives';
 
@@ -20,21 +20,11 @@ export interface AdminCrumb {
   selector: 'kh-page-header',
   imports: [Icon, RouterLink],
   template: `
-    @if (crumbs().length > 0) {
-      <nav aria-label="Breadcrumb">
-        <ol>
-          @for (crumb of crumbs(); track crumb.label; let last = $last) {
-            <li>
-              @if (crumb.path && !last) {
-                <a [routerLink]="crumb.path">{{ crumb.label }}</a>
-                <kh-icon name="chevron-right" size="sm" />
-              } @else {
-                <span [attr.aria-current]="last ? 'page' : null">{{ crumb.label }}</span>
-              }
-            </li>
-          }
-        </ol>
-      </nav>
+    @if (back(); as target) {
+      <a class="back" [routerLink]="target.path">
+        <kh-icon name="chevron-left" size="sm" />
+        {{ target.label }}
+      </a>
     }
 
     <div class="row">
@@ -53,29 +43,21 @@ export interface AdminCrumb {
   styles: `
     :host {
       display: block;
-      margin-block-end: var(--space-6);
+      margin-block-end: var(--space-5);
     }
 
-    nav ol {
-      display: flex;
-      flex-wrap: wrap;
+    .back {
+      display: inline-flex;
       gap: var(--space-1);
       align-items: center;
-      margin: 0 0 var(--space-2);
-      padding: 0;
-      list-style: none;
-      font-size: var(--text-xs);
+      margin-block-end: var(--space-2);
       color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      text-decoration: none;
     }
 
-    nav li {
-      display: flex;
-      gap: var(--space-1);
-      align-items: center;
-    }
-
-    nav a {
-      color: inherit;
+    .back:hover {
+      color: var(--color-text);
     }
 
     .row {
@@ -86,9 +68,15 @@ export interface AdminCrumb {
       justify-content: space-between;
     }
 
+    .titles {
+      min-width: 0;
+    }
+
     h1 {
       margin: 0;
       font-size: var(--text-2xl);
+      font-weight: var(--weight-bold);
+      letter-spacing: var(--tracking-display);
       line-height: var(--leading-tight);
     }
 
@@ -110,5 +98,15 @@ export interface AdminCrumb {
 export class PageHeader {
   readonly heading = input.required<string>();
   readonly description = input<string | null>(null);
+  /**
+   * Where this page sits, as a trail. The shell draws the full trail above the page; the header
+   * keeps the last linked step as a "back" link, which is the one a person actually uses.
+   */
   readonly crumbs = input<readonly AdminCrumb[]>([]);
+
+  protected readonly back = computed(() => {
+    const linked = this.crumbs().filter((crumb) => crumb.path);
+    const last = linked[linked.length - 1];
+    return last?.path ? { label: last.label, path: last.path } : null;
+  });
 }

@@ -82,7 +82,10 @@ import { BUSINESS_TYPES, VENDOR_STATUSES } from './vendor-vocabulary';
       [configurable]="true"
       storageKey="vendors-list"
       exportMode="page"
-      emptyMessage="No seller matches these filters."
+      [emptyMessage]="
+        onlyDefault() ? 'No sellers are waiting for review.' : 'No seller matches these filters.'
+      "
+      [clearLabel]="onlyDefault() ? 'Show all sellers' : 'Clear filters'"
       (nextPage)="list.next()"
       (previousPage)="list.previous()"
     >
@@ -146,7 +149,7 @@ import { BUSINESS_TYPES, VENDOR_STATUSES } from './vendor-vocabulary';
         />
       </kh-field>
 
-      <kh-field label="Constitution" for="vendor-type">
+      <kh-field label="Business type" for="vendor-type">
         <select
           khControl
           id="vendor-type"
@@ -253,6 +256,10 @@ export class VendorsPage {
 
   protected readonly list = this.vendors.vendors();
   protected readonly values = signal<FilterValues>({ status: 'Applied' });
+  /** Only the default "applied, waiting for review" filter is on. */
+  protected readonly onlyDefault = computed(
+    () => Object.keys(this.values()).length === 1 && this.values()['status'] === 'Applied',
+  );
   protected readonly creating = signal(false);
   protected readonly saving = signal(false);
   protected readonly createError = signal<string | null>(null);

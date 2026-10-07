@@ -35,7 +35,7 @@ import { describeError, fieldErrors } from '../../core/describe-error';
   selector: 'kh-pickup-locations-panel',
   imports: [Alert, Badge, Button, Checkbox, ConfirmDialog, Control, Field, Icon, Skeleton],
   template: `
-    <section class="panel">
+    <section class="panel kh-panel">
       <header>
         <h2>Pickup addresses</h2>
         @if (canManage()) {
@@ -262,13 +262,6 @@ import { describeError, fieldErrors } from '../../core/describe-error';
     />
   `,
   styles: `
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
     header {
       display: flex;
       gap: var(--space-2);

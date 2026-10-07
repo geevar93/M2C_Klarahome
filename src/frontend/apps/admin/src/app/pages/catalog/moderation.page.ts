@@ -40,7 +40,7 @@ import { tableDateTime } from '../../core/format';
   imports: [Alert, Button, CellTemplate, ConfirmDialog, DataTable, FilterBar, PageHeader, RouterLink],
   template: `
     <kh-page-header
-      heading="Moderation"
+      heading="Products to review"
       description="Products sellers have submitted. Nothing here is on the storefront yet."
     />
 
@@ -49,7 +49,7 @@ import { tableDateTime } from '../../core/format';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="Not everything worked" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Some of it didn't save" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table

@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterRenderEffect,
+  input,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Breadcrumb } from '@klarahome/util';
 import { Icon } from '@klarahome/ui-primitives';
@@ -10,8 +17,10 @@ import { Icon } from '@klarahome/ui-primitives';
  * knows how deep they are — and the separator is a decorative icon rather than a character in the
  * text, so the trail is not read as "Home slash Lighting slash Table lamps".
  *
- * On a phone it scrolls horizontally rather than wrapping to three lines above the content. The
- * items come from `BreadcrumbTrail`, which derives them from the router; this component renders
+ * On a phone it scrolls horizontally rather than wrapping to three lines above the content, starts
+ * scrolled to the end (the current page is the part a shopper wants to read, and clipping it to
+ * "Jaipur Blo" was the one thing the row must never do), and fades at both edges so a clipped
+ * crumb reads as "more this way" rather than as a rendering fault. The items come from `BreadcrumbTrail`, which derives them from the router; this component renders
  * what it is given and knows nothing about routes.
  */
 @Component({
@@ -19,7 +28,7 @@ import { Icon } from '@klarahome/ui-primitives';
   imports: [Icon, RouterLink],
   template: `
     @if (items().length > 1) {
-      <nav aria-label="Breadcrumb">
+      <nav #trail aria-label="Breadcrumb">
         <ol>
           <!-- Tracked by position, not label: ancestors arrive after hydration and are inserted
                before the leaf, and keyed moves over server-rendered nodes left them after it. -->
@@ -43,6 +52,34 @@ import { Icon } from '@klarahome/ui-primitives';
     nav {
       overflow-x: auto;
       scrollbar-width: none;
+      /* The container's own gutter is given to the nav and taken back as padding, so at rest the
+         trail sits where it always did while the fade zone lives in the gutter, not over a label. */
+      margin-inline: calc(-1 * var(--space-4));
+      padding-inline: var(--space-4);
+      /* Alpha only: the colour is irrelevant to a mask, so a token stands in for "opaque". */
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent,
+        var(--color-bg) var(--space-4),
+        var(--color-bg) calc(100% - var(--space-4)),
+        transparent
+      );
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        var(--color-bg) var(--space-4),
+        var(--color-bg) calc(100% - var(--space-4)),
+        transparent
+      );
+    }
+
+    @media (min-width: 768px) {
+      nav {
+        margin-inline: 0;
+        padding-inline: 0;
+        -webkit-mask-image: none;
+        mask-image: none;
+      }
     }
 
     nav::-webkit-scrollbar {
@@ -74,7 +111,12 @@ import { Icon } from '@klarahome/ui-primitives';
       text-decoration: none;
     }
 
+    a {
+      transition: color var(--duration-fast) var(--ease-standard);
+    }
+
     a:hover {
+      color: var(--color-text);
       text-decoration: underline;
     }
 
@@ -87,4 +129,16 @@ import { Icon } from '@klarahome/ui-primitives';
 })
 export class Breadcrumbs {
   readonly items = input<readonly Breadcrumb[]>([]);
+
+  private readonly trail = viewChild<ElementRef<HTMLElement>>('trail');
+
+  constructor() {
+    // After every render in which the trail changed, show its end. A browser-only hook: it never
+    // runs during SSR, and on a trail that fits scrollWidth equals the width, so nothing moves.
+    afterRenderEffect(() => {
+      this.items();
+      const element = this.trail()?.nativeElement;
+      if (element) element.scrollLeft = element.scrollWidth;
+    });
+  }
 }

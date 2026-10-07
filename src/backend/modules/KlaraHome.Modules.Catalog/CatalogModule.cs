@@ -82,6 +82,10 @@ public sealed class CatalogModule : IModule
         // and Orders can resolve an offer without a query that crosses a schema.
         services.AddScoped<IProductCatalog, ProductCatalogDirectory>();
 
+        // Names products and variants on the audit trail instead of showing their ids.
+        services.AddScoped<KlaraHome.Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.ProductAuditLabels>();
+        services.AddScoped<KlaraHome.Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.VariantAuditLabels>();
+
         // Its wider sibling, added at Step 19. A read-model needs the words a shopper searches by
         // and the names a facet is labelled with, none of which a cart line has any use for — and
         // it needs the buy box resolved by the rule this module owns, so that a search result and
@@ -119,6 +123,7 @@ public sealed class CatalogModule : IModule
         // The demonstration catalogue. Registered only outside Production and only when
         // DemoData:SeedCatalog is on — see DemoDataOptions for what that fences.
         services.AddDemoDataSeeder<Infrastructure.Seeding.DemoCatalogSeeder>(configuration);
+        services.AddDemoDataSeeder<Infrastructure.Seeding.DemoCatalogMediaSeeder>(configuration);
 
         services.AddHostedService<CatalogJobDispatcher>();
     }

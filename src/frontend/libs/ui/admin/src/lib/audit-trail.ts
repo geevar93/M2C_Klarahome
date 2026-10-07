@@ -2,7 +2,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { KhDatePipe } from '@klarahome/i18n';
 import { Disclosure, EmptyState, Skeleton } from '@klarahome/ui-primitives';
 
-import { AuditEntryView } from './admin.model';
+import { AuditChangeView, AuditEntryView } from './admin.model';
+
+/** How many changed fields an entry shows without being opened. */
+const INLINE_CHANGES = 3;
 
 /**
  * Who changed this, when, and to what.
@@ -46,8 +49,30 @@ import { AuditEntryView } from './admin.model';
               </span>
             </div>
 
+            @if (entry.targetLabel) {
+              <p class="target">{{ entry.targetLabel }}</p>
+            }
+
             @if (entry.changes.length > 0) {
-              <kh-disclosure heading="What changed" [hint]="entry.changes.length + ' field(s)'">
+              <!-- Up to three changed fields where they can be read at a glance; a long list is the
+                   expander's job, since the question is nearly always "what happened". -->
+              <ul class="inline">
+                @for (change of inlineChanges(entry); track change.field) {
+                  <li>
+                    <span class="field">{{ change.field }}</span>
+                    <span class="before">{{ change.before ?? '—' }}</span>
+                    →
+                    <span class="after">{{ change.after ?? '—' }}</span>
+                  </li>
+                }
+              </ul>
+            }
+
+            @if (entry.changes.length > inlineLimit) {
+              <kh-disclosure
+                heading="More changes"
+                [hint]="entry.changes.length - inlineLimit + ' more field(s)'"
+              >
                 <table>
                   <thead>
                     <tr>
@@ -57,7 +82,7 @@ import { AuditEntryView } from './admin.model';
                     </tr>
                   </thead>
                   <tbody>
-                    @for (change of entry.changes; track change.field) {
+                    @for (change of restChanges(entry); track change.field) {
                       <tr>
                         <th scope="row">{{ change.field }}</th>
                         <td class="before">{{ change.before ?? '—' }}</td>
@@ -70,16 +95,17 @@ import { AuditEntryView } from './admin.model';
             }
 
             @if (showTechnical()) {
-              <p class="technical">
+              <!-- The correlation id is for a developer following a request: kept, but on hover. -->
+              <p
+                class="technical"
+                [attr.title]="entry.correlationId ? 'Correlation id ' + entry.correlationId : null"
+              >
                 {{ entry.entityType }}
                 @if (entry.entityId) {
                   <span> · {{ entry.entityId }}</span>
                 }
                 @if (entry.ip) {
                   <span> · {{ entry.ip }}</span>
-                }
-                @if (entry.correlationId) {
-                  <span> · {{ entry.correlationId }}</span>
                 }
               </p>
             }
@@ -120,6 +146,31 @@ import { AuditEntryView } from './admin.model';
     .meta,
     .technical {
       font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
+    .target {
+      margin: var(--space-1) 0 0;
+      font-size: var(--text-sm);
+    }
+
+    .inline {
+      margin: var(--space-1) 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: var(--text-xs);
+    }
+
+    .inline li {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-1);
+      padding: 0;
+      border: 0;
+    }
+
+    .inline .field {
+      margin-inline-end: var(--space-2);
       color: var(--color-text-muted);
     }
 
@@ -169,4 +220,14 @@ export class AuditTrail {
    * page, where the entity is already known and an IP address is noise.
    */
   readonly showTechnical = input(false);
+
+  protected readonly inlineLimit = INLINE_CHANGES;
+
+  protected inlineChanges(entry: AuditEntryView): readonly AuditChangeView[] {
+    return entry.changes.slice(0, INLINE_CHANGES);
+  }
+
+  protected restChanges(entry: AuditEntryView): readonly AuditChangeView[] {
+    return entry.changes.slice(INLINE_CHANGES);
+  }
 }

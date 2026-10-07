@@ -14,6 +14,7 @@ import {
   DataTable,
   DataTableColumn,
   EntityDrawer,
+  EntityPicker,
   FormShell,
   PageHeader,
 } from '@klarahome/ui-admin';
@@ -22,6 +23,7 @@ import { ToastService, formField, formGroup, required } from '@klarahome/util';
 
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableMoney } from '../../core/format';
+import { vendorSearchFor } from '../../core/vendor-search';
 
 /** One rule being edited. Prices are strings until they are sent. */
 interface RuleDraft {
@@ -67,6 +69,7 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
     Control,
     DataTable,
     EntityDrawer,
+    EntityPicker,
     Field,
     FormShell,
     HasPermission,
@@ -135,22 +138,19 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
         </kh-data-table>
       }
 
-      <aside class="panel">
+      <aside class="panel kh-panel">
         <h2>What would this cost a seller?</h2>
         <p class="hint">
-          Runs the resolver that freezes the rate onto an order line, so the answer here is the answer a
-          statement will carry — and it names the rule that matched.
+          Locks in the commission rate for that order line, so the answer here is the answer a statement will
+          carry — and it names the rule that matched.
         </p>
 
-        <kh-field label="Seller id" for="preview-vendor">
-          <input
-            khControl
-            id="preview-vendor"
-            type="text"
-            [value]="previewVendorId()"
-            (input)="previewVendorId.set($any($event.target).value)"
-          />
-        </kh-field>
+        <kh-entity-picker
+          label="Seller"
+          inputId="preview-vendor"
+          [search]="vendorSearch"
+          (chose)="previewVendorId.set($event?.id ?? '')"
+        />
 
         <kh-field label="Category" for="preview-category" [optional]="true">
           <select
@@ -410,23 +410,13 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       grid-template-columns: minmax(0, 1fr);
     }
 
-    @media (min-width: 1024px) {
+    /* Side by side only where the table keeps its seven columns: at 1366 the panel left it two
+       (Plan, How) with the rest scrolled out of sight. Below this it stacks under the table. */
+    @media (min-width: 1536px) {
       .layout {
         grid-template-columns: minmax(0, 3fr) minmax(18rem, 1fr);
         align-items: start;
       }
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {
@@ -486,6 +476,12 @@ const PLAN_TYPES: readonly { value: CommissionPlanType; label: string; hint: str
       flex: 1 1 8rem;
     }
 
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
+    }
+
     .answer {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -531,6 +527,7 @@ export class CommissionPlansPage {
   protected readonly categoryOptions = signal<readonly { id: string; label: string }[]>([]);
 
   protected readonly previewVendorId = signal('');
+  protected readonly vendorSearch = vendorSearchFor(inject(VendorsAdminService));
   protected readonly previewCategoryId = signal('');
   protected readonly previewPrice = signal('1000');
   protected readonly previewing = signal(false);
@@ -556,7 +553,12 @@ export class CommissionPlansPage {
 
   protected readonly columns: readonly DataTableColumn<CommissionPlanResponse>[] = [
     { key: 'name', label: 'Plan', kind: 'custom' },
-    { key: 'planType', label: 'How', value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType, width: '12rem' },
+    {
+      key: 'planType',
+      label: 'How',
+      value: (row) => PLAN_TYPES.find((entry) => entry.value === row.planType)?.label ?? row.planType,
+      width: '12rem',
+    },
     {
       key: 'defaultRate',
       label: 'Default rate',

@@ -28,7 +28,7 @@ import { tableDateTime } from '../../core/format';
   selector: 'kh-bank-accounts-panel',
   imports: [Alert, Badge, Button, Checkbox, ConfirmDialog, Control, Field, Icon, Skeleton],
   template: `
-    <section class="panel">
+    <section class="panel kh-panel">
       <header>
         <h2>Bank accounts</h2>
         @if (canManage()) {
@@ -233,13 +233,6 @@ import { tableDateTime } from '../../core/format';
     />
   `,
   styles: `
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
     header {
       display: flex;
       gap: var(--space-2);

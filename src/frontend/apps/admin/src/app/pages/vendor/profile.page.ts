@@ -41,7 +41,7 @@ import { MediaPicker } from '../catalog/media-picker';
     StatusBadge,
   ],
   template: `
-    <kh-page-header heading="Your seller profile" description="What shoppers see, and what you promise them.">
+    <kh-page-header heading="Seller profile" description="What shoppers see, and what you promise them.">
       @if (vendor(); as current) {
         <kh-status-badge [status]="current.status" />
       }
@@ -59,6 +59,7 @@ import { MediaPicker } from '../catalog/media-picker';
           [summary]="profileSummary()"
           [saving]="savingProfile()"
           [dirty]="profileDirty()"
+          [revealOnDirty]="true"
           submitLabel="Save shopfront"
           [cancelLabel]="'Undo changes'"
           (submitted)="saveProfile()"
@@ -128,6 +129,7 @@ import { MediaPicker } from '../catalog/media-picker';
             [summary]="operationsSummary()"
             [saving]="savingOperations()"
             [dirty]="operationsDirty()"
+            [revealOnDirty]="true"
             submitLabel="Save promises"
             [cancelLabel]="'Undo changes'"
             (submitted)="saveOperations()"
@@ -204,7 +206,7 @@ import { MediaPicker } from '../catalog/media-picker';
             />
           </kh-form-shell>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Your legal record</h2>
             <p class="hint">
               Verified by the store. Changing any of it means talking to us — a unilateral change would
@@ -213,7 +215,7 @@ import { MediaPicker } from '../catalog/media-picker';
             <dl>
               <dt>Legal name</dt>
               <dd>{{ current.legalName }}</dd>
-              <dt>Constitution</dt>
+              <dt>Business type</dt>
               <dd>{{ businessTypeLabel(current.businessType) }}</dd>
               <dt>PAN</dt>
               <dd>{{ current.pan ?? '—' }}</dd>
@@ -260,13 +262,6 @@ import { MediaPicker } from '../catalog/media-picker';
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     h2 {

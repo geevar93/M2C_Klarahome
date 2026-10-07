@@ -16,6 +16,7 @@ import {
   EntityPicker,
   Modal,
   PageHeader,
+  toneFor,
   StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
@@ -25,6 +26,7 @@ import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import { RETURN_STATUS_VOCAB, statusLabel } from '../orders/order-vocabulary';
 
 /** One line being inspected: what came back, how much of it is good, and where it goes. */
 interface QcDraft {
@@ -77,6 +79,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
 @Component({
   selector: 'kh-return-detail-page',
   imports: [
+    StatusBadge,
     Alert,
     Badge,
     Button,
@@ -88,7 +91,6 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     Modal,
     PageHeader,
     Skeleton,
-    StatusBadge,
   ],
   template: `
     <kh-page-header
@@ -97,7 +99,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       [description]="subtitle()"
     >
       @if (rma(); as current) {
-        <kh-status-badge [status]="current.status" />
+        <span [title]="statusTooltip(current.status)">
+          <kh-status-badge [status]="current.status" [label]="statusLabelFor(current.status)" />
+        </span>
       }
     </kh-page-header>
 
@@ -106,7 +110,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -114,9 +118,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
     } @else if (rma(); as current) {
       <div class="layout">
         <div class="main">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>What is coming back</h2>
-            <table>
+            <table class="kh-table">
               <thead>
                 <tr>
                   <th scope="col">Item</th>
@@ -149,12 +153,9 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             </table>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>What can be done now</h2>
-            <p class="hint">
-              These come from the API's own transition table, so what is offered here is exactly what it will
-              accept.
-            </p>
+            <p class="hint">Only the actions this return can move to next are shown.</p>
 
             <div class="actions">
               @if (can('Approved')) {
@@ -255,7 +256,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
           </section>
 
           @if (creditNote(); as note) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <h2>Credit note {{ note.creditNoteNumber }}</h2>
               <p class="hint">
                 Reduces the seller's output tax for {{ note.financialYear }}. It exists whether or not money
@@ -292,7 +293,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
         </div>
 
         <aside class="side">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Why</h2>
             <p>
               <strong>{{ reason()?.label ?? current.reasonCode }}</strong>
@@ -314,7 +315,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Money</h2>
             <dl class="facts">
               <div>
@@ -346,7 +347,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
             </dl>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Where it is</h2>
             <dl class="facts">
               <div>
@@ -361,7 +362,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
               }
               @if (current.pickupAwb; as awb) {
                 <div>
-                  <dt>Pickup waybill</dt>
+                  <dt>Pickup tracking number</dt>
                   <dd>{{ awb }}</dd>
                 </div>
               }
@@ -459,8 +460,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       (closed)="schedulingPickup.set(false)"
     >
       <p class="hint">
-        A reverse shipment, which is an ordinary one with its addresses inverted. Leave the date blank to let
-        the courier choose the next available slot.
+        Leave the date blank to let the courier choose the next available slot.
       </p>
 
       <kh-field label="Collect on" for="pickup-date" [optional]="true">
@@ -501,7 +501,7 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
         <strong>Back on the shelf</strong> puts stock back on sale — the rest are recorded and do not.
       </p>
 
-      <table>
+      <table class="kh-table">
         <thead>
           <tr>
             <th scope="col">Item</th>
@@ -691,15 +691,6 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .hint {
@@ -722,18 +713,10 @@ const DISPOSITIONS: readonly { readonly value: ReturnDisposition; readonly label
       gap: var(--space-2);
     }
 
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     .numeric {
@@ -881,9 +864,21 @@ export class ReturnDetailPage {
     return tableDateTime(value) || '—';
   }
 
-  /** Whether the API's own transition table allows this edge from where the return is now. */
+  /** Whether the return can move to this status next. */
   protected can(status: string): boolean {
     return this.rma()?.nextStatuses.includes(status) ?? false;
+  }
+
+  protected tone(status: string) {
+    return toneFor(status);
+  }
+
+  protected statusLabelFor(status: string): string {
+    return statusLabel(RETURN_STATUS_VOCAB, status);
+  }
+
+  protected statusTooltip(status: string): string {
+    return RETURN_STATUS_VOCAB[status]?.tooltip ?? '';
   }
 
   protected approve(): void {

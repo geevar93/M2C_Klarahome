@@ -1,11 +1,25 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FeatureFlagResponse, PlatformSettingsService, RolloutModel } from '@klarahome/data-access-admin';
 import { HasPermission } from '@klarahome/data-access-auth';
-import { ConfirmDialog, PageHeader } from '@klarahome/ui-admin';
+import { ConfirmDialog, PageHeader, humanise } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
+
+/** What each flag area is called on screen; an area not listed is spaced out from its key. */
+const AREA_LABELS: Readonly<Record<string, string>> = {
+  content: 'Storefront content',
+  identity: 'Sign-in and accounts',
+  notifications: 'Messages',
+  platform: 'Platform',
+  pricing: 'Pricing and credit',
+  reporting: 'Reports',
+  reviews: 'Reviews and wishlists',
+  search: 'Search',
+};
+
+const PERMANENT_GAP = /permanent gap/i;
 
 /**
  * Feature flags.
@@ -28,10 +42,7 @@ import { describeError } from '../../core/describe-error';
   selector: 'kh-feature-flags-page',
   imports: [Alert, Badge, Button, ConfirmDialog, Control, Field, HasPermission, PageHeader, Skeleton],
   template: `
-    <kh-page-header
-      heading="Feature flags"
-      description="What this deployment has switched on. Declared by the code that reads them."
-    />
+    <kh-page-header heading="Feature flags" description="Switches that turn admin features on or off." />
 
     @if (loadError(); as message) {
       <kh-alert tone="danger" heading="Flags could not be loaded">{{ message }}</kh-alert>
@@ -39,48 +50,53 @@ import { describeError } from '../../core/describe-error';
       <kh-skeleton height="16rem" />
     } @else {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
-      <ul>
-        @for (flag of flags(); track flag.key) {
-          <li>
-            <div class="details">
-              <span class="key">
-                <code>{{ flag.key }}</code>
-                <kh-badge [tone]="flag.enabled ? 'success' : 'neutral'">
-                  {{ flag.enabled ? 'On' : 'Off' }}
-                </kh-badge>
-                @if (flag.enabled && isPartial(flag)) {
-                  <kh-badge tone="warning">{{ describeRollout(flag.rollout) }}</kh-badge>
-                }
-              </span>
-              <span class="note">{{ flag.description }}</span>
-            </div>
+      @for (group of groups(); track group.area) {
+        <section class="group" [attr.aria-labelledby]="'flags-' + group.area">
+          <h2 class="group-title" [id]="'flags-' + group.area">{{ group.label }}</h2>
+          <ul>
+            @for (flag of group.flags; track flag.key) {
+              <li>
+                <div class="details">
+                  <!-- The description leads: it says what the switch does, the code is only its name. -->
+                  <span class="what">{{ flag.description }}</span>
+                  <span class="key">
+                    <code>{{ flag.key }}</code>
+                    @if (flag.enabled && isPartial(flag)) {
+                      <kh-badge tone="warning">{{ describeRollout(flag.rollout) }}</kh-badge>
+                    }
+                  </span>
+                </div>
 
-            <div class="actions" *khHasPermission="'platform.settings.manage'">
-              <button khButton type="button" size="sm" variant="tertiary" (click)="startEdit(flag)">
-                Rollout
-              </button>
-              <button
-                khButton
-                type="button"
-                size="sm"
-                [variant]="flag.enabled ? 'tertiary' : 'primary'"
-                [disabled]="busyKey() === flag.key"
-                (click)="flag.enabled ? disabling.set(flag) : enable(flag)"
-              >
-                {{ flag.enabled ? 'Switch off' : 'Switch on' }}
-              </button>
-            </div>
-          </li>
-        } @empty {
-          <li class="hint">No feature flag is declared for this deployment.</li>
-        }
-      </ul>
+                <div class="actions" *khHasPermission="'platform.settings.manage'">
+                  <button khButton type="button" size="sm" variant="tertiary" (click)="startEdit(flag)">
+                    Rollout
+                  </button>
+                  <button
+                    type="button"
+                    class="switch"
+                    role="switch"
+                    [attr.aria-checked]="flag.enabled"
+                    [attr.aria-label]="flag.key"
+                    [disabled]="busyKey() === flag.key"
+                    (click)="flag.enabled ? disabling.set(flag) : enable(flag)"
+                  >
+                    <span class="knob" aria-hidden="true"></span>
+                    <span class="state">{{ flag.enabled ? 'On' : 'Off' }}</span>
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+      } @empty {
+        <p class="hint">No feature flag is declared for this deployment.</p>
+      }
 
       @if (editing(); as flag) {
-        <section class="panel">
+        <section class="panel kh-panel">
           <h2>
             Rollout for <code>{{ flag.key }}</code>
           </h2>
@@ -139,10 +155,10 @@ import { describeError } from '../../core/describe-error';
 
     <kh-confirm-dialog
       [open]="disabling() !== null"
-      heading="Switch this flag off"
+      [heading]="disablingPermanent() ? 'Switch off, and lose data for good' : 'Switch this flag off'"
       [message]="disableMessage()"
-      confirmLabel="Switch it off"
-      tone="warning"
+      [confirmLabel]="disablingPermanent() ? 'Switch it off anyway' : 'Switch it off'"
+      [tone]="disablingPermanent() ? 'danger' : 'warning'"
       [busy]="busyKey() !== null"
       (confirmed)="disable()"
       (cancelled)="disabling.set(null)"
@@ -157,6 +173,102 @@ import { describeError } from '../../core/describe-error';
       margin: 0;
       padding: 0;
       list-style: none;
+    }
+
+    .group {
+      margin-block-end: var(--space-5);
+    }
+
+    .group-title {
+      margin: 0 0 var(--space-2);
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-semibold);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .what {
+      display: block;
+      font-weight: var(--weight-medium);
+    }
+
+    .key {
+      margin-block-start: var(--space-1);
+    }
+
+    code {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+    }
+
+    /* A real switch: one control that says what it is now, instead of a filled "Switch on" button on
+       twelve rows. Off is quiet, on is the brand colour. */
+    .switch {
+      display: inline-flex;
+      gap: var(--space-2);
+      align-items: center;
+      min-block-size: 2rem;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+
+    .switch:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    .switch:focus-visible {
+      outline: 2px solid var(--color-focus-ring);
+      outline-offset: 2px;
+    }
+
+    .knob {
+      position: relative;
+      inline-size: 2.5rem;
+      block-size: 1.5rem;
+      border-radius: var(--radius-full);
+      background: var(--color-border-strong);
+      transition: background var(--duration-fast) var(--ease-standard);
+    }
+
+    .knob::after {
+      content: '';
+      position: absolute;
+      inset-block-start: var(--space-1);
+      inset-inline-start: var(--space-1);
+      inline-size: 1rem;
+      block-size: 1rem;
+      border-radius: var(--radius-full);
+      background: var(--color-surface-raised);
+      transition: transform var(--duration-fast) var(--ease-standard);
+    }
+
+    .switch[aria-checked='true'] {
+      color: var(--color-text);
+    }
+
+    .switch[aria-checked='true'] .knob {
+      background: var(--color-primary);
+    }
+
+    .switch[aria-checked='true'] .knob::after {
+      transform: translateX(1rem);
+    }
+
+    .state {
+      min-inline-size: 1.75rem;
+    }
+
+    @media (pointer: coarse) {
+      .switch,
+      button[khButton] {
+        min-block-size: var(--touch-target-min);
+      }
     }
 
     li {
@@ -192,15 +304,13 @@ import { describeError } from '../../core/describe-error';
 
     .actions {
       display: flex;
+      flex: none;
       gap: var(--space-2);
+      align-items: center;
     }
 
     .panel {
       margin-block-start: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     h2 {
@@ -257,11 +367,30 @@ export class FeatureFlagsPage {
     return parts.join(' · ');
   }
 
+  /** The flags are keyed `area.name`; the area is the heading they are listed under. */
+  protected readonly groups = computed(() => {
+    const byArea = new Map<string, FeatureFlagResponse[]>();
+    for (const flag of this.flags()) {
+      const area = flag.key.split('.')[0];
+      byArea.set(area, [...(byArea.get(area) ?? []), flag]);
+    }
+    return [...byArea.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([area, flags]) => ({ area, label: AREA_LABELS[area] ?? humanise(area), flags }));
+  });
+
+  /** A flag whose description says that switching it off leaves "a permanent gap" in recorded data. */
+  protected readonly disablingPermanent = computed(() => {
+    const flag = this.disabling();
+    return flag ? PERMANENT_GAP.test(flag.description) : false;
+  });
+
   protected disableMessage(): string {
     const flag = this.disabling();
-    return flag
-      ? `Everything behind ${flag.key} stops working for everybody, immediately. ${flag.description}`
-      : '';
+    if (!flag) return '';
+    return this.disablingPermanent()
+      ? `${flag.description} Anything that happens while this is off is never recorded, and switching it back on does not fill the gap.`
+      : `Everything behind ${flag.key} stops working for everybody, immediately. ${flag.description}`;
   }
 
   protected startEdit(flag: FeatureFlagResponse): void {

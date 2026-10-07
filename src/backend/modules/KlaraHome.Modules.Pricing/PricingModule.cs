@@ -76,6 +76,9 @@ public sealed class PricingModule : IModule
         services.AddScoped<IPriceCatalog>(provider => provider.GetRequiredService<PriceResolver>());
         services.AddScoped<IPriceQuoteEngine, QuoteEngine>();
 
+        // Names promotions on the audit trail instead of showing their ids.
+        services.AddScoped<KlaraHome.Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.PromotionAuditLabels>();
+
         // Committing what a quote merely evaluated. Both are called when an order is placed or
         // cancelled, never when a cart is rendered.
         services.AddScoped<IPromotionLedger, PromotionLedger>();

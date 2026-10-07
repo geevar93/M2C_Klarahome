@@ -79,8 +79,10 @@ import { ProductCard } from './product-card';
       flex-direction: column;
       gap: var(--space-2);
       padding: var(--space-2);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -92,10 +94,13 @@ export class ProductGrid {
   readonly loadingMore = input(false);
   readonly skeletonCount = input(8);
   /**
-   * 9rem, so a 360px phone gets two columns: two 10rem columns plus the gap are 332px, 4px more
-   * than the 328px inside its gutters, and the grid fell back to one full-width card per row.
+   * Floored at 9rem, so a 360px phone gets two columns: two 10rem columns plus the gap are 332px,
+   * 4px more than the 328px inside its gutters, and the grid fell back to one full-width card per
+   * row. Past the phone the floor rises with the viewport (14vw) up to 14rem, so a 1440px screen
+   * beside a filter rail gets four or five roomy cards rather than six ~190px ones whose names
+   * clamp to ellipses and whose price row has nowhere to sit.
    */
-  readonly minColumnWidth = input('9rem');
+  readonly minColumnWidth = input('clamp(9rem, 14vw, 14rem)');
   readonly showWishlist = input(true);
   readonly showAddToCart = input(false);
   readonly wishlistedIds = input<readonly string[]>([]);

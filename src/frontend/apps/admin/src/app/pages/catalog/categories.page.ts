@@ -230,12 +230,14 @@ interface CategoryRow {
       padding: 0;
       list-style: none;
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     .tree li {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       align-items: center;
       padding: var(--space-2) var(--space-3);
@@ -260,6 +262,10 @@ interface CategoryRow {
       display: flex;
       gap: var(--space-2);
       margin-inline-start: auto;
+    }
+
+    .row-actions button {
+      white-space: nowrap;
     }
 
     [slot='footer'] {

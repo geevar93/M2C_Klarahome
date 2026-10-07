@@ -87,7 +87,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       <kh-skeleton height="16rem" />
     } @else if (user(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (isLockedOut(current)) {
@@ -104,7 +104,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       }
 
       <div class="layout">
-        <section class="panel">
+        <section class="panel kh-panel">
           <h2>Roles</h2>
           <p class="hint">
             A user's permissions come from their roles and from nowhere else. A change takes effect on their
@@ -138,7 +138,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
         </section>
 
         <div class="column">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Status</h2>
 
             <kh-field label="Account status" for="user-status" [hint]="statusHint()">
@@ -166,7 +166,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
             </button>
           </section>
 
-          <section class="panel" *khHasPermission="'identity.user.manage'">
+          <section class="panel kh-panel" *khHasPermission="'identity.user.manage'">
             <h2>Temporary password</h2>
             <p class="hint">
               A one-time password to hand over out of band. They must change it when they use it, and nothing
@@ -194,7 +194,7 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
             </button>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>The account</h2>
             <dl>
               <dt>Email</dt>
@@ -317,13 +317,6 @@ const STATUSES: readonly { value: UserStatus; label: string; hint: string }[] = 
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     h2 {

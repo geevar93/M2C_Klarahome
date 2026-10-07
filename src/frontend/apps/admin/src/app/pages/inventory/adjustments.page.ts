@@ -37,10 +37,10 @@ import { tableDateTime } from '../../core/format';
     />
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
-    <section class="panel">
+    <section class="panel kh-panel">
       <h2>Find the stock</h2>
       <kh-filter-bar
         [filters]="[]"
@@ -64,8 +64,8 @@ import { tableDateTime } from '../../core/format';
                 [attr.aria-pressed]="chosen()?.id === item.id"
                 (click)="choose(item)"
               >
-                <span class="sku">{{ item.sku }}</span>
-                <span class="where">{{ item.warehouseCode }}</span>
+                <span class="sku">{{ item.productName ?? item.sku }}</span>
+                <span class="where">{{ item.productName ? item.sku + ' · ' : '' }}{{ item.warehouseName ?? item.warehouseCode }}</span>
                 <span class="counts">
                   {{ item.quantityOnHand }} on hand · {{ item.quantityAvailable }} available
                 </span>
@@ -83,7 +83,7 @@ import { tableDateTime } from '../../core/format';
 
     @if (chosen(); as item) {
       <div class="columns">
-        <section class="panel">
+        <section class="panel kh-panel">
           <h2>Adjust</h2>
           <p class="hint">
             {{ item.sku }} at {{ item.warehouseCode }} — {{ item.quantityOnHand }} on hand. Positive adds,
@@ -116,7 +116,7 @@ import { tableDateTime } from '../../core/format';
             </select>
           </kh-field>
 
-          <kh-field label="Note" for="adjustment-note" hint="Goes on the ledger row, and stays there.">
+          <kh-field label="Note" for="adjustment-note" hint="Goes on this history entry, and stays there.">
             <input
               khControl
               id="adjustment-note"
@@ -132,7 +132,7 @@ import { tableDateTime } from '../../core/format';
           </button>
         </section>
 
-        <section class="panel">
+        <section class="panel kh-panel">
           <h2>Transfer</h2>
           <p class="hint">
             Moves {{ item.sku }} out of {{ item.warehouseCode }} and into another warehouse, in one step — so
@@ -194,14 +194,14 @@ import { tableDateTime } from '../../core/format';
         </section>
       </div>
 
-      <section class="panel">
+      <section class="panel kh-panel">
         <h2>What has happened to it</h2>
 
         @if (ledger()?.error(); as message) {
-          <kh-alert tone="danger" heading="The ledger could not be loaded">{{ message }}</kh-alert>
+          <kh-alert tone="danger" heading="Couldn't load the history">{{ message }}</kh-alert>
         }
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -214,7 +214,7 @@ import { tableDateTime } from '../../core/format';
           <tbody>
             @for (entry of ledgerRows(); track entry.id) {
               <tr>
-                <td>{{ when(entry) }}</td>
+                <td class="nowrap">{{ when(entry) }}</td>
                 <td>
                   {{ entry.reason }}
                   @if (entry.note; as note) {
@@ -256,6 +256,24 @@ import { tableDateTime } from '../../core/format';
           </button>
         </div>
       </section>
+    } @else {
+      <!-- Nothing chosen yet: say what the two flows are, so the page is not just a search box. -->
+      <div class="columns">
+        <section class="panel kh-panel">
+          <h2>Adjust a count</h2>
+          <p class="hint">
+            The shelf says 12 and the system says 15: find the SKU above, pick its warehouse and enter the
+            difference (−3). Damage, loss and write-offs go through here too, each with a reason.
+          </p>
+        </section>
+        <section class="panel kh-panel">
+          <h2>Transfer between warehouses</h2>
+          <p class="hint">
+            Pick the SKU in the warehouse it is leaving, then the destination and a quantity. It is one
+            movement out and one in, written together, so stock is never left in neither place.
+          </p>
+        </section>
+      </div>
     }
     <kh-confirm-dialog
       [open]="confirmingWriteOff()"
@@ -274,15 +292,6 @@ import { tableDateTime } from '../../core/format';
 
     .panel {
       margin-block-end: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-3);
-      font-size: var(--text-lg);
     }
 
     .columns {
@@ -337,19 +346,6 @@ import { tableDateTime } from '../../core/format';
     .note {
       color: var(--color-text-muted);
       font-size: var(--text-xs);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
     }
 
     .numeric {
@@ -454,7 +450,7 @@ export class AdjustmentsPage {
   protected readonly writeOffMessage = computed(() => {
     const item = this.chosen();
     const change = Number(this.adjustForm.fields.change.value());
-    return `${Math.abs(change)} of ${item?.sku ?? 'this SKU'} comes off the shelf count. The ledger keeps the row; undoing it is another movement, not a delete.`;
+    return `${Math.abs(change)} of ${item?.sku ?? 'this SKU'} comes off the shelf count. This stays in the history; you can't undo it, but you can correct it with another movement.`;
   });
 
   protected reviewAdjust(): void {

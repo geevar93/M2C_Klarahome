@@ -58,8 +58,8 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
  *
  * **A balance is `Σ credits − Σ debits`, and there is no column for it.** Nothing on this screen
  * sets a balance; the one write it offers is an adjustment, which is a signed row carrying its
- * reason. That is the entire point of an append-only ledger and it is why "correcting" a seller's
- * balance means explaining the correction.
+ * reason. You can't edit a past entry — to fix a mistake, add a new entry that offsets it and
+ * explains why.
  *
  * **A statement is not the entry list.** The entries are every movement across every seller; the
  * statement is one seller's opening balance, their movements and their closing balance for a
@@ -93,7 +93,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     ConfirmDialog,
   ],
   template: `
-    <kh-page-header heading="Ledger" description="Every movement of money between the store and its sellers.">
+    <kh-page-header heading="Seller ledger" description="Every movement of money between the store and its sellers.">
       <button
         khButton
         type="button"
@@ -106,12 +106,12 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     </kh-page-header>
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
     }
 
     @if (isVendor()) {
       <kh-alert tone="info" heading="Your own ledger">
-        These are your movements only. The API scopes them to your seller account.
+        These are your movements only — you can't see other sellers' accounts.
       </kh-alert>
     }
 
@@ -123,7 +123,6 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
           <kh-entity-picker
             label="Seller"
             inputId="ledger-vendor"
-            hint="Search by name or code, or paste a seller id."
             [search]="vendorSearch"
             (chose)="chooseVendor($event?.id ?? '')"
           />
@@ -238,7 +237,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
     </kh-data-table>
 
     <section class="panels" *khHasPermission="'settlements.settlement.read'">
-      <div class="panel">
+      <div class="panel kh-panel">
         <header>
           <h2>What the platform kept</h2>
           <button khButton type="button" size="sm" [disabled]="loadingRevenue()" (click)="loadRevenue()">
@@ -271,7 +270,7 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
         }
       </div>
 
-      <div class="panel">
+      <div class="panel kh-panel">
         <header>
           <h2>TCS and TDS</h2>
           <div class="header-actions">
@@ -394,8 +393,9 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       margin-block-end: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     .row {
@@ -403,6 +403,12 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       gap: var(--space-3);
       align-items: flex-end;
       flex-wrap: wrap;
+    }
+
+    /* A kh-field keeps its bottom margin, so a bottom-aligned button beside one would sit that
+       margin lower than the input. The same margin on the button lines their edges up. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .row > kh-field {
@@ -456,13 +462,6 @@ const ENTRY_TYPES: readonly { value: LedgerEntryType; label: string }[] = [
       gap: var(--space-4);
       grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
       margin-block-start: var(--space-4);
-    }
-
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     .panel header {

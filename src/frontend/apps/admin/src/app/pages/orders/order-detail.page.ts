@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CancelLineBody,
@@ -7,6 +8,7 @@ import {
   OrderEventResponse,
   OrderResponse,
   OrdersAdminService,
+  ReferenceDataService,
   SubOrderResponse,
 } from '@klarahome/data-access-admin';
 import { HasPermission, SessionStore } from '@klarahome/data-access-auth';
@@ -16,6 +18,13 @@ import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import {
+  ORDER_STATUS_VOCAB,
+  PAYMENT_STATUS_VOCAB,
+  SUB_ORDER_STATUS_VOCAB,
+  statusLabel,
+  statusTooltip,
+} from './order-vocabulary';
 
 /** A line being cancelled, and how much of it. */
 interface CancelDraft {
@@ -75,8 +84,15 @@ interface CancelDraft {
       [description]="subtitle()"
     >
       @if (order(); as current) {
-        <kh-status-badge [status]="current.status" />
-        <kh-status-badge [status]="current.paymentStatus" />
+        <span [title]="orderStatusTooltip(current.status)">
+          <kh-status-badge [status]="current.status" [label]="orderStatusLabel(current.status)" />
+        </span>
+        <span [title]="paymentStatusTooltip(current.paymentStatus)">
+          <kh-status-badge
+            [status]="current.paymentStatus"
+            [label]="paymentStatusLabel(current.paymentStatus)"
+          />
+        </span>
       }
     </kh-page-header>
 
@@ -85,7 +101,7 @@ interface CancelDraft {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
@@ -94,13 +110,15 @@ interface CancelDraft {
       <div class="layout">
         <div class="main">
           @for (part of current.subOrders; track part.id) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <header class="part-head">
                 <div>
                   <h2>{{ part.subOrderNumber }}</h2>
                   <p class="hint">
                     @if (isPlatform()) {
-                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{ part.vendorName ?? 'Seller' }}</a>
+                      <a class="link" [routerLink]="['/vendors', part.vendorId]">{{
+                        part.vendorName ?? 'Seller'
+                      }}</a>
                     } @else {
                       {{ part.vendorName ?? 'Seller' }}
                     }
@@ -111,10 +129,12 @@ interface CancelDraft {
                     }
                   </p>
                 </div>
-                <kh-status-badge [status]="part.status" />
+                <span [title]="partStatusTooltip(part.status)">
+                  <kh-status-badge [status]="part.status" [label]="partStatusLabel(part.status)" />
+                </span>
               </header>
 
-              <table>
+              <table class="kh-table">
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
@@ -150,16 +170,19 @@ interface CancelDraft {
               </table>
 
               <div class="part-actions">
-                @for (next of part.nextStatuses; track next) {
+                @for (next of part.nextStatuses; track next; let first = $first) {
+                  <!-- One primary action per part: the first edge the API offers is the way the order
+                       moves forward, and the rest are alternatives. Destructive ones live under Cancel. -->
                   <button
                     *khHasPermission="'orders.order.transition'"
                     khButton
                     type="button"
                     size="sm"
+                    [variant]="first ? 'primary' : 'secondary'"
                     [disabled]="busy()"
                     (click)="transition(part, next)"
                   >
-                    Mark {{ next }}
+                    {{ transitionButtonLabel(next) }}
                   </button>
                 }
 
@@ -196,7 +219,7 @@ interface CancelDraft {
                     [disabled]="busy()"
                     (click)="issueInvoice(part)"
                   >
-                    Raise the invoice
+                    Create the invoice
                   </button>
                 }
               </div>
@@ -207,7 +230,7 @@ interface CancelDraft {
             </section>
           }
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Timeline</h2>
             <ol class="timeline">
               @for (event of timeline(); track event.id) {
@@ -229,7 +252,7 @@ interface CancelDraft {
             </ol>
           </section>
 
-          <section class="panel" *khHasPermission="'orders.order.note'">
+          <section class="panel kh-panel" *khHasPermission="'orders.order.note'">
             <h2>Add a note</h2>
             <kh-field label="Note" for="order-note">
               <textarea
@@ -263,18 +286,22 @@ interface CancelDraft {
         </div>
 
         <aside class="side">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Customer</h2>
             <p>{{ current.customerName }}</p>
             @if (current.customerEmail; as email) {
               <p class="note">{{ email }}</p>
             }
+            <!-- The customer's name is their number when they never gave one, so printing the mobile
+                 under it said the same thing twice. -->
             @if (current.customerMobile; as mobile) {
-              <p class="note">{{ mobile }}</p>
+              @if (mobile !== current.customerName) {
+                <p class="note">{{ mobile }}</p>
+              }
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Delivering to</h2>
             <p>{{ current.shippingAddress.recipientName }}</p>
             <p class="note">
@@ -283,13 +310,15 @@ interface CancelDraft {
                 {{ line2 }}<br />
               }
               {{ current.shippingAddress.city }},
-              {{ current.shippingAddress.stateName ?? current.shippingAddress.stateCode }}
+              {{ stateName(current.shippingAddress.stateName, current.shippingAddress.stateCode) }}
               {{ current.shippingAddress.pincode }}<br />
-              {{ current.shippingAddress.mobile }}
+              @if (current.shippingAddress.mobile !== current.customerMobile) {
+                {{ current.shippingAddress.mobile }}
+              }
             </p>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Money</h2>
             <dl>
               <div>
@@ -307,7 +336,7 @@ interface CancelDraft {
                 <dd>{{ money(current.shippingTotal, current.currencyCode) }}</dd>
               </div>
               <div>
-                <dt>Tax</dt>
+                <dt>Tax (included in the prices)</dt>
                 <dd>{{ money(current.taxTotal, current.currencyCode) }}</dd>
               </div>
               @if (current.codFee > 0) {
@@ -358,7 +387,7 @@ interface CancelDraft {
           them to cancel some of it. Stock is released and any payment refunded by the platform, in one step.
         </p>
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Item</th>
@@ -390,7 +419,6 @@ interface CancelDraft {
             }
           </tbody>
         </table>
-
       }
 
       <div slot="footer">
@@ -422,6 +450,7 @@ interface CancelDraft {
 
     .layout {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-4);
     }
 
@@ -434,15 +463,6 @@ interface CancelDraft {
 
     .panel {
       margin-block-end: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
     }
 
     .part-head {
@@ -477,18 +497,10 @@ interface CancelDraft {
       display: block;
     }
 
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     .numeric {
@@ -504,14 +516,27 @@ interface CancelDraft {
       list-style: none;
     }
 
+    /* One column on a phone (when, what, who stacked); the three-column row from 640px. */
     .timeline li {
+      padding-inline-start: var(--space-3);
+      border-inline-start: 2px solid var(--color-primary-subtle-hover);
       display: grid;
-      grid-template-columns: 11rem 1fr auto;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-2);
       align-items: baseline;
       padding-block: var(--space-1);
       border-block-end: 1px solid var(--color-border);
       font-size: var(--text-sm);
+    }
+
+    @media (min-width: 768px) {
+      .timeline li {
+        grid-template-columns: 11rem minmax(0, 1fr) auto;
+      }
+    }
+
+    .part-head {
+      flex-wrap: wrap;
     }
 
     .when {
@@ -543,6 +568,13 @@ interface CancelDraft {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OrderDetailPage {
+  /** The platform's states, to say "Telangana" for the code "36" the address is stored with. */
+  private readonly states = toSignal(inject(ReferenceDataService).states, { initialValue: [] });
+
+  protected stateName(name: string | null | undefined, code: string | null | undefined): string {
+    return name ?? this.states().find((state) => state.code === code)?.name ?? code ?? '';
+  }
+
   private readonly session = inject(SessionStore);
   /** A seller has no seller directory to link into; platform staff do. */
   protected readonly isPlatform = computed(() => !this.session.session()?.vendorId);
@@ -585,7 +617,11 @@ export class OrderDetailPage {
   protected readonly subtitle = computed(() => {
     const current = this.order();
     if (!current) return null;
-    return `${current.customerName} · placed ${tableDateTime(current.placedAt)}`;
+    const phone =
+      current.customerMobile && current.customerMobile !== current.customerName
+        ? ` · ${current.customerMobile}`
+        : '';
+    return `${current.customerName}${phone} · placed ${tableDateTime(current.placedAt)}`;
   });
 
   /** Newest first: the question on an order detail page is always "what happened last". */
@@ -601,6 +637,50 @@ export class OrderDetailPage {
 
   protected tone(status: string) {
     return toneFor(status);
+  }
+
+  protected orderStatusLabel(status: string): string {
+    return statusLabel(ORDER_STATUS_VOCAB, status);
+  }
+
+  protected orderStatusTooltip(status: string): string {
+    return statusTooltip(ORDER_STATUS_VOCAB, status);
+  }
+
+  protected partStatusLabel(status: string): string {
+    return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected partStatusTooltip(status: string): string {
+    return statusTooltip(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected paymentStatusLabel(status: string): string {
+    return statusLabel(PAYMENT_STATUS_VOCAB, status);
+  }
+
+  protected paymentStatusTooltip(status: string): string {
+    return PAYMENT_STATUS_VOCAB[status]?.tooltip ?? '';
+  }
+
+  /** A plain verb per `SubOrderStatus` a seller's share can be moved to. */
+  protected transitionButtonLabel(next: string): string {
+    switch (next) {
+      case 'Confirmed':
+        return 'Mark as paid';
+      case 'Processing':
+        return 'Accept order';
+      case 'Packed':
+        return 'Mark as packed';
+      case 'Shipped':
+        return 'Mark as shipped';
+      case 'Delivered':
+        return 'Mark as delivered';
+      case 'Cancelled':
+        return 'Cancel';
+      default:
+        return `Mark as ${statusLabel(SUB_ORDER_STATUS_VOCAB, next).toLowerCase()}`;
+    }
   }
 
   protected money(amount: number, currency: string): string {

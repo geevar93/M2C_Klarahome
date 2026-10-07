@@ -1,22 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
-import {
-  IdentityAdminService,
-  ImpersonationStore,
-  NotificationCentreService,
-  VendorsAdminService,
-} from '@klarahome/data-access-admin';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { IdentityAdminService, ImpersonationStore, VendorsAdminService } from '@klarahome/data-access-admin';
 import { SessionStore } from '@klarahome/data-access-auth';
-import { AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
+import { AdminAttentionItem, AdminCreateAction, AdminIdentityView, AdminShell } from '@klarahome/ui-admin';
 import { ToastHost } from '@klarahome/ui-primitives';
-import { BrowserStorage } from '@klarahome/util';
+import { filter, map } from 'rxjs';
 
-import { visibleSections } from './navigation';
+import { breadcrumbsFor } from './breadcrumbs';
+import { ColourSchemeService } from './colour-scheme';
+import { navCategories } from './navigation';
 import { GlobalSearchPanel } from './global-search.panel';
+import { ProductQuickAdd } from './product-quick-add';
+import { QueueCountsStore } from './queue-counts.store';
+import { QuickAction, quickActionsFor } from './quick-actions';
 import { SignInFlow } from './sign-in.flow';
 
-/** Where the collapsed/expanded choice is remembered, per browser. */
-const RAIL_KEY = 'kh.admin.rail-collapsed';
+/** The glyph each work queue wears in the notifications panel. */
+const ATTENTION_ICONS: Readonly<Record<string, string>> = {
+  'to-pack': 'package',
+  overdue: 'clock',
+  returns: 'refresh',
+  moderation: 'check',
+  vendors: 'user',
+  notifications: 'alert',
+};
 
 /**
  * Everything behind the sign-in screen.
@@ -25,60 +33,129 @@ const RAIL_KEY = 'kh.admin.rail-collapsed';
  * a shell that rendered its own navigation around a sign-in form would be a menu of links to
  * screens the visitor cannot open, and the identity in its top bar would have nobody to name.
  *
- * It owns the three pieces of state that belong to the whole back office and to no page — whether
- * the tablet drawer is open, whether the desktop rail is collapsed, and whether global search is
- * up — and nothing else. Everything a page needs, a page fetches.
+ * It owns the state that belongs to the whole back office and to no page — whether the command
+ * palette is up, whether the product quick-add sheet is, and the colour scheme — and nothing else.
+ * Everything a page needs, a page fetches.
  *
- * The **sections come off the session**, through the same declaration the route guards are built
- * from (`navigation.ts`), so the sidebar cannot offer a screen the guard will refuse.
+ * The **navigation comes off the session** (the sidebar's categories and the tabs above the page),
+ * through the same declaration the route guards are built from (`navigation.ts`), so the shell
+ * cannot offer a screen the guard will refuse. The counts on it, and in the notifications panel,
+ * come off `QueueCountsStore`, the same numbers the dashboard
+ * shows, refreshed on navigation at the store's own pace. The breadcrumb trail is derived from
+ * the same declaration and the current URL (`breadcrumbs.ts`).
  */
 @Component({
   selector: 'kh-admin-layout',
-  imports: [AdminShell, GlobalSearchPanel, RouterOutlet, ToastHost],
+  imports: [AdminShell, GlobalSearchPanel, ProductQuickAdd, RouterOutlet, ToastHost],
   template: `
     <kh-admin-shell
-      [sections]="sections()"
+      [categories]="categories()"
+      [crumbs]="crumbs()"
       [identity]="identity()"
-      [navOpen]="navOpen()"
-      [collapsed]="collapsed()"
-      [showNotifications]="canReadNotifications()"
-      [notificationCount]="notificationCount()"
+      [showNotifications]="true"
+      [attention]="attention()"
+      [messageLogPath]="canReadNotifications() ? '/notifications' : null"
+      [createActions]="createActions()"
+      [scheme]="scheme.scheme()"
       [impersonation]="impersonation()"
       [endingImpersonation]="endingImpersonation()"
-      (navToggled)="toggleNav()"
-      (navClosed)="navOpen.set(false)"
+      (createChosen)="createFromMenu($event)"
       (searchOpened)="searchOpen.set(true)"
+      (schemeToggled)="scheme.toggle()"
       (signedOut)="signOut()"
       (impersonationExited)="endImpersonation()"
     >
       <router-outlet />
     </kh-admin-shell>
 
-    <kh-global-search [open]="searchOpen()" (closed)="searchOpen.set(false)" />
+    <kh-global-search
+      [open]="searchOpen()"
+      [actions]="quickActions()"
+      (closed)="searchOpen.set(false)"
+      (actionChosen)="openQuickAction($event)"
+    />
+
+    <kh-product-quick-add [open]="productQuickAddOpen()" (closed)="productQuickAddOpen.set(false)" />
 
     <kh-toast-host />
   `,
   host: {
-    // `/` opens search from anywhere, as it does in every tool the people using this already use.
-    // Guarded so it does not steal the slash out of somebody's typing.
+    // Ctrl/Cmd+K opens the command palette from anywhere, and so does `/` (as it does in every
+    // tool the people using this already use). `/` is guarded so it does not steal the slash out
+    // of somebody's typing; Ctrl/Cmd+K is safe to take everywhere because no field uses it.
     '(document:keydown)': 'onKeydown($event)',
   },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShellLayout {
   private readonly session = inject(SessionStore);
-  private readonly notifications = inject(NotificationCentreService);
   private readonly vendors = inject(VendorsAdminService);
   private readonly signInFlow = inject(SignInFlow);
-  private readonly storage = inject(BrowserStorage);
   private readonly router = inject(Router);
 
-  protected readonly navOpen = signal(false);
-  protected readonly searchOpen = signal(false);
-  protected readonly collapsed = signal(this.storage.getJson<boolean>(RAIL_KEY, false));
+  private readonly queues = inject(QueueCountsStore);
 
-  protected readonly sections = computed(() => visibleSections(this.session.session()));
-  protected readonly notificationCount = this.notifications.attentionCount;
+  protected readonly scheme = inject(ColourSchemeService);
+
+  protected readonly searchOpen = signal(false);
+  protected readonly productQuickAddOpen = signal(false);
+
+  /**
+   * A quick action chosen from the palette or the Create menu. Most are a link; the product one
+   * has a sheet of its own, which opens here rather than navigating to the full form.
+   */
+  protected openQuickAction(action: QuickAction): void {
+    if (action.opens === 'product-quick-add') this.productQuickAddOpen.set(true);
+    else void this.router.navigateByUrl(action.targetPath);
+  }
+
+  protected createFromMenu(key: string): void {
+    const action = this.quickActions().find((candidate) => candidate.targetPath === key);
+    if (action) this.openQuickAction(action);
+  }
+
+  protected readonly categories = computed(() =>
+    navCategories(this.session.session(), this.queues.countsByPath()),
+  );
+  protected readonly quickActions = computed(() => quickActionsFor(this.session.session()));
+
+  protected readonly createActions = computed<readonly AdminCreateAction[]>(() =>
+    this.quickActions().map((action) => ({
+      key: action.targetPath,
+      label: action.label,
+      hint: action.hint,
+      icon: action.icon,
+    })),
+  );
+
+  /** The trail above the page, from the current URL and the same declaration the routes come from. */
+  protected readonly crumbs = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => breadcrumbsFor((event as NavigationEnd).urlAfterRedirects)),
+    ),
+    { initialValue: breadcrumbsFor(this.router.url) },
+  );
+
+  /**
+   * The notifications panel: the work queues that have something in them.
+   *
+   * The same numbers the dashboard shows (`QueueCountsStore`), not a separate feed — the API has
+   * no event stream, and a second source would be a second number that disagrees with the first.
+   */
+  protected readonly attention = computed<readonly AdminAttentionItem[]>(() =>
+    this.queues
+      .tiles()
+      .filter((tile) => tile.value !== null && tile.value !== 0)
+      .map((tile) => ({
+        key: tile.key,
+        label: tile.label,
+        hint: tile.hint,
+        count: tile.value as number | string,
+        path: tile.path,
+        icon: ATTENTION_ICONS[tile.key],
+      })),
+  );
 
   protected readonly canReadNotifications = computed(() =>
     this.session.hasPermission('notifications.log.read'),
@@ -169,10 +246,15 @@ export class ShellLayout {
       void this.signInFlow.sessionEnded(this.router.url);
     });
 
-    // Counted once on entry rather than polled. See `NotificationCentreService` for why.
-    if (this.session.hasPermission('notifications.log.read')) {
-      this.notifications.refreshAttentionCount().subscribe({ error: () => undefined });
-    }
+    // The queue counts on the tabs: on entry, and then on each navigation once they have gone
+    // stale. The store decides what stale means; see `QueueCountsStore`.
+    this.queues.refresh(true);
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.queues.refresh());
 
     if (this.session.session()?.vendorId) {
       this.vendors.mine().subscribe({
@@ -182,26 +264,13 @@ export class ShellLayout {
     }
   }
 
-  /**
-   * One button, two behaviours — and they are not a compromise.
-   *
-   * Below the sidebar's breakpoint there is no rail to collapse, so the control opens the drawer;
-   * above it there is no drawer, so it narrows the rail. The width is read at the moment of the
-   * press rather than tracked, because nothing else depends on it.
-   */
-  protected toggleNav(): void {
-    const isWide = globalThis.matchMedia?.('(min-width: 60.0625rem)').matches ?? true;
-    if (!isWide) {
-      this.navOpen.update((open) => !open);
+  protected onKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      this.searchOpen.set(true);
       return;
     }
 
-    const next = !this.collapsed();
-    this.collapsed.set(next);
-    this.storage.setJson(RAIL_KEY, next);
-  }
-
-  protected onKeydown(event: KeyboardEvent): void {
     if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
 
     // Not while somebody is typing. `isContentEditable` covers the rich-text editor Step 28 adds.

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { Badge, Button, Icon } from '@klarahome/ui-primitives';
@@ -24,7 +24,7 @@ import { NavItem, isInternalHref } from './navigation.model';
   selector: 'kh-site-header',
   imports: [Badge, Button, Icon, RouterLink, RouterLinkActive],
   template: `
-    <header class="bar">
+    <header class="bar" [class.has-nav]="hasNav()">
       <button
         khButton
         variant="tertiary"
@@ -47,6 +47,9 @@ import { NavItem, isInternalHref } from './navigation.model';
            tenant, is being identified (favicon, PWA icons, OG image, error art). -->
       <a class="wordmark" routerLink="/">{{ storeName() }}</a>
 
+      <!-- Not rendered at all without a menu: an empty \`<nav>\` is an empty landmark for a screen
+           reader and, on a desktop, a row of dead space under the wordmark. -->
+      @if (hasNav()) {
       <nav class="primary" aria-label="Main">
         @for (item of menu(); track item.label) {
           @if (isInternal(item.href)) {
@@ -68,6 +71,7 @@ import { NavItem, isInternalHref } from './navigation.model';
           }
         }
       </nav>
+      }
 
       <div class="actions">
         @if (isAuthenticated()) {
@@ -160,10 +164,20 @@ import { NavItem, isInternalHref } from './navigation.model';
 
     .wordmark {
       grid-area: wordmark;
+      /* The tenant's name in the display face, so the one piece of brand voice that is on every
+         page speaks the way the headings do. Still text, never an SVG: the name is a setting. */
+      font-family: var(--font-display);
       font-size: var(--text-xl);
-      font-weight: var(--weight-bold);
+      font-weight: var(--weight-display);
+      letter-spacing: var(--tracking-display);
+      line-height: var(--leading-tight);
       color: var(--color-text);
       text-decoration: none;
+      /* A long tenant name truncates rather than pushing the actions off a 360px row. */
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .actions {
@@ -215,6 +229,11 @@ import { NavItem, isInternalHref } from './navigation.model';
       font-size: var(--text-sm);
       font-weight: var(--weight-medium);
       white-space: nowrap;
+      transition: color var(--duration-fast) var(--ease-standard);
+    }
+
+    .nav-link:hover {
+      color: var(--color-primary);
     }
 
     .nav-link.is-active {
@@ -245,6 +264,13 @@ import { NavItem, isInternalHref } from './navigation.model';
         column-gap: var(--space-6);
         row-gap: var(--space-1);
         padding-block: var(--space-3) 0;
+      }
+
+      /* Without a menu there is no second row: a single row with even padding, rather than the
+         bottom padding the menu row's own link padding would have supplied. */
+      .bar:not(.has-nav) {
+        grid-template-areas: 'wordmark search actions';
+        padding-block: var(--space-3);
       }
 
       .menu-button {
@@ -287,6 +313,9 @@ export class SiteHeader {
   readonly cartOpened = output<void>();
 
   protected readonly isInternal = isInternalHref;
+
+  /** Whether any menu item is drawable: the template skips an item with no address. */
+  protected readonly hasNav = computed(() => this.menu().some((item) => !!item.href));
 
   private readonly router = inject(Router);
 

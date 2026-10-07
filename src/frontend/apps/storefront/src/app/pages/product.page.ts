@@ -33,6 +33,7 @@ import {
   Price,
   QuantityStepper,
   Rating,
+  Skeleton,
 } from '@klarahome/ui-primitives';
 import {
   DeliveryEstimateView,
@@ -66,6 +67,26 @@ import { map } from 'rxjs';
 import { CatalogMapper } from '../core/catalog.mapper';
 import { describeError } from '../core/describe-error';
 import { RecentlyViewedStore } from '../core/recently-viewed.store';
+
+/**
+ * Legal-metrology and GST unit codes a catalogue is likely to carry, as [singular, plural].
+ * Metric symbols (kg, ml, cm) are the same in both forms.
+ */
+const NET_QUANTITY_UNITS: Readonly<Record<string, readonly [string, string]>> = {
+  N: ['unit', 'units'],
+  NOS: ['unit', 'units'],
+  PC: ['piece', 'pieces'],
+  PCS: ['piece', 'pieces'],
+  SET: ['set', 'sets'],
+  PAIR: ['pair', 'pairs'],
+  KG: ['kg', 'kg'],
+  G: ['g', 'g'],
+  L: ['litre', 'litres'],
+  ML: ['ml', 'ml'],
+  M: ['m', 'm'],
+  CM: ['cm', 'cm'],
+  MM: ['mm', 'mm'],
+};
 
 /**
  * The product detail page — `/p/:productSlug`.
@@ -114,6 +135,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     ReviewList,
     RouterLink,
     SellerCard,
+    Skeleton,
     StickyAction,
     VariantSelector,
   ],
@@ -133,6 +155,9 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
           }
         </header>
 
+        <!-- One raised panel for everything a purchase needs, in the order a shopper decides it:
+             the price, which option, how many, then the actions, then whether it can reach them. -->
+        <div class="panel">
         @if (buyBox(); as offer) {
           <kh-price size="lg" [price]="offer.price" [mrp]="offer.mrp" taxNote="Inclusive of all taxes" />
         } @else {
@@ -151,13 +176,16 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
 
         @if (selectedVariant(); as variant) {
           @if (variant.netQuantity) {
-            <p class="net">Net quantity: {{ variant.netQuantity }}</p>
+            <p class="net">Net quantity: {{ netQuantityLabel(variant.netQuantity) }}</p>
           }
         }
 
         <div class="quantity">
           <kh-quantity-stepper [(quantity)]="quantity" [max]="maxQuantity()" [disabled]="!buyBox()" />
+          <!-- The id is what the sticky bar waits on: it appears once this button has scrolled out of
+               view, so the two are never on screen together. -->
           <button
+            id="pdp-add-to-cart"
             khButton
             variant="primary"
             type="button"
@@ -195,6 +223,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
             (checked)="checkDelivery($event)"
           />
         }
+        </div>
 
         @if (seller(); as sellerView) {
           <kh-seller-card [seller]="sellerView" />
@@ -261,7 +290,13 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
             (moreRequested)="loadMoreReviews()"
           />
         } @placeholder {
-          <p class="prose">Scroll to read what customers said.</p>
+          <!-- A block the shape of the section, not a sentence: "scroll to read" was an instruction
+               to somebody who may not need to scroll at all. The words are for assistive tech. -->
+          <div class="defer-skeleton" role="status">
+            <span class="kh-visually-hidden">Customer reviews are loading.</span>
+            <kh-skeleton height="5rem" radius="var(--radius-lg)" />
+            <kh-skeleton [lines]="3" height="0.875rem" />
+          </div>
         }
       </section>
 
@@ -275,7 +310,10 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
             (moreRequested)="loadMoreQuestions()"
           />
         } @placeholder {
-          <p class="prose">Scroll to read the questions other customers asked.</p>
+          <div class="defer-skeleton" role="status">
+            <span class="kh-visually-hidden">Customer questions are loading.</span>
+            <kh-skeleton [lines]="3" height="0.875rem" />
+          </div>
         }
       </section>
 
@@ -285,7 +323,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     </article>
 
     <!-- The thumb-zone action. In the shell's bar, so it stays put while the page scrolls. -->
-    <ng-template khStickyAction mobileOnly>
+    <ng-template khStickyAction mobileOnly revealAfter="#pdp-add-to-cart">
       @if (buyBox(); as offer) {
         <span class="bar-price">{{ offer.price | khMoney }}</span>
         <button
@@ -468,6 +506,33 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       gap: var(--space-4);
     }
 
+    /* The buy box as one object. Depth from the shadow rather than a heavier edge: the border is
+       the quiet hairline, the panel stands off the page by casting. It carries the whole purchase
+       so the eye lands on one thing and reads down it. */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+      box-shadow: var(--shadow-md);
+    }
+
+    /* The delivery check is the footnote of the panel, set off by a rule, not a second panel. */
+    .panel kh-delivery-estimator {
+      padding-block-start: var(--space-4);
+      border-block-start: 1px solid var(--color-border-subtle);
+    }
+
+    .defer-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      min-block-size: 8rem;
+    }
+
     /* Product names, descriptions and spec values are merchant free text with no length limit. */
     .buy,
     .detail {
@@ -478,6 +543,7 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
       margin: 0 0 var(--space-2);
       font-size: var(--text-xl);
       line-height: var(--leading-snug);
+      text-wrap: balance;
     }
 
     .rating-link {
@@ -519,6 +585,10 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
     .prose {
       margin: 0;
       color: var(--color-text-muted);
+    }
+
+    .net {
+      font-size: var(--text-sm);
     }
 
     .summary {
@@ -575,13 +645,11 @@ import { RecentlyViewedStore } from '../core/recently-viewed.store';
         display: contents;
       }
 
-      .quantity {
-        display: flex;
-        flex-wrap: wrap;
-      }
+    }
 
-      .quantity > button {
-        inline-size: auto;
+    @media (min-width: 768px) {
+      .panel {
+        padding: var(--space-5);
       }
     }
 
@@ -746,6 +814,22 @@ export class ProductPage {
   protected readonly isWishlisted = computed(() =>
     this.selectedVariantId() ? this.wishlist.variantIds().includes(this.selectedVariantId()!) : false,
   );
+
+  /**
+   * "1 N" read as the code it is. Presentational only: the stored value is untouched, and a unit
+   * this table does not know is shown exactly as the merchant typed it, never guessed at.
+   */
+  protected netQuantityLabel(raw: string): string {
+    const match = /^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$/.exec(raw.trim());
+    if (!match) return raw;
+
+    const [, amount, code] = match;
+    const unit = NET_QUANTITY_UNITS[code.toUpperCase()];
+    if (!unit) return raw;
+
+    const plural = Number(amount) !== 1;
+    return `${amount} ${plural ? unit[1] : unit[0]}`;
+  }
 
   protected readonly title = computed(() => {
     const suffix = this.selectedVariant()?.nameSuffix;

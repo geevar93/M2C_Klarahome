@@ -38,7 +38,7 @@ interface RegionDraft {
   selector: 'kh-serviceable-regions-panel',
   imports: [Alert, Badge, Button, Checkbox, Control, Field, Icon, Skeleton],
   template: `
-    <section class="panel">
+    <section class="panel kh-panel">
       <h2>Where this seller ships</h2>
       <p class="hint">
         An exclusion always beats an inclusion. The store's own delivery coverage still applies on top of this
@@ -148,13 +148,6 @@ interface RegionDraft {
     </section>
   `,
   styles: `
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
     h2 {
       margin: 0 0 var(--space-2);
       font-size: var(--text-lg);
@@ -186,6 +179,12 @@ interface RegionDraft {
 
     .region > kh-field {
       flex: 1 1 9rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .region > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .flags {

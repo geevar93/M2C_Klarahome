@@ -83,7 +83,8 @@ const BATCH_STATUSES = [
     </kh-page-header>
 
     <kh-alert tone="info" heading="Two people, two steps">
-      Whoever creates a run may not approve it. The API refuses it, and so does the database.
+      Someone else must approve this payout run before it's paid out — the person who created it can't
+      also approve it.
     </kh-alert>
 
     @if (list.error(); as message) {
@@ -91,7 +92,7 @@ const BATCH_STATUSES = [
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
     }
 
     <kh-data-table

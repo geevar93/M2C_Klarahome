@@ -170,7 +170,8 @@ internal sealed class ConfigureStockItemValidator : AbstractValidator<ConfigureS
 
 /// <summary>Lists stock rows.</summary>
 /// <param name="context">The Inventory data context.</param>
-internal sealed class ListStockQueryHandler(InventoryDbContext context)
+/// <param name="catalog">Names the offers, in one batched call per page.</param>
+internal sealed class ListStockQueryHandler(InventoryDbContext context, IProductCatalog catalog)
     : IQueryHandler<ListStockQuery, PagedResult<StockItemResponse>>
 {
     public async Task<Result<PagedResult<StockItemResponse>>> HandleAsync(
@@ -185,7 +186,7 @@ internal sealed class ListStockQueryHandler(InventoryDbContext context)
         var rows =
             from item in context.StockItems.AsNoTracking()
             join warehouse in context.Warehouses.AsNoTracking() on item.WarehouseId equals warehouse.Id
-            select new { item, warehouse.Code };
+            select new { item, warehouse.Code, warehouse.Name };
 
         if (query.WarehouseId is { } warehouseId)
         {
@@ -241,15 +242,28 @@ internal sealed class ListStockQueryHandler(InventoryDbContext context)
             page.RemoveAt(page.Count - 1);
         }
 
+        // Inventory knows listing ids and SKUs, not product names. The names come from the
+        // catalogue's read seam, once for the whole page rather than once per row.
+        var listings = await catalog
+            .FindListingsAsync([.. page.Select(row => row.item.ListingId).Distinct()], cancellationToken)
+            .ConfigureAwait(false);
+
         return Result.Success(new PagedResult<StockItemResponse>(
-            [.. page.Select(row => StockProjection.ToResponse(row.item, row.Code))],
+            [
+                .. page.Select(row => StockProjection.ToResponse(
+                    row.item,
+                    row.Code,
+                    row.Name,
+                    listings.GetValueOrDefault(row.item.ListingId))),
+            ],
             new PageInfo(size, hasMore ? Cursor.Encode(page[^1].item.Id.ToString()) : null)));
     }
 }
 
 /// <summary>Reads one stock row.</summary>
 /// <param name="context">The Inventory data context.</param>
-internal sealed class GetStockItemQueryHandler(InventoryDbContext context)
+/// <param name="catalog">Names the offer.</param>
+internal sealed class GetStockItemQueryHandler(InventoryDbContext context, IProductCatalog catalog)
     : IQueryHandler<GetStockItemQuery, StockItemResponse>
 {
     public async Task<Result<StockItemResponse>> HandleAsync(
@@ -262,12 +276,17 @@ internal sealed class GetStockItemQueryHandler(InventoryDbContext context)
             from item in context.StockItems.AsNoTracking()
             join warehouse in context.Warehouses.AsNoTracking() on item.WarehouseId equals warehouse.Id
             where item.Id == query.StockItemId
-            select new { item, warehouse.Code }).FirstOrDefaultAsync(cancellationToken)
+            select new { item, warehouse.Code, warehouse.Name }).FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return row is null
-            ? InventoryErrors.NotFound("stock item")
-            : Result.Success(StockProjection.ToResponse(row.item, row.Code));
+        if (row is null)
+        {
+            return InventoryErrors.NotFound("stock item");
+        }
+
+        var listing = await catalog.FindListingAsync(row.item.ListingId, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(StockProjection.ToResponse(row.item, row.Code, row.Name, listing));
     }
 }
 

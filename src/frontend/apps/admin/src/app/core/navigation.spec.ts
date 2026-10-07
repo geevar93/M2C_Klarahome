@@ -1,6 +1,14 @@
 import { Session } from '@klarahome/data-access-auth';
 
-import { DESTINATIONS, adminRoutes, canReach, visibleSections } from './navigation';
+import {
+  DESTINATIONS,
+  NAV_CATEGORIES,
+  NAV_SECTIONS,
+  adminRoutes,
+  canReach,
+  navCategories,
+  visibleSections,
+} from './navigation';
 
 /**
  * The one piece of Step 26 that is cheaper to test than to reason about twice.
@@ -55,7 +63,7 @@ describe('Admin navigation rules', () => {
 
   it('drops a section entirely when none of its items is reachable', () => {
     const sections = visibleSections(session({ permissions: ['orders.order.read'] }));
-    expect(sections.map((entry) => entry.label)).toEqual(['Overview', 'Orders']);
+    expect(sections.map((entry) => entry.label)).toEqual(['Home', 'Orders']);
     expect(sections.find((entry) => entry.label === 'Orders')?.items.map((item) => item.path)).toEqual([
       '/orders',
     ]);
@@ -87,6 +95,105 @@ describe('Admin navigation rules', () => {
     for (const hidden of DESTINATIONS.filter((entry) => entry.hidden)) {
       expect(listed).not.toContain(`/${hidden.path}`);
     }
+  });
+
+  it('declares every destination in a known section', () => {
+    for (const destination of DESTINATIONS) {
+      expect(NAV_SECTIONS).toContain(destination.section);
+    }
+  });
+
+  it('files every section under exactly one category, so nothing declared can go missing', () => {
+    const filed = NAV_CATEGORIES.flatMap((category) => category.sections);
+    expect([...filed].sort()).toEqual([...NAV_SECTIONS].sort());
+    expect(new Set(filed).size).toBe(filed.length);
+  });
+
+  it('keeps the six categories and their labels', () => {
+    expect(NAV_CATEGORIES.map((category) => category.label)).toEqual([
+      'Home',
+      'Sell',
+      'Catalogue',
+      'Grow',
+      'Marketplace',
+      'Business',
+    ]);
+  });
+
+  it('builds the categories from the same reachable list, nothing added and nothing lost', () => {
+    const everything = session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) });
+    const categories = navCategories(everything, new Map());
+
+    const paths = categories.flatMap((category) =>
+      category.sections.flatMap((section) => section.items.map((item) => item.path)),
+    );
+    const reachable = visibleSections(everything).flatMap((section) => section.items.map((item) => item.path));
+    expect(paths.sort()).toEqual(reachable.sort());
+  });
+
+  it('drops a category with nothing reachable in it', () => {
+    const support = navCategories(session({ permissions: ['identity.user.read', 'notifications.log.read'] }), new Map());
+    expect(support.map((category) => category.key)).toEqual(['home', 'business']);
+  });
+
+  it('opens each category on the first screen this session can reach', () => {
+    // A seller with no promotions permission: Grow must open on Price lists, not on a 403.
+    const seller = navCategories(session({ vendorId: 'v1', permissions: ['pricing.price-list.read'] }), new Map());
+    expect(seller.find((category) => category.key === 'grow')?.path).toBe('/price-lists');
+
+    // A platform admin with everything: each opens on its own first screen.
+    const everything = navCategories(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+      new Map(),
+    );
+    expect(everything.find((category) => category.key === 'home')?.path).toBe('/dashboard');
+    expect(everything.find((category) => category.key === 'sell')?.path).toBe('/orders');
+    expect(everything.find((category) => category.key === 'catalogue')?.path).toBe('/catalog/products');
+    expect(everything.find((category) => category.key === 'business')?.path).toBe('/settings/store');
+  });
+
+  it("gives a platform admin Catalogue's and Business's sections, and a seller only their own", () => {
+    const everything = navCategories(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+      new Map(),
+    );
+    const labels = (key: string) =>
+      everything.find((category) => category.key === key)?.sections.map((section) => section.label);
+    expect(labels('catalogue')).toEqual(['Products', 'Organise', 'Inventory']);
+    expect(labels('business')).toEqual(['Settings', 'System']);
+    expect(labels('marketplace')).toEqual(['Marketplace']);
+
+    const seller = navCategories(session({ vendorId: 'v1', permissions: ['orders.order.read'] }), new Map());
+    expect(seller.find((category) => category.key === 'business')?.sections.map((section) => section.label)).toEqual([
+      'Your business',
+    ]);
+    expect(seller.find((category) => category.key === 'marketplace')).toBeUndefined();
+  });
+
+  it('counts the queues onto screens and adds them up on the section and the category', () => {
+    const everything = session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) });
+    const categories = navCategories(
+      everything,
+      new Map<string, number | string>([
+        ['/fulfilment', 8],
+        ['/returns', 3],
+        ['/catalog/moderation', '50+'],
+      ]),
+    );
+
+    const sell = categories.find((category) => category.key === 'sell');
+    const items = sell?.sections.flatMap((section) => section.items) ?? [];
+    expect(items.find((item) => item.path === '/fulfilment')?.badge).toBe(8);
+    expect(items.find((item) => item.path === '/orders')?.badge).toBeUndefined();
+    expect(sell?.sections[0].badge).toBe(11);
+    expect(sell?.badge).toBe(11);
+
+    // A capped screen caps its section and category: nobody counted past fifty, so neither may claim to have.
+    const catalogue = categories.find((category) => category.key === 'catalogue');
+    expect(catalogue?.sections[0].badge).toBe('50+');
+    expect(catalogue?.sections[1].badge).toBe(0);
+    expect(catalogue?.badge).toBe('50+');
+    expect(categories.find((category) => category.key === 'home')?.badge).toBe(0);
   });
 
   it('builds one guarded route per destination, and every route lazily', () => {

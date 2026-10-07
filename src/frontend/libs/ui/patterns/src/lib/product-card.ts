@@ -93,9 +93,37 @@ import { ProductCardView } from './catalog.model';
       gap: var(--space-2);
       block-size: 100%;
       padding: var(--space-2);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      /* Depth comes from the shadow, not from a darker edge: the border is the quiet hairline and
+         the card stands off the page by casting. The lift is shadow plus a 2px rise, both on the
+         duration tokens, so reduced motion (which zeroes them) gets an instant, still state. A
+         \`transform\` on hover is acceptable here, unlike \`scale\`, because it moves the card away
+         from its neighbours' space rather than into it. */
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-sm);
+      transition:
+        box-shadow var(--duration-base) var(--ease-standard),
+        transform var(--duration-base) var(--ease-standard);
+    }
+
+    .card:hover,
+    .card:focus-within {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    /* A touch screen leaves \`:hover\` stuck on the last-tapped card; the lift is for a pointer. */
+    @media (hover: none) {
+      .card:hover {
+        transform: none;
+        box-shadow: var(--shadow-sm);
+      }
+    }
+
+    .media kh-product-image {
+      border-radius: var(--radius-md);
+      overflow: hidden;
     }
 
     .media {
@@ -130,7 +158,7 @@ import { ProductCardView } from './catalog.model';
       margin: 0;
       font-size: var(--text-sm);
       font-weight: var(--weight-medium);
-      line-height: var(--leading-normal);
+      line-height: var(--leading-snug);
       overflow-wrap: anywhere;
     }
 

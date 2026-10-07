@@ -98,7 +98,7 @@ interface ReceiptLine {
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -146,7 +146,7 @@ interface ReceiptLine {
       @if (dialogError(); as message) {
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">SKU</th>
@@ -396,7 +396,7 @@ interface ReceiptLine {
           rejected is recorded against the supplier and does not.
         </p>
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">SKU</th>
@@ -514,19 +514,6 @@ interface ReceiptLine {
       font-size: var(--text-xs);
     }
 
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-    }
-
     .numeric {
       text-align: end;
       font-variant-numeric: tabular-nums;
@@ -574,6 +561,12 @@ interface ReceiptLine {
       align-items: end;
       padding-block: var(--space-2);
       border-block-start: 1px solid var(--color-border);
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .line > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .sku {

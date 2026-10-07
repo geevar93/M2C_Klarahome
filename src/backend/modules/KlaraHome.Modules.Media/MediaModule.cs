@@ -9,6 +9,8 @@ using KlaraHome.Modules.Media.Infrastructure;
 using KlaraHome.Modules.Media.Infrastructure.Imaging;
 using KlaraHome.Modules.Media.Infrastructure.Persistence;
 using KlaraHome.Modules.Media.Infrastructure.Scanning;
+using KlaraHome.Modules.Media.Infrastructure.Seeding;
+using KlaraHome.Infrastructure.Persistence.Seeding;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -71,6 +73,12 @@ public sealed class MediaModule : IModule
 
         services.AddScoped<MediaStorageService>();
         services.AddScoped<IDocumentStore, DocumentStore>();
+
+        // The read side of the demonstration imagery, and the seeder that uploads it. The lookup is
+        // harmless without the seeder (it answers an empty map); the seeder is registered only
+        // outside Production and only when DemoData:SeedCatalog is on.
+        services.AddScoped<IDemoMediaCatalogue, DemoMediaCatalogue>();
+        services.AddDemoDataSeeder<DemoMediaSeeder>(configuration);
 
         // The seam, with the implementation that is honest about scanning nothing. A ClamAV adapter
         // replaces this registration and nothing else (docs/08-integrations.md §4).

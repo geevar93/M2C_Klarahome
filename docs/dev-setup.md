@@ -70,7 +70,7 @@ waits for every service to report **healthy**, and prints the URLs.
 |---|---|---|---|
 | PostgreSQL 18 | `postgres:18.6-alpine` | `127.0.0.1:5432` | — |
 | Redis 8 | `redis:8.10.1-alpine` | `127.0.0.1:6379` | — |
-| MinIO — S3 API | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | `http://127.0.0.1:9000` | `https://s3.klarahome.localhost` |
+| MinIO — S3 API | `klarahome/minio:RELEASE.2025-09-07T16-13-09Z` (built from source by `infra/docker/minio.Dockerfile`; upstream no longer publishes images) | `http://127.0.0.1:9000` | `https://s3.klarahome.localhost` |
 | MinIO — console | same | `http://127.0.0.1:9001` | `https://minio.klarahome.localhost` |
 | Mailpit — SMTP | `axllent/mailpit:v1.31.0` | `127.0.0.1:1025` | — |
 | Mailpit — UI | same | `http://127.0.0.1:8025` | `https://mail.klarahome.localhost` |

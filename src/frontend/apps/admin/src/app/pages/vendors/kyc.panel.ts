@@ -44,7 +44,7 @@ import { KYC_DOCUMENT_TYPES } from './vendor-vocabulary';
   selector: 'kh-kyc-panel',
   imports: [Alert, Badge, Button, ConfirmDialog, Control, Field, MediaPicker, Modal, Skeleton],
   template: `
-    <section class="panel">
+    <section class="panel kh-panel">
       <header>
         <h2>Documents</h2>
         @if (canSubmit()) {
@@ -206,13 +206,6 @@ import { KYC_DOCUMENT_TYPES } from './vendor-vocabulary';
     />
   `,
   styles: `
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
     header {
       display: flex;
       gap: var(--space-2);

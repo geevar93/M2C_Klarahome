@@ -262,7 +262,7 @@ export class EntityMultiPicker {
   readonly heading = input.required<string>();
   /** What is being chosen, in the plural: "products". Used in the search box's name. */
   readonly noun = input('items');
-  readonly placeholder = input('Search by name, or paste an id');
+  readonly placeholder = input('Search by name');
   readonly search = input.required<EntitySearch>();
   /** Ids the caller already holds: shown ticked and disabled, never returned again. */
   readonly existingIds = input<readonly string[]>([]);

@@ -79,6 +79,9 @@ public sealed class VendorsModule : IModule
         services.AddScoped<IVendorDirectory, VendorDirectory>();
         services.AddScoped<ICommissionResolver, CommissionResolver>();
 
+        // Names sellers on the audit trail instead of showing their ids.
+        services.AddScoped<KlaraHome.Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.VendorAuditLabels>();
+
         // Added at Step 16. Where a seller's parcels are collected from, and the one field another
         // module writes back into this schema: the courier's own id for that address, which only the
         // module that talks to couriers can learn.

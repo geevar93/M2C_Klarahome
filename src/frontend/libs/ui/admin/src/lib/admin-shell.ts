@@ -1,40 +1,49 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { Drawer } from '@klarahome/ui-primitives';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { Icon } from '@klarahome/ui-primitives';
+import { filter } from 'rxjs';
 
-import { AdminNavSection } from './admin.model';
-import { AdminIdentityView, AdminTopBar } from './admin-top-bar';
+import { AdminAttentionItem, AdminCreateAction, AdminNavCategory } from './admin.model';
 import { AdminSidebar } from './admin-sidebar';
+import { AdminSubNav } from './admin-sub-nav';
+import { AdminIdentityView, AdminTopBar } from './admin-top-bar';
 import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
+import { categoryFor, currentPath } from './nav-location';
+import { AdminCrumb } from './page-header';
 
 /**
- * The frame the whole back office sits in.
+ * The frame the whole back office sits in: top bar, sidebar, the open category's tabs, breadcrumbs,
+ * then the page.
  *
- * **Desktop-first, and genuinely usable on a tablet** (`docs/05-frontend-architecture.md` §4.1) —
- * which is not the storefront's rule inverted, but a different rule. Vendors do dispatch on
- * tablets in a warehouse, standing up, so the layout has one break and it is a real one:
+ * **One layout break, and it is a real one.** From 1024px (`lg`) the sidebar is a fixed column in
+ * the page grid, always visible. Below it the same sidebar is a drawer: a menu button in the top
+ * bar opens it over the page with a backdrop, and it closes on Esc, on a backdrop press, on a
+ * link press and on any navigation. While closed it is `visibility: hidden`, so nothing in it can
+ * be tabbed to. Focus moves into the drawer when it opens and back to the menu button when it
+ * closes.
  *
- *  - **Above 1024px (`lg`, `libs/ui/primitives/src/styles/_breakpoints.scss`)** the sidebar is a
- *    column of the page grid. Collapsing it narrows the column to a rail of icons; the content
- *    reflows into the space, and the choice is remembered by the app.
- *  - **Below 1024px** the sidebar is not in the grid at all — it becomes a `kh-drawer`, with
- *    the focus trapping, Escape handling and scroll locking that a panel over content needs and a
- *    column does not. It closes on navigation, because a drawer still covering the page you have
- *    just navigated to is the most irritating thing a responsive shell does.
+ * The shell owns no data. The categories, the trail, the identity and the impersonation are inputs,
+ * and every control emits; the app holds the state, so a sign-out or a route change can move it.
+ * The one thing it does hold is whether the drawer is open, which is nobody else's business.
  *
- * The same `AdminSidebar` renders in both, from the same sections. Two sidebars would be two
- * navigations, and one of them would be the one nobody updated.
- *
- * The shell owns no state: `navOpen`, `collapsed`, the identity and the impersonation are inputs,
- * and every control emits. The app holds them, so a sign-out or a route change can move them.
- *
- * The impersonation banner sits **above** the header rather than inside it, and that is deliberate:
- * the header is sticky and the banner has to be, so putting it inside would make the one thing that
- * must never scroll away depend on the one thing that already does not
- * (docs/07-security-compliance.md §2, Step 28B deliverable 1).
+ * The impersonation banner sits **above** the header rather than inside it, deliberately: the
+ * header is sticky and the banner has to be, so putting it inside would make the one thing that
+ * must never scroll away depend on the one thing that already does not.
  */
 @Component({
   selector: 'kh-admin-shell',
-  imports: [AdminSidebar, AdminTopBar, Drawer, ImpersonationBanner],
+  imports: [AdminSidebar, AdminSubNav, AdminTopBar, Icon, ImpersonationBanner, RouterLink],
   template: `
     <a class="kh-skip-link" href="#main-content">Skip to main content</a>
 
@@ -49,35 +58,55 @@ import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
     <header>
       <kh-admin-top-bar
         [identity]="identity()"
-        [navOpen]="navOpen()"
         [showNotifications]="showNotifications()"
-        [notificationCount]="notificationCount()"
-        (navToggled)="navToggled.emit()"
+        [attention]="attention()"
+        [messageLogPath]="messageLogPath()"
+        [createActions]="createActions()"
+        [scheme]="scheme()"
+        [menuOpen]="menuOpen()"
+        (menuToggled)="toggleMenu()"
+        (createChosen)="createChosen.emit($event)"
         (searchOpened)="searchOpened.emit()"
+        (schemeToggled)="schemeToggled.emit()"
         (signedOut)="signedOut.emit()"
       />
     </header>
 
-    <div class="layout" [class.collapsed]="collapsed()">
-      <!-- The column. Hidden below the breakpoint, where the drawer below takes over. -->
-      <aside class="rail">
-        <kh-admin-sidebar [sections]="sections()" [collapsed]="collapsed()" />
+    @if (menuOpen()) {
+      <div class="backdrop" aria-hidden="true" (click)="closeMenu(false)"></div>
+    }
+
+    <div class="layout">
+      <aside id="admin-sidebar" [class.open]="menuOpen()" (keydown.escape)="closeMenu(true)">
+        <kh-admin-sidebar [categories]="categories()" (navigated)="closeMenu(false)" />
       </aside>
 
       <main id="main-content" tabindex="-1">
-        <ng-content />
+        <div class="content">
+          <kh-admin-sub-nav [category]="activeCategory()" />
+
+          @if (crumbs().length > 1) {
+            <nav aria-label="Breadcrumb">
+              <ol>
+                @for (crumb of crumbs(); track $index; let last = $last) {
+                  <li>
+                    @if (crumb.path && !last) {
+                      <a [routerLink]="crumb.path">{{ crumb.label }}</a>
+                    } @else {
+                      <span [attr.aria-current]="last ? 'page' : null">{{ crumb.label }}</span>
+                    }
+                    @if (!last) {
+                      <kh-icon name="chevron-right" size="sm" />
+                    }
+                  </li>
+                }
+              </ol>
+            </nav>
+          }
+          <ng-content />
+        </div>
       </main>
     </div>
-
-    <kh-drawer
-      class="sheet"
-      [open]="navOpen()"
-      side="start"
-      label="Back office navigation"
-      (closed)="navClosed.emit()"
-    >
-      <kh-admin-sidebar [sections]="sections()" (navigated)="navClosed.emit()" />
-    </kh-drawer>
   `,
   styles: `
     :host {
@@ -89,77 +118,134 @@ import { ImpersonationBanner, ImpersonationView } from './impersonation-banner';
     header {
       position: sticky;
       inset-block-start: 0;
-      z-index: var(--z-header);
+      /* Above the navigation drawer's backdrop, so the menu button that opened it can close it, and
+         below --z-drawer, so a page's own drawer (kh-entity-drawer) covers the bar instead of
+         hiding its title and close button underneath it. */
+      z-index: calc(var(--z-drawer) - 1);
       height: var(--header-height);
     }
 
     .layout {
-      display: grid;
-      grid-template-columns: 1fr;
+      display: block;
+    }
+
+    /* Below 1024px: the drawer, hung from the bottom edge of the header. */
+    aside {
+      position: fixed;
+      inset-block: var(--header-height) 0;
+      inset-inline-start: 0;
+      z-index: var(--z-drawer);
+      width: min(var(--sidebar-width), 85vw);
+      border-inline-end: 1px solid var(--sidebar-border, var(--color-border));
+      background: var(--sidebar-bg, var(--color-surface-raised));
+      box-shadow: var(--shadow-lg);
+      transform: translateX(-100%);
+      visibility: hidden;
+      transition:
+        transform var(--duration-base) var(--ease-standard),
+        visibility 0s linear var(--duration-base);
+    }
+
+    aside.open {
+      transform: none;
+      visibility: visible;
+      transition-delay: 0s;
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: calc(var(--z-drawer) - 2);
+      background: var(--color-overlay);
     }
 
     main {
       min-width: 0;
-      padding: var(--space-6) var(--space-4);
     }
 
-    /* The drawer is the tablet form. Above the breakpoint it is not rendered at all — the
-       component removes itself from the DOM when closed, and the app never opens it there. */
-    .sheet {
-      display: block;
+    .content {
+      max-width: 87.5rem;
+      margin-inline: auto;
+      padding: var(--space-4) var(--space-4) var(--space-12);
     }
 
-    .rail {
-      display: none;
+    nav ol {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-1);
+      align-items: center;
+      margin: 0 0 var(--space-4);
+      padding: 0;
+      list-style: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+    }
+
+    nav li {
+      display: flex;
+      gap: var(--space-1);
+      align-items: center;
+    }
+
+    nav a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      color: var(--color-text);
+      text-decoration: underline;
+    }
+
+    nav [aria-current='page'] {
+      color: var(--color-text);
+      font-weight: var(--weight-medium);
     }
 
     @media (min-width: 1024px) {
       .layout {
-        grid-template-columns: 16rem 1fr;
+        display: grid;
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
         align-items: start;
       }
 
-      .layout.collapsed {
-        grid-template-columns: 4rem 1fr;
-      }
-
-      .rail {
-        display: block;
+      aside {
         position: sticky;
-        /* Below the sticky header, so the two never overlap. */
-        inset-block-start: var(--header-height);
+        inset-block: var(--header-height) auto;
+        z-index: auto;
+        width: auto;
         height: calc(100vh - var(--header-height));
-        border-inline-end: 1px solid var(--color-border);
+        box-shadow: none;
+        transform: none;
+        visibility: visible;
+        transition: none;
       }
 
-      main {
-        padding: var(--space-6);
-      }
-
-      .sheet {
+      .backdrop {
         display: none;
       }
-    }
 
-    @media (min-width: 1536px) {
-      main {
-        /* A line of text 200 characters wide is unreadable; a data table is not text. The cap is
-           generous and applies to the column, not to a table inside it, which scrolls. */
-        max-width: 110rem;
+      .content {
+        padding: var(--space-6) var(--space-8) var(--space-12);
       }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminShell {
-  readonly sections = input.required<readonly AdminNavSection[]>();
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /** The categories the session can reach: the sidebar draws them, the sub-nav draws the open one. */
+  readonly categories = input.required<readonly AdminNavCategory[]>();
+  readonly crumbs = input<readonly AdminCrumb[]>([]);
   readonly identity = input.required<AdminIdentityView>();
-  /** Whether the tablet drawer is showing. Meaningless above the breakpoint. */
-  readonly navOpen = input(false);
-  /** Whether the desktop column is a rail of icons. */
-  readonly collapsed = input(false);
   readonly showNotifications = input(false);
-  readonly notificationCount = input<number | null>(null);
+  /** The work queues with something in them, for the notifications panel. */
+  readonly attention = input<readonly AdminAttentionItem[]>([]);
+  readonly messageLogPath = input<string | null>(null);
+  /** What "Create" offers; empty hides it. The app decides, from what the session may create. */
+  readonly createActions = input<readonly AdminCreateAction[]>([]);
+  readonly scheme = input<'light' | 'dark'>('light');
 
   /** The support impersonation in progress, or null. Non-null shows the banner. */
   readonly impersonation = input<ImpersonationView | null>(null);
@@ -167,12 +253,45 @@ export class AdminShell {
   /** Whether the stop is in flight, so the banner's button can say so. */
   readonly endingImpersonation = input(false);
 
-  /** The menu button was pressed: open the drawer on a tablet, collapse the rail on a desktop. */
-  readonly navToggled = output<void>();
-  readonly navClosed = output<void>();
+  readonly createChosen = output<string>();
   readonly searchOpened = output<void>();
+  readonly schemeToggled = output<void>();
   readonly signedOut = output<void>();
 
   /** The banner's Stop was pressed. The app ends the session and clears the input. */
   readonly impersonationExited = output<void>();
+
+  protected readonly menuOpen = signal(false);
+
+  private readonly path = currentPath();
+
+  /** The category the current page is in; its screens are the tabs above the page. */
+  protected readonly activeCategory = computed(() => categoryFor(this.categories(), this.path()));
+
+  constructor() {
+    // Any navigation closes the drawer: it is a way to get somewhere, and the page has changed.
+    inject(Router)
+      .events.pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.menuOpen.set(false));
+
+    // Focus follows the drawer: into its first link when it opens.
+    effect(() => {
+      if (!this.menuOpen()) return;
+      setTimeout(() => this.host.nativeElement.querySelector<HTMLElement>('aside a')?.focus());
+    });
+  }
+
+  protected toggleMenu(): void {
+    this.menuOpen.update((open) => !open);
+  }
+
+  /** Closes the drawer; `restoreFocus` returns focus to the menu button (Esc), not on a link press. */
+  protected closeMenu(restoreFocus: boolean): void {
+    if (!this.menuOpen()) return;
+    this.menuOpen.set(false);
+    if (restoreFocus) this.host.nativeElement.querySelector<HTMLElement>('.menu-btn')?.focus();
+  }
 }

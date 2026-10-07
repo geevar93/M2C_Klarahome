@@ -64,7 +64,7 @@ import { describeError } from '../../core/describe-error';
       </div>
 
       @if (failure(); as message) {
-        <kh-alert tone="danger" heading="That did not work">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (list.error(); as message) {
@@ -193,10 +193,11 @@ import { describeError } from '../../core/describe-error';
       inline-size: 100%;
       padding: var(--space-2);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
       text-align: start;
       cursor: pointer;
+      box-shadow: none;
     }
 
     .tile.chosen {

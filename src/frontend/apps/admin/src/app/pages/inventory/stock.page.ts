@@ -7,6 +7,7 @@ import {
   StockLedgerEntryResponse,
   StockMovementReason,
 } from '@klarahome/data-access-admin';
+import { RouterLink } from '@angular/router';
 import { HasPermission } from '@klarahome/data-access-auth';
 import {
   CellTemplate,
@@ -18,6 +19,7 @@ import {
   FilterBar,
   FilterDefinition,
   FilterValues,
+  KpiCard,
   Modal,
   PageHeader,
 } from '@klarahome/ui-admin';
@@ -68,8 +70,10 @@ import { tableDateTime } from '../../core/format';
     Field,
     FilterBar,
     HasPermission,
+    KpiCard,
     Modal,
     PageHeader,
+    RouterLink,
   ],
   template: `
     <kh-page-header
@@ -83,16 +87,51 @@ import { tableDateTime } from '../../core/format';
         variant="primary"
         (click)="startTracking()"
       >
-        Track a listing
+        Add to warehouse
       </button>
     </kh-page-header>
+
+    <!-- Two counts that are also the two filters: press one to see just those rows. Counted from the
+         same list endpoint with the same filters, capped at one page, so a long queue reads "50+". -->
+    <div class="tiles">
+      <button
+        type="button"
+        class="tile"
+        [attr.aria-pressed]="values()['level'] === 'low'"
+        (click)="pickLevel('low')"
+      >
+        <kh-kpi-card
+          label="Low stock"
+          hint="At or below the reorder level"
+          icon="alert"
+          tone="warning"
+          [value]="lowCount()"
+          [loading]="lowList.loading() && lowList.rows().length === 0"
+        />
+      </button>
+      <button
+        type="button"
+        class="tile"
+        [attr.aria-pressed]="values()['level'] === 'out'"
+        (click)="pickLevel('out')"
+      >
+        <kh-kpi-card
+          label="Out of stock"
+          hint="Nothing available to sell"
+          icon="package"
+          tone="danger"
+          [value]="outCount()"
+          [loading]="outList.loading() && outList.rows().length === 0"
+        />
+      </button>
+    </div>
 
     @if (list.error(); as message) {
       <kh-alert tone="danger" heading="Stock could not be loaded">{{ message }}</kh-alert>
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -119,8 +158,18 @@ import { tableDateTime } from '../../core/format';
       />
 
       <ng-template khCell="sku" let-row>
-        <span class="sku">{{ row.sku }}</span>
-        <span class="where">{{ row.warehouseCode }}</span>
+        <!-- The product leads when the API names it (a link to its page), the SKU beneath it. -->
+        @if (row.productName) {
+          @if (row.productId) {
+            <a class="product" [routerLink]="['/catalog/products', row.productId]">{{ row.productName }}</a>
+          } @else {
+            <span class="product">{{ row.productName }}</span>
+          }
+          <span class="where">{{ row.sku }} · {{ row.warehouseName ?? row.warehouseCode }}</span>
+        } @else {
+          <span class="sku">{{ row.sku }}</span>
+          <span class="where">{{ row.warehouseName ?? row.warehouseCode }}</span>
+        }
       </ng-template>
 
       <ng-template khCell="available" let-row>
@@ -132,7 +181,7 @@ import { tableDateTime } from '../../core/format';
 
       <ng-template khCell="actions" let-row>
         <div class="row-actions">
-          <button khButton type="button" size="sm" (click)="openLedger(row)">Ledger</button>
+          <button khButton type="button" size="sm" (click)="openLedger(row)">History</button>
           <button
             *khHasPermission="'inventory.stock.adjust'"
             khButton
@@ -157,23 +206,23 @@ import { tableDateTime } from '../../core/format';
 
     @if (ledgerFor(); as item) {
       <kh-entity-drawer
-        [heading]="'Ledger — ' + item.sku"
-        [subtitle]="item.warehouseCode + ' · ' + item.quantityOnHand + ' on hand'"
+        [heading]="'History — ' + item.sku"
+        [subtitle]="(item.warehouseName ?? item.warehouseCode) + ' · ' + item.quantityOnHand + ' on hand'"
         (closed)="closeLedger()"
       >
-      @if (dialogError(); as message) {
-        <kh-alert tone="danger">{{ message }}</kh-alert>
-      }
+        @if (dialogError(); as message) {
+          <kh-alert tone="danger">{{ message }}</kh-alert>
+        }
         <p class="hint">
-          Every movement, newest first. The balance after each one is what the platform believed at that
-          moment — nothing here can be edited, which is what makes it worth reading.
+          Every movement, newest first. The balance after each one is what was on hand at that moment —
+          nothing here can be edited, which is what makes it worth reading.
         </p>
 
         @if (ledger()?.error(); as message) {
-          <kh-alert tone="danger" heading="The ledger could not be loaded">{{ message }}</kh-alert>
+          <kh-alert tone="danger" heading="Couldn't load the history">{{ message }}</kh-alert>
         }
 
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -191,7 +240,7 @@ import { tableDateTime } from '../../core/format';
             }
             @for (entry of ledgerRows(); track entry.id) {
               <tr>
-                <td>{{ when(entry) }}</td>
+                <td class="nowrap">{{ when(entry) }}</td>
                 <td>
                   {{ entry.reason }}
                   @if (entry.note; as note) {
@@ -247,8 +296,8 @@ import { tableDateTime } from '../../core/format';
       }
       @if (adjustFor(); as item) {
         <p class="hint">
-          {{ item.sku }} at {{ item.warehouseCode }} — {{ item.quantityOnHand }} on hand,
-          {{ item.quantityReserved }} reserved.
+          {{ item.sku }} at {{ item.warehouseName ?? item.warehouseCode }} — {{ item.quantityOnHand }} on
+          hand, {{ item.quantityReserved }} reserved.
         </p>
 
         <kh-field
@@ -282,7 +331,7 @@ import { tableDateTime } from '../../core/format';
           </select>
         </kh-field>
 
-        <kh-field label="Note" for="adjust-note" hint="Why, in a few words. It goes on the ledger row.">
+        <kh-field label="Note" for="adjust-note" hint="Why, in a few words. It goes on this history entry.">
           <input
             khControl
             id="adjust-note"
@@ -315,7 +364,7 @@ import { tableDateTime } from '../../core/format';
         <kh-alert tone="danger">{{ message }}</kh-alert>
       }
       @if (settingsFor(); as item) {
-        <p class="hint">{{ item.sku }} at {{ item.warehouseCode }}.</p>
+        <p class="hint">{{ item.sku }} at {{ item.warehouseName ?? item.warehouseCode }}.</p>
 
         <kh-field label="Reorder level" for="settings-level" hint="At or below this, the row is flagged low.">
           <input
@@ -369,7 +418,7 @@ import { tableDateTime } from '../../core/format';
 
     <kh-modal
       [open]="tracking()"
-      heading="Track a listing"
+      heading="Add to warehouse"
       width="30rem"
       [dismissible]="!busy()"
       (closed)="tracking.set(false)"
@@ -388,7 +437,7 @@ import { tableDateTime } from '../../core/format';
       <kh-entity-picker
         label="Listing"
         inputId="track-listing"
-        hint="Search by SKU or product name, or paste the listing id."
+        hint="Search by product name or SKU."
         [search]="listingSearch"
         (chose)="trackListing.set($event?.id ?? null)"
       />
@@ -428,7 +477,34 @@ import { tableDateTime } from '../../core/format';
       margin-block-end: var(--space-4);
     }
 
-    .sku {
+    .tiles {
+      display: grid;
+      gap: var(--space-3);
+      margin-block-end: var(--space-4);
+    }
+
+    @media (min-width: 768px) {
+      .tiles {
+        grid-template-columns: repeat(2, minmax(0, 16rem));
+      }
+    }
+
+    .tile {
+      padding: 0;
+      border: 2px solid transparent;
+      border-radius: var(--radius-lg);
+      background: none;
+      color: inherit;
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .tile[aria-pressed='true'] {
+      border-color: var(--color-primary);
+    }
+
+    .sku,
+    .product {
       display: block;
       font-weight: var(--weight-medium);
     }
@@ -457,19 +533,6 @@ import { tableDateTime } from '../../core/format';
     .hint {
       color: var(--color-text-muted);
       font-size: var(--text-sm);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
     }
 
     .numeric {
@@ -531,6 +594,29 @@ export class StockPage {
   ];
 
   protected readonly list = this.inventory.stock();
+
+  /** The two queues the tiles count. A page each is enough: past it the tile says "50+". */
+  protected readonly lowList = this.inventory.stock({ lowStock: true }, 50);
+  protected readonly outList = this.inventory.stock({ outOfStock: true }, 50);
+  protected readonly lowCount = computed(() => this.countOf(this.lowList));
+  protected readonly outCount = computed(() => this.countOf(this.outList));
+
+  private countOf(list: {
+    rows(): readonly unknown[];
+    nextCursor(): string | null;
+    loading(): boolean;
+    error(): string | null;
+  }): number | string | null {
+    if (list.error() || (list.loading() && list.rows().length === 0)) return null;
+    return list.nextCursor() ? `${list.rows().length}+` : list.rows().length;
+  }
+
+  protected pickLevel(level: 'low' | 'out'): void {
+    const next = { ...this.values() };
+    if (next['level'] === level) delete next['level'];
+    else next['level'] = level;
+    this.applyFilters(next);
+  }
   /** Reference data for the warehouse filter. Small, bounded, and read straight off the store. */
   private readonly warehouseList = this.inventory.warehouses({ activeOnly: true }, 200);
   protected readonly values = signal<FilterValues>({});
@@ -578,13 +664,20 @@ export class StockPage {
   }));
 
   protected readonly rowKey = (row: StockItemResponse) => row.id;
-  protected readonly rowLabel = (row: StockItemResponse) => `${row.sku} at ${row.warehouseCode}`;
+  protected readonly rowLabel = (row: StockItemResponse) =>
+    `${row.sku} at ${row.warehouseName ?? row.warehouseCode}`;
 
   protected readonly columns: readonly DataTableColumn<StockItemResponse>[] = [
-    { key: 'sku', label: 'SKU', kind: 'custom' },
-    { key: 'quantityOnHand', label: 'On hand', kind: 'number', value: (row) => row.quantityOnHand },
+    { key: 'sku', label: 'Product', kind: 'custom' },
+    {
+      key: 'quantityOnHand',
+      label: 'On hand',
+      kind: 'number',
+      value: (row) => row.quantityOnHand,
+      card: true,
+    },
     { key: 'quantityReserved', label: 'Reserved', kind: 'number', value: (row) => row.quantityReserved },
-    { key: 'available', label: 'Available', kind: 'custom', numeric: true },
+    { key: 'available', label: 'Available', kind: 'custom', numeric: true, card: true },
     {
       key: 'reorderLevel',
       label: 'Reorder at',
@@ -594,7 +687,7 @@ export class StockPage {
     },
     { key: 'trackingMode', label: 'Tracking', value: (row) => row.trackingMode, hiddenByDefault: true },
     { key: 'updatedAt', label: 'Last moved', kind: 'date', value: (row) => tableDateTime(row.updatedAt) },
-    { key: 'actions', label: 'Actions', kind: 'custom', width: '16rem' },
+    { key: 'actions', label: 'Actions', kind: 'custom', width: '16rem', card: true },
   ];
 
   /** The warehouse options come from the API, so the filter cannot offer one that is not there. */
@@ -612,6 +705,7 @@ export class StockPage {
       key: 'level',
       label: 'Stock level',
       kind: 'select',
+      quick: true,
       options: [
         { value: 'low', label: 'Low — at or below reorder' },
         { value: 'out', label: 'Out of stock' },
@@ -621,6 +715,8 @@ export class StockPage {
 
   constructor() {
     this.list.load();
+    this.lowList.load();
+    this.outList.load();
     this.warehouseList.load();
   }
 

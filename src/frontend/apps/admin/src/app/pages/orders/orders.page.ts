@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { OrderFilters, OrderSummaryResponse, OrdersAdminService } from '@klarahome/data-access-admin';
 import {
   CellTemplate,
@@ -14,6 +14,14 @@ import {
 import { Alert, Badge } from '@klarahome/ui-primitives';
 
 import { tableDateTime, tableMoney } from '../../core/format';
+import {
+  ORDER_STATUS_VOCAB,
+  PAYMENT_STATUS_VOCAB,
+  SUB_ORDER_STATUS_VOCAB,
+  paymentMethodLabel,
+  statusFilterOptions,
+  statusLabel,
+} from './order-vocabulary';
 
 /**
  * Every order.
@@ -29,13 +37,16 @@ import { tableDateTime, tableMoney } from '../../core/format';
  * status; the parts column shows the distinct statuses underneath it, which is the honest
  * summary — "Partially shipped" as a single word would be a status the domain does not have.
  */
+/** The filter keys that are mirrored into the address bar. */
+const FILTER_KEYS = ['status', 'paymentStatus', 'q', 'from', 'to'] as const;
+
 @Component({
   selector: 'kh-orders-page',
   imports: [Alert, Badge, CellTemplate, DataTable, FilterBar, PageHeader, RouterLink],
   template: `
     <kh-page-header
       heading="Orders"
-      description="One row per order. An order split across sellers has a part per seller, each moving at its own pace."
+      description="One row per order. When an order has items from more than one seller, each seller's share ships and is tracked separately."
     />
 
     @if (list.error(); as message) {
@@ -70,12 +81,21 @@ import { tableDateTime, tableMoney } from '../../core/format';
       <ng-template khCell="orderNumber" let-row>
         <a class="link" [routerLink]="['/orders', row.id]">{{ row.orderNumber }}</a>
         <span class="who">{{ row.customerName }}</span>
+        @if (row.customerMobile && row.customerMobile !== row.customerName) {
+          <span class="who">{{ row.customerMobile }}</span>
+        }
+        <!-- Items and sellers used to be two columns of their own; at 1366 they pushed "Placed" off
+             the edge, and neither is a figure anybody sorts by. -->
+        <span class="who"
+          >{{ row.itemCount }} {{ row.itemCount === 1 ? 'item' : 'items' }} · {{ row.vendorCount }}
+          {{ row.vendorCount === 1 ? 'seller' : 'sellers' }}</span
+        >
       </ng-template>
 
       <ng-template khCell="subOrderStatuses" let-row>
         <div class="parts">
           @for (status of row.subOrderStatuses; track status) {
-            <kh-badge [tone]="tone(status)">{{ status }}</kh-badge>
+            <kh-badge [tone]="tone(status)">{{ label(status) }}</kh-badge>
           } @empty {
             <span class="who">—</span>
           }
@@ -110,6 +130,8 @@ import { tableDateTime, tableMoney } from '../../core/format';
 export class OrdersPage {
   protected readonly hasFilters = computed(() => Object.keys(this.values()).length > 0);
   private readonly orders = inject(OrdersAdminService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly list = this.orders.orders();
   protected readonly values = signal<FilterValues>({});
@@ -130,40 +152,44 @@ export class OrdersPage {
       key: 'status',
       label: 'Status',
       kind: 'badge',
-      value: (row) => row.status,
+      value: (row) => statusLabel(ORDER_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
+      card: true,
     },
-    { key: 'subOrderStatuses', label: 'Parts', kind: 'custom' },
+    { key: 'subOrderStatuses', label: 'Sellers’ shares', kind: 'custom' },
     {
       key: 'paymentStatus',
       label: 'Payment',
       kind: 'badge',
-      value: (row) => `${row.paymentMethod} · ${row.paymentStatus}`,
+      value: (row) =>
+        `${paymentMethodLabel(row.paymentMethod)} · ${statusLabel(PAYMENT_STATUS_VOCAB, row.paymentStatus)}`,
       tone: (row) => toneFor(row.paymentStatus),
-    },
-    { key: 'itemCount', label: 'Items', kind: 'number', value: (row) => row.itemCount },
-    {
-      key: 'vendorCount',
-      label: 'Sellers',
-      kind: 'number',
-      value: (row) => row.vendorCount,
-      hiddenByDefault: true,
+      card: true,
     },
     {
       key: 'netTotal',
       label: 'Net total',
       kind: 'number',
       value: (row) => tableMoney(row.netTotal, row.currencyCode),
+      card: true,
     },
     {
+      // The same figure as the net total until something is cancelled or returned, which is why it
+      // is off by default and named for what it is rather than a second "Total".
       key: 'grandTotal',
-      label: 'Ordered',
+      label: 'Originally ordered',
       kind: 'number',
       value: (row) => tableMoney(row.grandTotal, row.currencyCode),
       hiddenByDefault: true,
     },
-    { key: 'placedAt', label: 'Placed', kind: 'date', value: (row) => tableDateTime(row.placedAt) },
+    {
+      key: 'placedAt',
+      label: 'Placed',
+      kind: 'date',
+      value: (row) => tableDateTime(row.placedAt),
+      card: true,
+    },
   ];
 
   protected readonly filters: readonly FilterDefinition[] = [
@@ -171,42 +197,49 @@ export class OrdersPage {
       key: 'status',
       label: 'Status',
       kind: 'select',
-      options: [
-        { value: 'Pending', label: 'Awaiting payment' },
-        { value: 'Confirmed', label: 'Confirmed' },
-        { value: 'Processing', label: 'Being prepared' },
-        { value: 'Shipped', label: 'Shipped' },
-        { value: 'Delivered', label: 'Delivered' },
-        { value: 'Cancelled', label: 'Cancelled' },
-        { value: 'Returned', label: 'Returned' },
-      ],
+      options: statusFilterOptions(ORDER_STATUS_VOCAB),
     },
     {
       key: 'paymentStatus',
       label: 'Payment',
       kind: 'select',
-      options: [
-        { value: 'Pending', label: 'Not paid' },
-        { value: 'Authorized', label: 'Authorised' },
-        { value: 'Paid', label: 'Paid' },
-        { value: 'Failed', label: 'Failed' },
-        { value: 'Refunded', label: 'Refunded' },
-      ],
+      options: statusFilterOptions(PAYMENT_STATUS_VOCAB),
     },
     { key: 'from', label: 'Placed from', kind: 'date' },
     { key: 'to', label: 'Placed to', kind: 'date' },
   ];
 
   constructor() {
-    this.list.load();
+    // The filters live in the URL (`?status=Delivered&q=KH-1042`), so a link from the dashboard or
+    // the notifications panel lands on the right slice, and Back restores the one you left.
+    const query = this.route.snapshot.queryParamMap;
+    const initial: Record<string, string> = {};
+    for (const key of FILTER_KEYS) {
+      const value = query.get(key);
+      if (value) initial[key] = value;
+    }
+    // `setFilters` loads the first page, so there is no separate `load()`.
+    this.applyFilters(initial, false);
   }
 
   protected tone(status: string) {
     return toneFor(status);
   }
 
-  protected applyFilters(values: FilterValues): void {
+  protected label(status: string) {
+    return statusLabel(SUB_ORDER_STATUS_VOCAB, status);
+  }
+
+  protected applyFilters(values: FilterValues, syncUrl = true): void {
     this.values.set(values);
+    if (syncUrl) {
+      // Replace, not push: each chip press is a refinement of one view, not a page of history.
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: Object.fromEntries(FILTER_KEYS.map((key) => [key, values[key] || null])),
+        replaceUrl: true,
+      });
+    }
     const filters: OrderFilters = {
       status: values['status'],
       paymentStatus: values['paymentStatus'],

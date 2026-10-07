@@ -153,7 +153,7 @@ import { describeError, fieldErrors } from '../core/describe-error';
             </div>
 
             @if (!item.isCurrent) {
-              <button khButton type="button" size="sm" variant="danger" (click)="revoking.set(item)">End</button>
+              <button khButton type="button" size="sm" variant="secondary" (click)="revoking.set(item)">End</button>
             }
           </li>
         } @empty {
@@ -164,7 +164,7 @@ import { describeError, fieldErrors } from '../core/describe-error';
       </ul>
 
       @if (otherSessionCount() > 0) {
-        <button khButton type="button" variant="danger" (click)="revokeAllOpen.set(true)">
+        <button khButton type="button" variant="secondary" (click)="revokeAllOpen.set(true)">
           End the other {{ otherSessionCount() === 1 ? 'session' : otherSessionCount() + ' sessions' }}
         </button>
       }
@@ -287,8 +287,9 @@ import { describeError, fieldErrors } from '../core/describe-error';
       margin-block-end: var(--space-6);
       padding: var(--space-5);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     .section-head {

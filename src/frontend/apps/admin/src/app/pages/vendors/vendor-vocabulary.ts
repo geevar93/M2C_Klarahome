@@ -52,6 +52,17 @@ export const KYC_DOCUMENT_TYPES: readonly Choice<KycDocumentType>[] = [
 ];
 
 /**
+ * A readiness blocker from the server, with any document enum in it said in words — "Pan,
+ * IncorporationCertificate" is a list of `KycDocumentType` names, not something to read aloud.
+ */
+export function readableBlocker(text: string): string {
+  const names = KYC_DOCUMENT_TYPES.map((entry) => entry.value).join('|');
+  return text.replace(new RegExp(String.raw`\b(${names})\b`, 'g'), (match) => {
+    return KYC_DOCUMENT_TYPES.find((entry) => entry.value === match)?.label ?? match;
+  });
+}
+
+/**
  * The onboarding edges: which endpoint takes a seller to which state, and what to call it.
  *
  * **It no longer says when an edge is available.** Onboarding is six named endpoints rather than

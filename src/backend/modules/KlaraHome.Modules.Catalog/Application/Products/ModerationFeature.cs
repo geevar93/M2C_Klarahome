@@ -132,13 +132,15 @@ internal sealed class ListModerationQueueQueryHandler(CatalogDbContext context)
 /// <param name="caller">Records who submitted it.</param>
 /// <param name="options">Says whether moderation is required at all.</param>
 /// <param name="clock">The sanctioned clock.</param>
+/// <param name="audit">Records the submission, or the publication it became.</param>
 internal sealed class SubmitProductCommandHandler(
     CatalogDbContext context,
     CatalogScope scope,
     ProductLifecycle lifecycle,
     ICallerContext caller,
     IOptions<CatalogOptions> options,
-    IClock clock) : ICommandHandler<SubmitProductCommand, ProductResponse>
+    IClock clock,
+    IAuditLogger audit) : ICommandHandler<SubmitProductCommand, ProductResponse>
 {
     public async Task<Result<ProductResponse>> HandleAsync(
         SubmitProductCommand command,
@@ -199,6 +201,19 @@ internal sealed class SubmitProductCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // Without this a product that was created and published shows "Nothing recorded yet" in its
+        // History: creation was audited, and the decision that put it on sale was not.
+        await audit.RecordAsync(
+            new AuditEntry
+            {
+                Action = straightThrough ? "catalog.product.published" : "catalog.product.submitted",
+                EntityType = CreateProductCommandHandler.AuditEntityType,
+                EntityId = product.Id.ToString(),
+                Before = new { Status = from.ToString() },
+                After = new { Status = product.Status.ToString() },
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return await lifecycle.StateAsync(product.Id, cancellationToken).ConfigureAwait(false);
     }
@@ -295,12 +310,14 @@ internal sealed class RejectProductCommandHandler(
 /// <param name="lifecycle">Performs the publication checks and the transition.</param>
 /// <param name="publisher">Announces the offers a withdrawal takes down.</param>
 /// <param name="clock">The sanctioned clock.</param>
+/// <param name="audit">Records the change, so the product's history shows who published or withdrew it.</param>
 internal sealed class ChangeProductStatusCommandHandler(
     CatalogDbContext context,
     CatalogScope scope,
     ProductLifecycle lifecycle,
     Infrastructure.Events.CatalogEventPublisher publisher,
-    IClock clock) : ICommandHandler<ChangeProductStatusCommand, ProductResponse>
+    IClock clock,
+    IAuditLogger audit) : ICommandHandler<ChangeProductStatusCommand, ProductResponse>
 {
     public async Task<Result<ProductResponse>> HandleAsync(
         ChangeProductStatusCommand command,
@@ -347,6 +364,23 @@ internal sealed class ChangeProductStatusCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await audit.RecordAsync(
+            new AuditEntry
+            {
+                Action = command.Status switch
+                {
+                    ProductStatus.Active => "catalog.product.published",
+                    ProductStatus.Inactive => "catalog.product.unpublished",
+                    ProductStatus.Archived => "catalog.product.archived",
+                    _ => "catalog.product.status-changed",
+                },
+                EntityType = CreateProductCommandHandler.AuditEntityType,
+                EntityId = product.Id.ToString(),
+                Before = new { Status = from.ToString() },
+                After = new { Status = product.Status.ToString() },
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return await lifecycle.StateAsync(product.Id, cancellationToken).ConfigureAwait(false);
     }

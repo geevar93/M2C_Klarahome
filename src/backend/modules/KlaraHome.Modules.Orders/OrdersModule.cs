@@ -105,6 +105,9 @@ public sealed class OrdersModule : IModule
         // registered unconditionally, for the same reason.
         services.AddScoped<IOrderFulfilment, OrderFulfilmentService>();
 
+        // Names a seller's part of an order on the audit trail by its number.
+        services.AddScoped<KlaraHome.Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.SubOrderAuditLabels>();
+
         // And the same again for the post-delivery leg, added at Step 17: what a line is still worth
         // and how much of it is left, the three return states the machine has, and a place to record
         // what actually came back. It is deliberately narrower than the other two — no price may be

@@ -19,6 +19,41 @@ namespace KlaraHome.IntegrationTests.Commerce;
 public sealed class InventoryStockTests(KlaraHomeSchemaFixture fixture) : CommerceTestBase(fixture)
 {
     /// <summary>
+    /// A stock row names its product and its location, so the list reads without a second call per
+    /// row: <c>productId</c> and <c>productName</c> come from the catalogue's read seam, not from a
+    /// copy held in Inventory.
+    /// </summary>
+    [Fact]
+    public async Task The_stock_list_names_the_product_and_the_location()
+    {
+        SkipWithoutDocker();
+
+        var admin = await SignedInAdministratorAsync();
+        var sellers = Sellers(admin);
+        var catalogue = new CatalogScenario(admin, Cancellation);
+        var inventory = new InventoryScenario(admin, Cancellation);
+
+        var taxonomy = await catalogue.TaxonomyAsync();
+        var seller = await sellers.ActiveAsync();
+        var offer = await inventory.StockedAsync(catalogue, taxonomy, seller.Id, quantity: 5);
+
+        var listed = await ReadAsync(await admin.GetAsync(
+            new Uri($"/api/v1/admin/stock?listingId={offer.ListingId}", UriKind.Relative),
+            Cancellation));
+
+        var row = Assert.Single(listed.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(offer.ProductId, row.GetProperty("productId").GetGuid());
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("productName").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("warehouseName").GetString()));
+        Assert.Equal(offer.Sku, row.GetProperty("sku").GetString());
+
+        var single = await inventory.ReadStockAsync(offer.StockItemId);
+
+        Assert.Equal(offer.ProductId, single.GetProperty("productId").GetGuid());
+    }
+
+    /// <summary>
     /// After an arbitrary sequence of everything that moves stock, both caches still equal their
     /// ledger sums.
     /// </summary>

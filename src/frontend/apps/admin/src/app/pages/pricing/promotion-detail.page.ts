@@ -128,6 +128,7 @@ const NEW = 'new';
           [summary]="summary()"
           [saving]="busy()"
           [dirty]="form.dirty()"
+          [revealOnDirty]="!isNew()"
           [submitLabel]="isNew() ? 'Create promotion' : 'Save changes'"
           (submitted)="save()"
           (cancelled)="back()"
@@ -171,7 +172,7 @@ const NEW = 'new';
             ></textarea>
           </kh-field>
 
-          <kh-field label="Mechanic" for="promo-type" [hint]="typeHint()">
+          <kh-field label="Discount type" for="promo-type" [hint]="typeHint()">
             <select khControl id="promo-type" [value]="type()" (change)="type.set($any($event.target).value)">
               @for (choice of types; track choice.value) {
                 <option [value]="choice.value">{{ choice.label }}</option>
@@ -411,37 +412,39 @@ const NEW = 'new';
               Everything left empty means "no restriction". An exclusion always beats an inclusion.
             </p>
 
-            <kh-field label="Categories" for="promo-categories" [optional]="true">
-              <select
-                khControl
-                id="promo-categories"
-                multiple
-                size="6"
-                (change)="setCategoryIds($any($event.target))"
-              >
+            <!-- Tick boxes rather than a native multi-select listbox: ctrl-click is not something a
+                 phone or a first-time operator discovers, and a listbox hides what is chosen. -->
+            <div class="check-field">
+              <span class="check-label" id="promo-categories-label">Categories <em>(optional)</em></span>
+              <div class="check-list" role="group" aria-labelledby="promo-categories-label">
                 @for (node of categoryOptions(); track node.id) {
-                  <option [value]="node.id" [selected]="categoryIds().includes(node.id)">
-                    {{ node.label }}
-                  </option>
+                  <kh-checkbox
+                    [label]="node.label"
+                    [inputId]="'promo-category-' + node.id"
+                    [checked]="categoryIds().includes(node.id)"
+                    (checkedChange)="toggleId(categoryIds, node.id, $event)"
+                  />
+                } @empty {
+                  <span class="hint">No categories.</span>
                 }
-              </select>
-            </kh-field>
+              </div>
+            </div>
 
-            <kh-field label="Brands" for="promo-brands" [optional]="true">
-              <select
-                khControl
-                id="promo-brands"
-                multiple
-                size="6"
-                (change)="setBrandIds($any($event.target))"
-              >
+            <div class="check-field">
+              <span class="check-label" id="promo-brands-label">Brands <em>(optional)</em></span>
+              <div class="check-list" role="group" aria-labelledby="promo-brands-label">
                 @for (brand of brands.rows(); track brand.id) {
-                  <option [value]="brand.id" [selected]="brandIds().includes(brand.id)">
-                    {{ brand.name }}
-                  </option>
+                  <kh-checkbox
+                    [label]="brand.name"
+                    [inputId]="'promo-brand-' + brand.id"
+                    [checked]="brandIds().includes(brand.id)"
+                    (checkedChange)="toggleId(brandIds, brand.id, $event)"
+                  />
+                } @empty {
+                  <span class="hint">No brands.</span>
                 }
-              </select>
-            </kh-field>
+              </div>
+            </div>
 
             <!--
               A picker beside the list rather than instead of it. A scope is genuinely a *set* of
@@ -539,7 +542,7 @@ const NEW = 'new';
             </div>
 
             <div class="row">
-              <kh-field label="Stacking" for="promo-stacking" [hint]="stackingHint()">
+              <kh-field label="Combine with other offers" for="promo-stacking" [hint]="stackingHint()">
                 <select
                   khControl
                   id="promo-stacking"
@@ -591,12 +594,20 @@ const NEW = 'new';
         <!-- ---- The simulator ---- -->
 
         <aside>
-          <section class="panel">
+          @if (isNew()) {
+            <!-- Nothing to try until there is a rule to try it on: the panel would sit in the right
+                 column beside an empty form. -->
+            <section class="panel kh-panel">
+              <h2>Try it on a basket</h2>
+              <p class="hint">Create the promotion first, then price a basket here to see exactly what it does.</p>
+            </section>
+          } @else {
+          <section class="panel kh-panel">
             <h2>Try it on a basket</h2>
             <p class="hint">
-              Run through the same engine that prices a real checkout. Nothing is saved, and the promotion
-              does not have to exist yet — save it first only if you want the stored version tried rather than
-              what is on screen.
+              Prices a basket the same way a real checkout would. Nothing is saved, and the promotion does not
+              have to exist yet — save it first only if you want the stored version tried rather than what is
+              on screen.
             </p>
 
             @for (line of simulationLines(); track $index) {
@@ -673,7 +684,7 @@ const NEW = 'new';
                   }
                 </select>
               </kh-field>
-              <kh-field label="Place of supply" for="sim-state" [optional]="true">
+              <kh-field label="Delivery state" for="sim-state" [optional]="true">
                 <select
                   khControl
                   id="sim-state"
@@ -725,7 +736,7 @@ const NEW = 'new';
                 <kh-alert tone="warning" heading="The coupon did nothing">{{ rejection }}</kh-alert>
               }
 
-              <h3>What the engine considered</h3>
+              <h3>What was considered</h3>
               @if (result.promotions.length === 0) {
                 <p class="hint">No promotion matched this basket at all.</p>
               } @else {
@@ -747,9 +758,10 @@ const NEW = 'new';
               }
             }
           </section>
+          }
 
           @if (!isNew()) {
-            <section class="panel">
+            <section class="panel kh-panel">
               <h2>Who has used it</h2>
               @if (redemptions(); as list) {
                 <kh-data-table
@@ -805,18 +817,6 @@ const NEW = 'new';
       gap: var(--space-4);
     }
 
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-2);
-      font-size: var(--text-lg);
-    }
-
     .panel h3 {
       margin: var(--space-4) 0 var(--space-2);
       font-size: var(--text-base);
@@ -847,6 +847,40 @@ const NEW = 'new';
 
     .row > kh-field {
       flex: 1 1 10rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
+    }
+
+    .check-field {
+      margin-block-end: var(--space-3);
+    }
+
+    .check-label {
+      display: block;
+      margin-block-end: var(--space-1);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-medium);
+    }
+
+    .check-label em {
+      color: var(--color-text-muted);
+      font-style: normal;
+      font-weight: var(--weight-regular);
+    }
+
+    .check-list {
+      display: grid;
+      gap: var(--space-1);
+      max-block-size: 12rem;
+      padding: var(--space-2) var(--space-3);
+      overflow-y: auto;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
     }
 
     .hint {
@@ -1129,12 +1163,9 @@ export class PromotionDetailPage implements HasUnsavedChanges {
 
   // ---- Scope pickers ----------------------------------------------------------------------------
 
-  protected setCategoryIds(select: HTMLSelectElement): void {
-    this.categoryIds.set(selectedValues(select));
-  }
-
-  protected setBrandIds(select: HTMLSelectElement): void {
-    this.brandIds.set(selectedValues(select));
+  /** Adds or removes one id from a scope list. */
+  protected toggleId(target: WritableSignal<readonly string[]>, id: string, on: boolean): void {
+    target.update((current) => (on ? [...current.filter((entry) => entry !== id), id] : current.filter((entry) => entry !== id)));
   }
 
   protected togglePaymentMethod(method: QuotePaymentMethod, on: boolean): void {
@@ -1194,7 +1225,7 @@ export class PromotionDetailPage implements HasUnsavedChanges {
         error: (error: unknown) => {
           this.simulating.set(false);
           this.quote.set(null);
-          this.simulationError.set(describeError(error, 'The engine refused this basket.'));
+          this.simulationError.set(describeError(error, 'This basket could not be priced.'));
         },
       });
   }
@@ -1240,7 +1271,14 @@ export class PromotionDetailPage implements HasUnsavedChanges {
       next: (saved) => {
         this.busy.set(false);
         this.promotion.set(saved);
-        this.toasts.success(saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.');
+        // Reversible, so it is undoable rather than confirmed, exactly as on the list: Undo is the
+        // other call, made against the state this one just produced.
+        this.toasts.show({
+          tone: 'success',
+          message: saved.isActive ? 'Promotion switched on.' : 'Promotion switched off.',
+          durationMs: 8000,
+          action: { label: 'Undo', run: () => this.toggle(saved) },
+        });
       },
       error: (error: unknown) => {
         this.busy.set(false);
@@ -1401,9 +1439,6 @@ function hintFor(choices: readonly { value: string; hint?: string }[], value: st
   return choices.find((choice) => choice.value === value)?.hint ?? '';
 }
 
-function selectedValues(select: HTMLSelectElement): readonly string[] {
-  return Array.from(select.selectedOptions).map((option) => option.value);
-}
 
 /** A textarea of identifiers, one per line. Null rather than an empty array means "unrestricted". */
 function lines(value: string): string[] | null {

@@ -66,22 +66,28 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
       heading="Attributes"
       description="What the catalogue can say about a product, and which of those a shopper can filter by."
     >
-      <button khButton type="button" variant="primary" *khHasPermission="'catalog.taxonomy.manage'" (click)="startCreate()">
+      <button
+        khButton
+        type="button"
+        variant="primary"
+        *khHasPermission="'catalog.taxonomy.manage'"
+        (click)="startCreate()"
+      >
         <kh-icon name="plus" size="sm" />
         New attribute
       </button>
     </kh-page-header>
 
     @if (error(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     @if (loading()) {
       <kh-skeleton height="16rem" />
     } @else {
-      <section class="panel">
+      <section class="panel kh-panel">
         <h2>Attributes</h2>
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Name</th>
@@ -129,14 +135,27 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
               </tr>
             } @empty {
               <tr>
-                <td colspan="6" class="hint">No attributes yet.</td>
+                <td colspan="6" class="hint">
+                  No attributes yet. Add the first one — Colour, Material, Size — and mark whether shoppers
+                  can filter by it.
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    *khHasPermission="'catalog.taxonomy.manage'"
+                    (click)="startCreate()"
+                  >
+                    <kh-icon name="plus" size="sm" />
+                    New attribute
+                  </button>
+                </td>
               </tr>
             }
           </tbody>
         </table>
       </section>
 
-      <section class="panel">
+      <section class="panel kh-panel">
         <h2>Attribute sets</h2>
         <p class="hint">
           A set is the group of attributes a category asks for. Sets are assigned to a category on the
@@ -149,7 +168,10 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
               <span class="hint">{{ set.attributes.length }} attributes</span>
             </li>
           } @empty {
-            <li class="hint">No sets yet.</li>
+            <li class="hint">
+              No sets yet. Sets are read-only on this screen for now; they are assigned to a category on the
+              categories screen.
+            </li>
           }
         </ul>
       </section>
@@ -187,7 +209,7 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
             label="Code"
             for="attribute-code"
             [optional]="true"
-            hint="How the API names it. Left blank, it is made from the name. It cannot be changed later."
+            hint="How it's identified internally. Left blank, it is made from the name. It cannot be changed later."
           >
             <input
               khControl
@@ -262,8 +284,8 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
             <fieldset>
               <legend>Options</legend>
               <p class="hint">
-                The values this attribute can take. An option already used by a product cannot be removed —
-                the API will say so.
+                The values this attribute can take. An option already used by a product can't be removed —
+                you'll see a message if you try.
               </p>
 
               @for (option of options(); track $index; let index = $index) {
@@ -345,29 +367,6 @@ const DATA_TYPES: readonly { readonly value: AttributeDataType; readonly label: 
 
     .panel {
       margin-block-end: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
-    .panel h2 {
-      margin: 0 0 var(--space-3);
-      font-size: var(--text-lg);
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
     }
 
     .numeric {

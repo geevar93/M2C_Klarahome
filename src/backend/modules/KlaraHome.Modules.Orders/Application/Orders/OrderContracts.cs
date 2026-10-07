@@ -206,7 +206,12 @@ internal sealed record OrderEventResponse(
 /// <param name="Id">The order.</param>
 /// <param name="OrderNumber">The number a shopper quotes.</param>
 /// <param name="CustomerId">The shopper.</param>
-/// <param name="CustomerName">Their name, as it was.</param>
+/// <param name="CustomerName">
+/// A name a person would recognise: the account's own name when it has one, otherwise the delivery
+/// contact's. A shopper who registered by mobile number has the number itself as their account name,
+/// and a list of orders headed by phone numbers is a list nobody can scan.
+/// </param>
+/// <param name="CustomerMobile">Their mobile number, as it was, shown beside the name.</param>
 /// <param name="Status">Where the order stands, derived from its parts.</param>
 /// <param name="PaymentMethod">Prepaid or cash on delivery.</param>
 /// <param name="PaymentStatus">Where the money stands.</param>
@@ -222,6 +227,7 @@ internal sealed record OrderSummaryResponse(
     string OrderNumber,
     Guid CustomerId,
     string CustomerName,
+    string? CustomerMobile,
     string Status,
     string PaymentMethod,
     string PaymentStatus,
@@ -237,7 +243,9 @@ internal sealed record OrderSummaryResponse(
 /// <param name="Id">The order.</param>
 /// <param name="OrderNumber">The number a shopper quotes.</param>
 /// <param name="CustomerId">The shopper.</param>
-/// <param name="CustomerName">Their name, as it was.</param>
+/// <param name="CustomerName">
+/// A name a person would recognise — see <see cref="OrderSummaryResponse.CustomerName"/>.
+/// </param>
 /// <param name="CustomerEmail">Their email, as it was.</param>
 /// <param name="CustomerMobile">Their mobile, as it was.</param>
 /// <param name="Status">Where the order stands.</param>
@@ -336,7 +344,7 @@ internal static class OrderProjection
             order.Id,
             order.OrderNumber,
             order.CustomerId,
-            order.CustomerSnapshot.DisplayName,
+            CustomerLabel(order),
             order.CustomerSnapshot.Email,
             order.CustomerSnapshot.Mobile,
             order.Status.ToString(),
@@ -379,6 +387,30 @@ internal static class OrderProjection
             ]);
     }
 
+    /// <summary>
+    /// The name to show for whoever bought: their own, unless their own is just their phone number.
+    /// </summary>
+    /// <remarks>
+    /// Mobile sign-up uses the number as the account's display name, so the order snapshot froze a
+    /// phone number where a name belongs. The delivery contact's name is on every order and is what
+    /// the courier asks for, so it is the honest fallback. Applied when reading rather than when
+    /// placing, so orders already on file get it too.
+    /// </remarks>
+    /// <param name="order">The order, with its snapshot and delivery address.</param>
+    internal static string CustomerLabel(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        var name = order.CustomerSnapshot.DisplayName;
+        var isJustANumber = string.IsNullOrWhiteSpace(name)
+            || name == order.CustomerSnapshot.Mobile
+            || !name.Any(char.IsLetter);
+
+        return isJustANumber && !string.IsNullOrWhiteSpace(order.ShippingAddress.RecipientName)
+            ? order.ShippingAddress.RecipientName
+            : name;
+    }
+
     /// <summary>Projects one order into a list row.</summary>
     /// <param name="order">The order, with sub-orders and lines loaded.</param>
     public static OrderSummaryResponse ToSummary(Order order)
@@ -389,7 +421,8 @@ internal static class OrderProjection
             order.Id,
             order.OrderNumber,
             order.CustomerId,
-            order.CustomerSnapshot.DisplayName,
+            CustomerLabel(order),
+            order.CustomerSnapshot.Mobile,
             order.Status.ToString(),
             order.PaymentMethod.ToString(),
             order.PaymentStatus.ToString(),

@@ -5,12 +5,21 @@ import {
   ReportRow,
   ReportTable,
   ReportingAdminService,
+  VendorsAdminService,
 } from '@klarahome/data-access-admin';
-import { ChartPoint, DataTable, DataTableColumn, PageHeader, ReportChart } from '@klarahome/ui-admin';
+import {
+  ChartPoint,
+  DataTable,
+  DataTableColumn,
+  EntityPicker,
+  PageHeader,
+  ReportChart,
+} from '@klarahome/ui-admin';
 import { Alert, Button, Control, Field, Skeleton } from '@klarahome/ui-primitives';
 
 import { describeError } from '../../core/describe-error';
 import { tableDate, tableMoney } from '../../core/format';
+import { vendorSearchFor } from '../../core/vendor-search';
 
 /** How many rows a chart is worth drawing for. Beyond this the table is the honest rendering. */
 const CHARTABLE_ROWS = 60;
@@ -38,7 +47,7 @@ const CHARTABLE_ROWS = 60;
  */
 @Component({
   selector: 'kh-report-runner',
-  imports: [Alert, Button, Control, DataTable, Field, PageHeader, ReportChart, Skeleton],
+  imports: [Alert, Button, Control, DataTable, EntityPicker, Field, PageHeader, ReportChart, Skeleton],
   template: `
     @if (definition(); as report) {
       <kh-page-header [heading]="report.name" [description]="report.description" [crumbs]="crumbs()" />
@@ -81,15 +90,14 @@ const CHARTABLE_ROWS = 60;
         }
 
         @if (showVendorFilter()) {
-          <kh-field label="Seller id" for="report-vendor" [optional]="true" hint="Blank means every seller.">
-            <input
-              khControl
-              id="report-vendor"
-              type="text"
-              [value]="vendorId()"
-              (input)="vendorId.set($any($event.target).value)"
-            />
-          </kh-field>
+          <kh-entity-picker
+            label="Seller"
+            inputId="report-vendor"
+            hint="Blank means every seller."
+            [optional]="true"
+            [search]="vendorSearch"
+            (chose)="vendorId.set($event?.id ?? '')"
+          />
         }
 
         <button khButton type="button" variant="primary" [disabled]="running()" (click)="run()">
@@ -99,6 +107,15 @@ const CHARTABLE_ROWS = 60;
           {{ exporting() ? 'Producing…' : 'Produce a CSV' }}
         </button>
       </div>
+      @if (table(); as shown) {
+        @if (!from() && !to()) {
+          <!-- From and To are blank when the server chose the period; say which one it chose. -->
+          <p class="period">
+            Showing {{ date(shown.from) }} to {{ date(shown.to) }} — the report's default period. Set From and
+            To to change it.
+          </p>
+        }
+      }
     </section>
 
     @if (error(); as message) {
@@ -165,8 +182,15 @@ const CHARTABLE_ROWS = 60;
       margin-block-end: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
+    }
+
+    .period {
+      margin: var(--space-3) 0 0;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
     }
 
     .row {
@@ -180,20 +204,28 @@ const CHARTABLE_ROWS = 60;
       flex: 1 1 9rem;
     }
 
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
+    }
+
     .chart {
       margin-block-end: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     .totals {
       margin-block-start: var(--space-4);
       padding: var(--space-4);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
     h2 {
@@ -233,6 +265,8 @@ export class ReportRunner {
   /** Runs as soon as the component appears, rather than waiting for the button. */
   readonly runOnInit = input(true);
 
+  protected readonly date = tableDate;
+  protected readonly vendorSearch = vendorSearchFor(inject(VendorsAdminService));
   protected readonly from = signal('');
   protected readonly to = signal('');
   protected readonly groupBy = signal('');

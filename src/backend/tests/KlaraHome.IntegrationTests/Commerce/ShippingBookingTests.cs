@@ -66,9 +66,39 @@ public sealed class ShippingBookingTests(KlaraHomeSchemaFixture fixture) : Comme
         Assert.Equal("shiprocket", response.GetProperty("provider").GetString());
         Assert.NotEmpty(response.GetProperty("lines").EnumerateArray());
 
-        // The order's own timeline learned it, through IOrderFulfilment.AdvanceAsync — the booking
-        // does not dispatch, so the sub-order is still Confirmed, not yet Shipped.
-        var order = await orders.LoadAsync(placed.OrderId);
+        // Booking the waybill brought the part to Packed, so it has left the not-yet-packed
+        // statuses; the booking does not dispatch, so it is not yet Shipped.
+        var queued = await ReadAsync(await admin.GetAsync(
+            new Uri("/api/v1/admin/sub-orders?status=Confirmed,Processing&size=100", UriKind.Relative),
+            Cancellation));
+
+        Assert.DoesNotContain(
+            queued.GetProperty("items").EnumerateArray(),
+            entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId);
+
+        var reread = await ReadAsync(
+            await admin.GetAsync(new Uri($"/api/v1/admin/orders/{placed.OrderId}", UriKind.Relative), Cancellation));
+
+        Assert.Equal(
+            "Packed",
+            reread.GetProperty("subOrders").EnumerateArray()
+                .First(entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId)
+                .GetProperty("status").GetString());
+
+        // A shopper who signed up by mobile number has the number as their account name; the order
+        // shows the delivery contact's name instead, with the number kept alongside it.
+        var number = reread.GetProperty("orderNumber").GetString();
+        var named = await ReadAsync(await admin.GetAsync(
+            new Uri($"/api/v1/admin/orders?number={number}", UriKind.Relative),
+            Cancellation));
+
+        var summary = Assert.Single(named.GetProperty("items").EnumerateArray());
+
+        Assert.Contains(summary.GetProperty("customerName").GetString()!, char.IsLetter);
+        Assert.Equal(
+            reread.GetProperty("customerName").GetString(),
+            summary.GetProperty("customerName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(summary.GetProperty("customerMobile").GetString()));
 
         Assert.Contains(
             Factory.Courier.Bookings,

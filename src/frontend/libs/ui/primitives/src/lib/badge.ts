@@ -25,18 +25,22 @@ export type BadgeTone = 'neutral' | 'primary' | 'accent' | 'success' | 'warning'
       padding: 0 var(--space-2);
       min-width: var(--space-6);
       min-block-size: var(--space-6);
-      border-radius: var(--radius-sm);
+      border-radius: var(--badge-radius, var(--radius-sm));
       font-size: var(--text-xs);
       font-weight: var(--weight-medium);
       line-height: 1;
       white-space: nowrap;
-      background: var(--color-surface-raised);
+      background: var(--badge-bg, var(--color-surface-raised));
       color: var(--color-text);
-      border: 1px solid var(--color-border);
-      box-shadow: var(--shadow-sm);
+      border: var(--badge-border-width, 1px) solid var(--color-border);
+      box-shadow: var(--badge-shadow, var(--shadow-sm));
     }
 
+    /* The back office draws a status as a soft fill with coloured text and no outline. These
+       hooks default to the storefront's bordered, ink-text label, so nothing changes there. */
+
     :host([data-tone='primary']) {
+      color: var(--badge-text-primary, var(--color-text));
       background: var(--color-primary-subtle);
       border-color: var(--color-primary);
     }
@@ -52,21 +56,25 @@ export type BadgeTone = 'neutral' | 'primary' | 'accent' | 'success' | 'warning'
     }
 
     :host([data-tone='success']) {
+      color: var(--badge-text-success, var(--color-text));
       background: var(--color-success-subtle);
       border-color: var(--color-success);
     }
 
     :host([data-tone='warning']) {
+      color: var(--badge-text-warning, var(--color-text));
       background: var(--color-warning-subtle);
       border-color: var(--color-warning);
     }
 
     :host([data-tone='danger']) {
+      color: var(--badge-text-danger, var(--color-text));
       background: var(--color-danger-subtle);
       border-color: var(--color-danger);
     }
 
     :host([data-tone='info']) {
+      color: var(--badge-text-info, var(--color-text));
       background: var(--color-info-subtle);
       border-color: var(--color-info);
     }

@@ -102,7 +102,12 @@ internal sealed class OrderFact : AggregateRoot<Guid>, ITenantScoped
             OrderNumber = orderNumber,
             CustomerId = customerId,
             PaymentMethod = paymentMethod,
-            IsCod = string.Equals(paymentMethod, "Cod", StringComparison.OrdinalIgnoreCase),
+            // The Orders module names the method "CashOnDelivery"; this once compared against "Cod",
+            // which no order ever carried, so every order was filed as prepaid and the COD-versus-
+            // prepaid report and the dashboard's cash-pending figure were wrong. Both spellings are
+            // accepted so a fact written under either reads correctly.
+            IsCod = string.Equals(paymentMethod, "CashOnDelivery", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(paymentMethod, "Cod", StringComparison.OrdinalIgnoreCase),
             GrandTotal = grandTotal,
             AmountPayable = amountPayable,
             CurrencyCode = currencyCode,

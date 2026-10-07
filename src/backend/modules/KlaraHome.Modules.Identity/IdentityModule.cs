@@ -77,6 +77,9 @@ public sealed class IdentityModule : IModule
         // and Orders all read it; none of them may join to identity.addresses.
         services.AddScoped<Contracts.Identity.ICustomerDirectory, Infrastructure.Directory.CustomerDirectory>();
 
+        // Names users on the audit trail: as the target of an entry, and as the actor of every one.
+        services.AddScoped<Contracts.Platform.IAuditLabelSource, Infrastructure.Auditing.UserAuditLabels>();
+
         services.AddScoped<AccessResolver>();
         services.AddScoped<SessionService>();
         services.AddScoped<SignInCoordinator>();

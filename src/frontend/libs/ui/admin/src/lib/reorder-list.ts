@@ -144,14 +144,19 @@ export class ReorderItemTemplate {
       list-style: none;
     }
 
+    /* Wraps: three touch-sized buttons beside a label left it a few characters wide on a phone
+       ("Categor / y tiles"), so the controls drop to their own line when the label needs the room. */
     li {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-3);
       align-items: center;
       padding: var(--space-2) var(--space-3);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      /* A row inside a panel: flat, the panel owns the elevation. */
+      box-shadow: none;
     }
 
     li.dragging {
@@ -168,13 +173,13 @@ export class ReorderItemTemplate {
     }
 
     .body {
-      flex: 1;
+      flex: 1 1 9rem;
       min-inline-size: 0;
     }
 
     .label {
       display: block;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
       font-weight: var(--weight-medium);
     }
 
@@ -195,6 +200,7 @@ export class ReorderItemTemplate {
          \`.body\` (which has \`min-inline-size: 0\`) is what shrinks and wraps a long label instead. */
       flex-shrink: 0;
       gap: var(--space-1);
+      margin-inline-start: auto;
     }
 
     .empty {

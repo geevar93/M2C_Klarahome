@@ -19,14 +19,15 @@ import {
   FilterDefinition,
   FilterValues,
   PageHeader,
-  StatusBadge,
   toneFor,
+  StatusBadge,
 } from '@klarahome/ui-admin';
 import { Alert, Badge, Button, Control, Field, Icon } from '@klarahome/ui-primitives';
 import { ToastService } from '@klarahome/util';
 
 import { describeError } from '../../core/describe-error';
 import { tableDateTime, tableMoney } from '../../core/format';
+import { SHIPMENT_STATUS_VOCAB, statusFilterOptions, statusLabel } from '../orders/order-vocabulary';
 
 /**
  * Every parcel, and the courier's account of what happened to it.
@@ -50,6 +51,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
 @Component({
   selector: 'kh-shipments-page',
   imports: [
+    StatusBadge,
     Alert,
     Badge,
     Button,
@@ -63,7 +65,6 @@ import { tableDateTime, tableMoney } from '../../core/format';
     HasPermission,
     Icon,
     PageHeader,
-    StatusBadge,
     RouterLink,
   ],
   template: `
@@ -77,7 +78,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
     }
 
     @if (actionError(); as message) {
-      <kh-alert tone="danger" heading="That did not work" [dismissible]="true">{{ message }}</kh-alert>
+      <kh-alert tone="danger" heading="Something went wrong" [dismissible]="true">{{ message }}</kh-alert>
     }
 
     <kh-data-table
@@ -104,7 +105,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
         slot="filters"
         [filters]="filters"
         [values]="values()"
-        searchLabel="Order number, recipient or waybill"
+        searchLabel="Order number, recipient or tracking number"
         (changed)="applyFilters($event)"
       />
 
@@ -118,12 +119,12 @@ import { tableDateTime, tableMoney } from '../../core/format';
           <span class="awb">{{ row.awb }}</span>
           <span class="note">{{ row.courier ?? 'courier unknown' }}</span>
         } @else {
-          <span class="note">Not booked</span>
+          <span class="note">—</span>
         }
       </ng-template>
     </kh-data-table>
 
-    <section class="panel">
+    <section class="panel kh-panel">
       <div class="panel-head">
         <h2>Courier messages that failed</h2>
         <button khButton type="button" size="sm" [disabled]="events.loading()" (click)="events.refresh()">
@@ -140,55 +141,56 @@ import { tableDateTime, tableMoney } from '../../core/format';
         <kh-alert tone="danger" heading="The failed messages could not be loaded">{{ message }}</kh-alert>
       }
 
-      <table [attr.aria-busy]="events.loading()">
-        <thead>
-          <tr>
-            <th scope="col">Received</th>
-            <th scope="col">Courier</th>
-            <th scope="col">Waybill</th>
-            <th scope="col">Event</th>
-            <th scope="col">Why it failed</th>
-            <th scope="col"><span class="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          @if (events.loading() && events.rows().length === 0) {
+      @if (!events.loading() && events.rows().length === 0) {
+        <!-- No header row over an empty body: the answer is the sentence. -->
+        <p class="hint">Nothing has failed. That is the answer you want.</p>
+      } @else {
+        <table class="kh-table" [attr.aria-busy]="events.loading()">
+          <thead>
             <tr>
-              <td colspan="6" class="hint">Loading…</td>
+              <th scope="col">Received</th>
+              <th scope="col">Courier</th>
+              <th scope="col">Tracking number</th>
+              <th scope="col">Event</th>
+              <th scope="col">Why it failed</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
-          }
-          @for (event of events.rows(); track event.id) {
-            <tr>
-              <td>{{ when(event.receivedAt) }}</td>
-              <td>{{ event.provider }}</td>
-              <td>{{ event.awb ?? '—' }}</td>
-              <td>
-                {{ event.eventType }}
-                @if (!event.signatureValid) {
-                  <kh-badge tone="danger">Signature invalid</kh-badge>
-                }
-              </td>
-              <td class="note">{{ event.processError ?? event.status }} · {{ event.attempts }} attempts</td>
-              <td>
-                <button
-                  *khHasPermission="'shipping.shipment.manage'"
-                  khButton
-                  type="button"
-                  size="sm"
-                  [disabled]="busy()"
-                  (click)="replay(event.id)"
-                >
-                  Replay
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="6" class="hint">Nothing has failed. That is the answer you want.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @if (events.loading() && events.rows().length === 0) {
+              <tr>
+                <td colspan="6" class="hint">Loading…</td>
+              </tr>
+            }
+            @for (event of events.rows(); track event.id) {
+              <tr>
+                <td class="nowrap">{{ when(event.receivedAt) }}</td>
+                <td>{{ event.provider }}</td>
+                <td>{{ event.awb ?? '—' }}</td>
+                <td>
+                  {{ event.eventType }}
+                  @if (!event.signatureValid) {
+                    <kh-badge tone="danger">Signature invalid</kh-badge>
+                  }
+                </td>
+                <td class="note">{{ event.processError ?? event.status }} · {{ event.attempts }} attempts</td>
+                <td>
+                  <button
+                    *khHasPermission="'shipping.shipment.manage'"
+                    khButton
+                    type="button"
+                    size="sm"
+                    [disabled]="busy()"
+                    (click)="replay(event.id)"
+                  >
+                    Replay
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
     </section>
 
     @if (viewing(); as parcel) {
@@ -200,7 +202,11 @@ import { tableDateTime, tableMoney } from '../../core/format';
         <dl class="facts">
           <div>
             <dt>Status</dt>
-            <dd><kh-status-badge [status]="parcel.status" /></dd>
+            <dd>
+              <span [title]="statusTooltip(parcel.status)">
+                <kh-status-badge [status]="parcel.status" [label]="statusLabelFor(parcel.status)" />
+              </span>
+            </dd>
           </div>
           <div>
             <dt>Courier</dt>
@@ -252,7 +258,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
         </dl>
 
         <h3>What is in it</h3>
-        <table>
+        <table class="kh-table">
           <thead>
             <tr>
               <th scope="col">Item</th>
@@ -296,7 +302,7 @@ import { tableDateTime, tableMoney } from '../../core/format';
 
         <fieldset *khHasPermission="'shipping.shipment.manage'">
           <legend>Record a scan by hand</legend>
-          <p class="hint">For a waybill this deployment tracks itself — there is no webhook to wait for.</p>
+          <p class="hint">Use this when the courier does not send tracking updates automatically.</p>
           <div class="pair">
             <kh-field label="Status" for="tracking-status">
               <input
@@ -403,10 +409,6 @@ import { tableDateTime, tableMoney } from '../../core/format';
 
     .panel {
       margin-block-start: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     .panel-head {
@@ -425,18 +427,10 @@ import { tableDateTime, tableMoney } from '../../core/format';
       font-size: var(--text-base);
     }
 
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-      font-size: var(--text-sm);
-    }
-
-    th,
-    td {
-      padding: var(--space-2);
-      border-block-end: 1px solid var(--color-border);
-      text-align: start;
-      vertical-align: top;
+    @media (pointer: coarse) {
+      button[khButton] {
+        min-block-size: 44px;
+      }
     }
 
     .numeric {
@@ -557,13 +551,20 @@ export class ShipmentsPage {
       key: 'status',
       label: 'Status',
       kind: 'badge',
-      value: (row) => row.status,
+      value: (row) => statusLabel(SHIPMENT_STATUS_VOCAB, row.status),
       tone: (row) => toneFor(row.status),
       width: '10rem',
+      card: true,
     },
-    { key: 'awb', label: 'Waybill', kind: 'custom' },
+    { key: 'awb', label: 'Tracking number', kind: 'custom', card: true },
     { key: 'destinationPincode', label: 'To', value: (row) => row.destinationPincode, width: '7rem' },
-    { key: 'weightGrams', label: 'Weight', kind: 'number', value: (row) => `${row.weightGrams} g` },
+    {
+      key: 'weightGrams',
+      label: 'Weight',
+      kind: 'number',
+      // An unbooked parcel has no weight yet; "0 g" read as a measurement.
+      value: (row) => (row.weightGrams ? `${row.weightGrams} g` : '—'),
+    },
     {
       key: 'codAmount',
       label: 'To collect',
@@ -575,6 +576,7 @@ export class ShipmentsPage {
       label: 'Expected',
       kind: 'date',
       value: (row) => tableDateTime(row.expectedDeliveryAt),
+      card: true,
     },
     {
       key: 'createdAt',
@@ -590,23 +592,14 @@ export class ShipmentsPage {
       key: 'status',
       label: 'Status',
       kind: 'select',
-      options: [
-        { value: 'Created', label: 'Packed, not booked' },
-        { value: 'Booked', label: 'Booked' },
-        { value: 'PickedUp', label: 'Picked up' },
-        { value: 'InTransit', label: 'In transit' },
-        { value: 'OutForDelivery', label: 'Out for delivery' },
-        { value: 'Delivered', label: 'Delivered' },
-        { value: 'Failed', label: 'Delivery failed' },
-        { value: 'Cancelled', label: 'Cancelled' },
-      ],
+      options: statusFilterOptions(SHIPMENT_STATUS_VOCAB),
     },
   ];
 
   protected readonly bulkActions = computed(() => [
     {
       key: 'manifest',
-      label: 'Create a handover manifest',
+      label: 'Create a pickup sheet',
       disabledReason: this.busy() ? 'Something else is still running.' : null,
     },
   ]);
@@ -622,6 +615,18 @@ export class ShipmentsPage {
 
   protected when(value: string | null): string {
     return tableDateTime(value) || '—';
+  }
+
+  protected tone(status: string) {
+    return toneFor(status);
+  }
+
+  protected statusLabelFor(status: string): string {
+    return statusLabel(SHIPMENT_STATUS_VOCAB, status);
+  }
+
+  protected statusTooltip(status: string): string {
+    return SHIPMENT_STATUS_VOCAB[status]?.tooltip ?? '';
   }
 
   protected applyFilters(values: FilterValues): void {

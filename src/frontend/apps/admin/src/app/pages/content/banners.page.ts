@@ -26,7 +26,7 @@ import { ImageUrls, ToastService, formField, formGroup, required } from '@klarah
 import { describeError, fieldErrors } from '../../core/describe-error';
 import { tableDateTime } from '../../core/format';
 import { MediaPicker } from '../catalog/media-picker';
-import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
+import { BANNER_AUDIENCES, BANNER_PLACEMENTS, VISIBLE_BANNER_PLACEMENTS } from './content-vocabulary';
 
 /**
  * Banners — the promotional furniture, on its own timetable.
@@ -106,7 +106,12 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
 
       <ng-template khCell="name" let-row>
         <button type="button" class="link" (click)="startEdit(row)">{{ row.name }}</button>
-        <span class="note">{{ placementLabel(row.placement) }}</span>
+        <span class="note">
+          {{ placementLabel(row.placement) }}
+          @if (!placementRenders(row.placement)) {
+            · <span class="warning">Not shown on the store yet</span>
+          }
+        </span>
       </ng-template>
 
       <ng-template khCell="state" let-row>
@@ -170,11 +175,18 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
               [value]="placement()"
               (change)="placement.set($any($event.target).value)"
             >
-              @for (choice of placements; track choice.value) {
+              @for (choice of pickerPlacements(); track choice.value) {
                 <option [value]="choice.value">{{ choice.label }}</option>
               }
             </select>
           </kh-field>
+
+          @if (!placementRenders(placement())) {
+            <kh-alert tone="warning" heading="Not shown on the store yet">
+              This placement isn't drawn anywhere on the storefront today. The banner will save, but
+              shoppers won't see it until that part of the store is built.
+            </kh-alert>
+          }
 
           <!-- The announcement bar is words and every other placement is a picture, and the API
                refuses the other combination — so the form shows one or the other, not both. -->
@@ -397,6 +409,11 @@ import { BANNER_AUDIENCES, BANNER_PLACEMENTS } from './content-vocabulary';
       font-size: var(--text-xs);
     }
 
+    .warning {
+      color: var(--color-warning-text, var(--color-text-muted));
+      font-weight: var(--weight-medium);
+    }
+
     /* Two fields side by side — one row here is a pair of \`datetime-local\` inputs, each with a
        large browser-drawn intrinsic minimum width. Wraps to one per line rather than overflowing a
        360px screen. */
@@ -487,6 +504,24 @@ export class BannersPage {
   protected readonly placementHint = computed(
     () => this.placements.find((choice) => choice.value === this.placement())?.hint ?? '',
   );
+
+  /**
+   * The picker's own options: the placements the storefront actually draws, plus whatever the
+   * banner being edited is already set to — so switching to "Edit" never shows an empty selection
+   * for a banner saved against a placement that predates this list being trimmed.
+   */
+  protected readonly pickerPlacements = computed(() => {
+    const current = this.placement();
+    if (VISIBLE_BANNER_PLACEMENTS.some((choice) => choice.value === current)) {
+      return VISIBLE_BANNER_PLACEMENTS;
+    }
+    const existing = this.placements.find((choice) => choice.value === current);
+    return existing ? [...VISIBLE_BANNER_PLACEMENTS, existing] : VISIBLE_BANNER_PLACEMENTS;
+  });
+
+  protected placementRenders(value: string): boolean {
+    return this.placements.find((choice) => choice.value === value)?.rendered ?? false;
+  }
 
   /** The announcement bar is words, not a picture; the form shows one or the other. */
   protected readonly isAnnouncement = computed(() => this.placement() === 'AnnouncementBar');

@@ -75,7 +75,7 @@ const STAGES: readonly StepperStep[] = [
       <kh-skeleton height="20rem" />
     } @else if (vendor(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       <kh-stepper [steps]="stages" [active]="stage()" />

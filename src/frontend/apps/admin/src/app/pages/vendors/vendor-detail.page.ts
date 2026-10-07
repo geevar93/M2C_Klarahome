@@ -24,7 +24,7 @@ import { BankAccountsPanel } from './bank-accounts.panel';
 import { KycPanel } from './kyc.panel';
 import { PickupLocationsPanel } from './pickup-locations.panel';
 import { ServiceableRegionsPanel } from './serviceable-regions.panel';
-import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-vocabulary';
+import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition, readableBlocker } from './vendor-vocabulary';
 
 /**
  * One seller, as the platform sees them.
@@ -99,7 +99,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
       <kh-skeleton height="24rem" />
     } @else if (vendor(); as current) {
       @if (actionError(); as message) {
-        <kh-alert tone="danger" heading="That did not take">{{ message }}</kh-alert>
+        <kh-alert tone="danger" heading="Something went wrong">{{ message }}</kh-alert>
       }
 
       @if (readiness(); as state) {
@@ -111,7 +111,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
           <kh-alert tone="warning" heading="Not ready to trade yet">
             <ul>
               @for (blocker of state.blockers; track blocker) {
-                <li>{{ blocker }}</li>
+                <li>{{ readable(blocker) }}</li>
               }
             </ul>
           </kh-alert>
@@ -120,7 +120,12 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
 
       <div class="layout">
         <div class="column">
-          <kh-kyc-panel [vendorId]="id" [canSubmit]="false" [canVerify]="canVerify()" (changed)="loadReadiness()" />
+          <kh-kyc-panel
+            [vendorId]="id"
+            [canSubmit]="false"
+            [canVerify]="canVerify()"
+            (changed)="loadReadiness()"
+          />
 
           <kh-bank-accounts-panel
             [vendorId]="id"
@@ -131,11 +136,15 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
 
           <kh-pickup-locations-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
 
-          <kh-serviceable-regions-panel [vendorId]="id" [canManage]="canManage()" (changed)="loadReadiness()" />
+          <kh-serviceable-regions-panel
+            [vendorId]="id"
+            [canManage]="canManage()"
+            (changed)="loadReadiness()"
+          />
         </div>
 
         <div class="column">
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>The legal record</h2>
             <dl>
               <dt>Code</dt>
@@ -154,7 +163,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
               />
             </kh-field>
 
-            <kh-field label="Constitution" for="vendor-business-type">
+            <kh-field label="Business type" for="vendor-business-type">
               <select
                 khControl
                 id="vendor-business-type"
@@ -261,7 +270,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
             }
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Trading terms</h2>
             <dl>
               <dt>Dispatch promise</dt>
@@ -287,7 +296,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
             </dl>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>Commission</h2>
             <p class="hint">
               What the platform charges on each sale. Left on the default, the store's default plan applies.
@@ -319,7 +328,7 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
             </button>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>People</h2>
             <p class="hint">Who may sign in as this seller. Add a user under Settings first.</p>
 
@@ -432,13 +441,6 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
       gap: var(--space-4);
     }
 
-    .panel {
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
-    }
-
     h2 {
       margin: 0 0 var(--space-3);
       font-size: var(--text-lg);
@@ -520,6 +522,12 @@ import { BUSINESS_TYPES, VENDOR_TRANSITIONS, VendorTransition } from './vendor-v
     .add-staff > kh-field {
       flex: 1 1 9rem;
     }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .add-staff > [khButton] {
+      margin-block-end: var(--space-4);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -561,6 +569,7 @@ export class VendorDetailPage {
 
   protected readonly vendor = signal<VendorResponse | null>(null);
   protected readonly readiness = signal<VendorReadiness | null>(null);
+  protected readonly readable = readableBlocker;
   protected readonly plans = signal<readonly CommissionPlanResponse[]>([]);
   protected readonly staff = signal<readonly VendorStaffResponse[]>([]);
 

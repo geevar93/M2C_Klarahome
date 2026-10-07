@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   Directive,
+  ElementRef,
   TemplateRef,
   computed,
+  contentChild,
   contentChildren,
   effect,
   inject,
@@ -15,6 +17,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Badge, Button, Checkbox, Icon, Skeleton } from '@klarahome/ui-primitives';
 import { BrowserStorage } from '@klarahome/util';
 
+import { FilterBar } from './filter-bar';
+import { humanise } from './status-badge';
 import { BulkAction, DataTableColumn, TablePage, TableSort } from './admin.model';
 
 /**
@@ -80,6 +84,9 @@ export class CellTemplate<TRow = any> {
  *    up deleting something else.
  *  - **Sorting is offered only where the API accepts it** (`DataTableColumn.sortKey`), because a
  *    header that produces a 400 is worse than a header that does not move.
+ *  - **Below 768px the rows are cards**, drawn from the same cells (see the styles). The first
+ *    column is the card's heading and the rest are captioned by their column label, so every
+ *    list in the back office reads on a phone without a card template per screen.
  */
 @Component({
   selector: 'kh-data-table',
@@ -91,51 +98,64 @@ export class CellTemplate<TRow = any> {
       </div>
 
       <div class="toolbar-actions">
-        @if (exportMode() !== 'none') {
-          <button khButton type="button" size="sm" (click)="requestExport()">
-            <kh-icon name="download" size="sm" />
-            Export CSV
-          </button>
-        }
+        <ng-content select="[slot=actions]" />
 
-        @if (configurable()) {
-          <div class="chooser">
+        @if (exportMode() !== 'none' || configurable()) {
+          <!-- Export and the column chooser used to be two worded buttons beside the filters,
+               which on a phone was a third row of chrome above the first row of data. They are
+               one overflow menu now: tools, not tasks. A popover rather than a dialog, because it
+               changes what is on screen behind it, and trapping focus away from the table while
+               choosing that table's columns is the wrong model. Escape closes it. -->
+          <div class="tools">
             <button
               khButton
               type="button"
               size="sm"
-              [attr.aria-expanded]="chooserOpen()"
+              [iconOnly]="true"
+              aria-label="Table tools"
+              [attr.aria-expanded]="toolsOpen()"
               aria-haspopup="true"
-              (click)="chooserOpen.set(!chooserOpen())"
+              (click)="toolsOpen.set(!toolsOpen())"
             >
-              <kh-icon name="filter" size="sm" />
-              Columns
+              <kh-icon name="more" size="sm" />
             </button>
 
-            @if (chooserOpen()) {
-              <!-- A popover rather than a dialog: it changes what is on screen behind it, and
-                   trapping focus away from the table while choosing that table's columns is the
-                   wrong model. Escape closes it. -->
+            @if (toolsOpen()) {
               <div
-                class="chooser-panel"
+                class="tools-panel"
                 role="group"
-                aria-label="Choose columns"
-                (keydown)="onChooserKeydown($event)"
+                aria-label="Table tools"
+                (keydown)="onToolsKeydown($event)"
               >
-                @for (column of columns(); track column.key) {
-                  <kh-checkbox
-                    [label]="column.label"
-                    [checked]="isVisible(column.key)"
-                    [inputId]="'col-' + instanceId + '-' + column.key"
-                    (checkedChange)="toggleColumn(column.key, $event)"
-                  />
+                @if (exportMode() !== 'none') {
+                  <button
+                    khButton
+                    type="button"
+                    size="sm"
+                    variant="tertiary"
+                    class="tool"
+                    (click)="requestExport()"
+                  >
+                    <kh-icon name="download" size="sm" />
+                    Export CSV
+                  </button>
+                }
+
+                @if (configurable()) {
+                  <p class="tools-heading">Columns</p>
+                  @for (column of columns(); track column.key) {
+                    <kh-checkbox
+                      [label]="column.label"
+                      [checked]="isVisible(column.key)"
+                      [inputId]="'col-' + instanceId + '-' + column.key"
+                      (checkedChange)="toggleColumn(column.key, $event)"
+                    />
+                  }
                 }
               </div>
             }
           </div>
         }
-
-        <ng-content select="[slot=actions]" />
       </div>
     </div>
 
@@ -187,6 +207,7 @@ export class CellTemplate<TRow = any> {
                 scope="col"
                 [style.width]="column.width"
                 [class.numeric]="isNumeric(column)"
+                [class.sticky-end]="isSticky(column)"
                 [attr.aria-sort]="ariaSort(column)"
               >
                 @if (column.sortKey; as sortKey) {
@@ -230,17 +251,23 @@ export class CellTemplate<TRow = any> {
                   </td>
                 }
 
-                @for (column of visibleColumns(); track column.key) {
-                  <td [class.numeric]="isNumeric(column)">
+                @for (column of visibleColumns(); track column.key; let first = $first) {
+                  <td
+                    [class.numeric]="isNumeric(column)"
+                    [class.sticky-end]="isSticky(column)"
+                    [class.title]="first"
+                    [class.card-hidden]="!first && hasCardMap() && !column.card"
+                    [attr.data-label]="first ? null : column.label"
+                  >
                     @if (cellTemplate(column.key); as template) {
                       <ng-container
                         [ngTemplateOutlet]="template"
                         [ngTemplateOutletContext]="{ $implicit: row, index: index }"
                       />
                     } @else if (column.kind === 'badge') {
-                      <kh-badge [tone]="column.tone ? column.tone(row) : 'neutral'">{{
-                        text(column, row)
-                      }}</kh-badge>
+                      <kh-badge [tone]="column.tone ? column.tone(row) : 'neutral'"
+                        ><span class="dot" aria-hidden="true"></span>{{ badgeText(column, row) }}</kh-badge
+                      >
                     } @else {
                       {{ text(column, row) }}
                     }
@@ -250,10 +277,11 @@ export class CellTemplate<TRow = any> {
             } @empty {
               <tr>
                 <td class="empty" [attr.colspan]="columnCount()">
-                  {{ emptyMessage() }}
-                  @if (filtered()) {
-                    <button khButton type="button" size="sm" variant="tertiary" (click)="filtersCleared.emit()">
-                      Clear the filters
+                  <span class="empty-glyph" aria-hidden="true"><kh-icon name="search" /></span>
+                  <span class="empty-message">{{ emptyText() }}</span>
+                  @if (canClear()) {
+                    <button khButton type="button" size="sm" variant="secondary" (click)="clearFilters()">
+                      {{ clearLabel() }}
                     </button>
                   }
                 </td>
@@ -264,77 +292,101 @@ export class CellTemplate<TRow = any> {
       </table>
     </div>
 
-    <div class="pager">
-      <p class="count">
-        {{ rows().length }} shown
-        @if (total(); as rowCount) {
-          <span class="muted">· about {{ formatCount(rowCount) }} in total</span>
-        }
-      </p>
+    @if (rows().length > 0 || hasPrevious() || hasNext()) {
+      <div class="pager">
+        <p class="count">
+          {{ rows().length }} shown
+          @if (total(); as rowCount) {
+            <span class="muted">· about {{ formatCount(rowCount) }} in total</span>
+          }
+        </p>
 
-      <div class="pager-controls">
-        <button
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="!hasPrevious() || loading()"
-          (click)="previousPage.emit()"
-        >
-          <kh-icon name="chevron-left" size="sm" />
-          Previous
-        </button>
-        <button
-          khButton
-          type="button"
-          size="sm"
-          [disabled]="!hasNext() || loading()"
-          (click)="nextPage.emit()"
-        >
-          Next
-          <kh-icon name="chevron-right" size="sm" />
-        </button>
+        <div class="pager-controls">
+          <button
+            khButton
+            type="button"
+            size="sm"
+            [disabled]="!hasPrevious() || loading()"
+            (click)="previousPage.emit()"
+          >
+            <kh-icon name="chevron-left" size="sm" />
+            Previous
+          </button>
+          <button
+            khButton
+            type="button"
+            size="sm"
+            [disabled]="!hasNext() || loading()"
+            (click)="nextPage.emit()"
+          >
+            Next
+            <kh-icon name="chevron-right" size="sm" />
+          </button>
+        </div>
       </div>
-    </div>
+    }
   `,
   styles: `
     :host {
       display: block;
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
       background: var(--color-surface-raised);
+      box-shadow: var(--shadow-card);
     }
 
+    /* Bottom-aligned, like the filter bar inside it: its fields carry a label above the control,
+       so centring would float Export and Columns half a label higher than the inputs beside them. */
     .toolbar {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-3);
-      align-items: center;
+      gap: var(--space-2);
+      /* Top-aligned on a phone so the tools button shares the search box's line rather than
+         dropping under the chips; bottom-aligned from \`md\`, where the fields beside it carry a
+         label above the control and centring would float the button half a label too high. */
+      align-items: flex-start;
       justify-content: space-between;
       padding: var(--space-3);
       border-block-end: 1px solid var(--color-border);
     }
 
     .toolbar-lead {
-      flex: 1 1 18rem;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
     .toolbar-actions {
       display: flex;
+      flex: none;
       flex-wrap: wrap;
       gap: var(--space-2);
       align-items: center;
+      justify-content: flex-end;
     }
 
-    .chooser {
+    @media (min-width: 768px) {
+      .toolbar {
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        align-items: flex-end;
+      }
+
+      .toolbar-lead {
+        flex: 1 1 18rem;
+      }
+    }
+
+    .tools {
       position: relative;
     }
 
-    .chooser-panel {
+    .tools-panel {
       position: absolute;
       inset-inline-end: 0;
       inset-block-start: calc(100% + var(--space-1));
       z-index: var(--z-header);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
       min-width: 14rem;
       max-height: 20rem;
       overflow-y: auto;
@@ -345,6 +397,19 @@ export class CellTemplate<TRow = any> {
       box-shadow: var(--shadow-md);
     }
 
+    .tool {
+      justify-content: flex-start;
+    }
+
+    .tools-heading {
+      margin: var(--space-2) 0 var(--space-1);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-muted);
+    }
+
     .bulk-bar {
       display: flex;
       flex-wrap: wrap;
@@ -352,7 +417,8 @@ export class CellTemplate<TRow = any> {
       align-items: center;
       padding: var(--space-2) var(--space-3);
       background: var(--color-primary-subtle);
-      border-block-end: 1px solid var(--color-border);
+      border-block-end: 1px solid var(--color-primary);
+      color: var(--color-text);
     }
 
     .bulk-count {
@@ -360,48 +426,84 @@ export class CellTemplate<TRow = any> {
       font-weight: var(--weight-medium);
     }
 
-    /* The table is the one element in the admin allowed to scroll sideways: forty columns of
-       stock do not fold onto a tablet, and a squeezed table is unreadable long before it is
-       unusable. */
+    /* ---- Rows as cards (the base state), a table from 768px (admin UX phase 4) ----------------
+       A row of nine columns does not fold onto a phone; it scrolled sideways, and a swipe that
+       meant "next row" caught the table instead. Below \`md\` each row is a card: the first
+       column is its heading, and every other cell is a caption/value pair, the caption read from
+       the column's label. Nothing about the rows changes — same cells, same templates — only how
+       they are laid out, so a page needs no card template of its own. Sorting lives in the header
+       and the header is hidden here; a phone user sorts on the desktop, or filters. */
     .scroll {
-      overflow: auto;
-      max-height: 70vh;
+      display: block;
+      padding: var(--space-3);
     }
 
     table {
+      display: block;
       width: 100%;
       border-collapse: collapse;
       font-size: var(--text-sm);
     }
 
-    th,
-    td {
-      padding: var(--space-2) var(--space-3);
-      text-align: start;
-      white-space: nowrap;
-      border-block-end: 1px solid var(--color-border);
+    thead {
+      display: none;
     }
 
-    thead th {
-      position: sticky;
-      inset-block-start: 0;
-      z-index: 1;
-      background: var(--color-surface);
-      font-weight: var(--weight-medium);
-      color: var(--color-text-muted);
+    tbody,
+    tr {
+      display: block;
+    }
+
+    tbody tr {
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-raised);
+    }
+
+    tbody tr + tr {
+      margin-block-start: var(--space-2);
     }
 
     tbody tr.selected {
       background: var(--color-primary-subtle);
     }
 
-    .numeric {
+    td {
+      display: flex;
+      gap: var(--space-3);
+      align-items: baseline;
+      justify-content: space-between;
+      padding: var(--space-1) 0;
       text-align: end;
+      white-space: normal;
+    }
+
+    td[data-label]::before {
+      content: attr(data-label);
+      flex: none;
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
+    /* Left off the phone card (\`DataTableColumn.card\`); a cell again from \`md\`, below. */
+    td.card-hidden {
+      display: none;
+    }
+
+    td.title {
+      display: block;
+      padding-block-start: var(--space-2);
+      font-weight: var(--weight-medium);
+      text-align: start;
+    }
+
+    .numeric {
       font-variant-numeric: tabular-nums;
     }
 
     .select-cell {
-      width: var(--touch-target-min);
+      justify-content: flex-start;
     }
 
     .select-cell input {
@@ -409,6 +511,133 @@ export class CellTemplate<TRow = any> {
       height: 1.125rem;
       accent-color: var(--color-primary);
       cursor: pointer;
+    }
+
+    .select-cell::after {
+      content: 'Select';
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+    }
+
+    /* The table is the one element in the admin allowed to scroll sideways: forty columns of
+       stock do not fold onto a tablet, and a squeezed table is unreadable long before it is
+       unusable. Sideways only. A table capped at a viewport height scrolls inside a page that
+       also scrolls, and two scrollbars stacked on each other is the most common "the page feels
+       broken" report there is. The page is already paged, so letting the rows run the page's own
+       length costs nothing. */
+    @media (min-width: 768px) {
+      .scroll {
+        padding: 0;
+        overflow-x: auto;
+      }
+
+      table {
+        display: table;
+      }
+
+      thead {
+        display: table-header-group;
+      }
+
+      tbody {
+        display: table-row-group;
+      }
+
+      tr,
+      tbody tr {
+        display: table-row;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+      }
+
+      tbody tr + tr {
+        margin-block-start: 0;
+      }
+
+      tbody tr.selected {
+        background: var(--color-primary-subtle);
+      }
+
+      th,
+      td,
+      td.title,
+      td.card-hidden {
+        display: table-cell;
+        padding: var(--space-2) var(--space-3);
+        text-align: start;
+        white-space: nowrap;
+        font-weight: inherit;
+        border-block-end: 1px solid var(--color-border);
+      }
+
+      td[data-label]::before,
+      .select-cell::after {
+        content: none;
+      }
+
+      thead th {
+        position: sticky;
+        inset-block-start: 0;
+        z-index: 1;
+        background: var(--color-surface);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+
+      tbody tr:last-child td {
+        border-block-end: 0;
+      }
+
+      tbody tr:hover:not(.selected) {
+        background: var(--color-surface);
+      }
+
+      /* The pinned end column (row actions). Opaque so the cells scrolling under it do not show
+         through, and it follows the row's own hover and selected tints. */
+      .sticky-end {
+        position: sticky;
+        inset-inline-end: 0;
+        background: var(--color-surface-raised);
+        box-shadow: inset 1px 0 0 var(--color-border);
+      }
+
+      thead th.sticky-end {
+        z-index: 2;
+        background: var(--color-surface);
+      }
+
+      tbody tr:hover:not(.selected) .sticky-end {
+        background: var(--color-surface);
+      }
+
+      tbody tr.selected .sticky-end {
+        background: var(--color-primary-subtle);
+      }
+
+      /* td.card-hidden and td.title set text-align: start above and would win over a bare
+         .numeric, leaving a figure left-aligned under a right-aligned header. */
+      th.numeric,
+      td.numeric,
+      td.card-hidden.numeric {
+        text-align: end;
+      }
+
+      .select-cell {
+        width: var(--touch-target-min);
+      }
+    }
+
+    .dot {
+      flex: none;
+      width: 0.375rem;
+      height: 0.375rem;
+      border-radius: var(--radius-full);
+      background: currentColor;
     }
 
     .sort {
@@ -423,11 +652,44 @@ export class CellTemplate<TRow = any> {
       cursor: pointer;
     }
 
-    .empty {
+    td.empty {
+      display: block;
       padding: var(--space-10) var(--space-3);
       text-align: center;
       color: var(--color-text-muted);
       white-space: normal;
+    }
+
+    /* A designed empty state, not a sentence: a glyph, the message, and the way out. */
+    .empty-glyph {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 3rem;
+      height: 3rem;
+      margin-block-end: var(--space-3);
+      border-radius: var(--radius-full);
+      background: var(--color-surface);
+      color: var(--color-text-muted);
+    }
+
+    .empty-message {
+      display: block;
+      margin-block-end: var(--space-2);
+      color: var(--color-text);
+      font-weight: var(--weight-medium);
+    }
+
+    /* The empty row is a card with no border: a bordered box saying "nothing" is a box. */
+    tbody tr:has(> td.empty) {
+      border: 0;
+      background: none;
+    }
+
+    @media (min-width: 768px) {
+      td.empty {
+        display: table-cell;
+      }
     }
 
     .pager {
@@ -453,6 +715,9 @@ export class CellTemplate<TRow = any> {
       gap: var(--space-2);
     }
   `,
+  host: {
+    '(document:click)': 'onDocumentClick($event)',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DataTable<TRow> {
@@ -461,6 +726,14 @@ export class DataTable<TRow> {
   }
 
   private readonly storage = inject(BrowserStorage);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /** A click anywhere outside the tools menu closes it — a popover that only Escape closes is a trap for a mouse. */
+  protected onDocumentClick(event: Event): void {
+    if (!this.toolsOpen()) return;
+    const tools = this.host.nativeElement.querySelector('.tools');
+    if (tools && !tools.contains(event.target as Node)) this.toolsOpen.set(false);
+  }
 
   private static sequence = 0;
   /** Distinguishes this table's control ids from another table's on the same screen. */
@@ -479,6 +752,10 @@ export class DataTable<TRow> {
   readonly sort = input<TableSort | null>(null);
   readonly loading = input(false);
   readonly emptyMessage = input('Nothing matches these filters.');
+  /** What an empty table says when nothing is filtering it; derived from `emptyMessage` when unset. */
+  /** The label of the reset offered by an empty, filtered table — "Show all" where a default filter is on. */
+  readonly clearLabel = input('Clear filters');
+  readonly emptyUnfilteredMessage = input<string | null>(null);
   /**
    * Whether a filter is narrowing the list. With it, an empty table offers to clear the filters,
    * because "nothing matches" and "there is nothing" call for different next moves and the table
@@ -515,13 +792,47 @@ export class DataTable<TRow> {
   readonly exportRequested = output<void>();
 
   private readonly cellTemplates = contentChildren(CellTemplate);
+  /** The filter bar projected into the `filters` slot, if any: it knows whether the list is narrowed, and how to widen it. */
+  private readonly filterBar = contentChild(FilterBar);
+  /**
+   * Whether an empty table can offer a way out: a page said so with `filtered`, or the projected
+   * filter bar has a search or filter on. Every list gets the reset without wiring it.
+   */
+  protected readonly canClear = computed(() => this.filtered() || this.filterBar()?.isFiltered() === true);
   private readonly selection = signal<ReadonlySet<string>>(new Set());
   private readonly hidden = signal<ReadonlySet<string>>(new Set());
-  protected readonly chooserOpen = signal(false);
+  protected readonly toolsOpen = signal(false);
+
+  protected isSticky(column: DataTableColumn<TRow>): boolean {
+    return column.sticky === 'end' || column.key === 'actions';
+  }
+
+  /** Resets the projected filter bar (which tells the page), else asks the page to clear. */
+  protected clearFilters(): void {
+    const bar = this.filterBar();
+    if (bar) bar.clearAll();
+    else this.filtersCleared.emit();
+  }
 
   protected readonly visibleColumns = computed(() =>
     this.columns().filter((column) => !this.hidden().has(column.key)),
   );
+  /** Whether this table chose which columns its phone cards carry — see `DataTableColumn.card`. */
+  protected readonly hasCardMap = computed(() => this.columns().some((column) => column.card));
+  /**
+   * The empty-state sentence. A page words it for the filtered case ("No banner matches these
+   * filters."), which is a lie about a list nobody has filtered: with nothing narrowing it, the
+   * honest message is that there are none yet. A page can say it itself with
+   * `emptyUnfilteredMessage`; otherwise the "No X matches…" wording is turned into "No Xs yet.".
+   */
+  protected readonly emptyText = computed(() => {
+    const message = this.emptyMessage();
+    if (this.canClear()) return message;
+    const explicit = this.emptyUnfilteredMessage();
+    if (explicit) return explicit;
+    const match = /^No (.+?) matche?s? (?:these filters|this search)\.$/.exec(message);
+    return match ? `No ${pluralise(match[1])} yet.` : message;
+  });
   protected readonly columnCount = computed(() => this.visibleColumns().length + (this.selectable() ? 1 : 0));
   protected readonly selectedCount = computed(() => this.selection().size);
   protected readonly selectedIds = computed(() => [...this.selection()]);
@@ -542,22 +853,17 @@ export class DataTable<TRow> {
   );
 
   constructor() {
-    // The remembered column choice, read per storage key. Read in an effect rather than in the
-    // constructor, which is what lets the key be an input at all.
-    effect(() => {
-      const key = this.storageKey();
-      if (!key) return;
-      this.hidden.set(new Set(this.storage.getJson<string[]>(`kh.columns.${key}`, [])));
-    });
-
-    // A column marked `hiddenByDefault` starts hidden — but only where nothing is remembered,
-    // otherwise the remembered choice above would be overwritten on every render.
+    // The columns that start hidden: remembered per storage key where the user has chosen, else the
+    // `hiddenByDefault` ones. Read in an effect rather than in the constructor, which is what lets
+    // the key be an input at all. (The defaults used to apply only to a table with no storage key,
+    // so every persisted list showed the columns that were meant to start off.)
     effect(() => {
       const defaults = this.columns()
         .filter((column) => column.hiddenByDefault)
         .map((column) => column.key);
-      if (defaults.length === 0 || this.storageKey()) return;
-      this.hidden.set(new Set(defaults));
+      const key = this.storageKey();
+      const remembered = key ? this.storage.getJson<string[] | null>(`kh.columns.${key}`, null) : null;
+      this.hidden.set(new Set(remembered ?? defaults));
     });
 
     // Rows changing means a new filter, a new page or a refresh. Anything still selected refers
@@ -583,10 +889,10 @@ export class DataTable<TRow> {
     if (storageKey) this.storage.setJson(`kh.columns.${storageKey}`, [...next]);
   }
 
-  protected onChooserKeydown(event: KeyboardEvent): void {
+  protected onToolsKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.stopPropagation();
-      this.chooserOpen.set(false);
+      this.toolsOpen.set(false);
     }
   }
 
@@ -650,6 +956,12 @@ export class DataTable<TRow> {
     return column.numeric ?? column.kind === 'number';
   }
 
+  /** A raw enum name (`UnderReview`) reads as words; text a page already worded is left alone. */
+  protected badgeText(column: DataTableColumn<TRow>, row: TRow): string {
+    const value = this.text(column, row);
+    return /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(value) ? humanise(value) : value;
+  }
+
   protected text(column: DataTableColumn<TRow>, row: TRow): string {
     const value = column.value?.(row);
     // An em dash rather than an empty cell: a blank says nothing about whether the value is
@@ -662,6 +974,7 @@ export class DataTable<TRow> {
   }
 
   protected requestExport(): void {
+    this.toolsOpen.set(false);
     if (this.exportMode() === 'server') {
       this.exportRequested.emit();
       return;
@@ -699,6 +1012,14 @@ export class DataTable<TRow> {
     link.click();
     URL.revokeObjectURL(url);
   }
+}
+
+/** Good enough for the nouns the back office lists; "stock" and "messages" do not take an s. */
+function pluralise(noun: string): string {
+  if (/^stock$/i.test(noun)) return noun;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  if (/(s|x|ch|sh)$/i.test(noun)) return `${noun}es`;
+  return `${noun}s`;
 }
 
 function quoteCsv(value: string): string {

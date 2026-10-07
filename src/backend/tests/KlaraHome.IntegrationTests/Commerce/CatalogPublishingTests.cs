@@ -14,6 +14,41 @@ namespace KlaraHome.IntegrationTests.Commerce;
 public sealed class CatalogPublishingTests(KlaraHomeSchemaFixture fixture) : CommerceTestBase(fixture)
 {
     /// <summary>
+    /// A product that was created and published has a history to show: the audit trail the admin's
+    /// "History" panel reads (<c>entityType=Product&amp;entityId=...</c>) carries both facts, each
+    /// with the actor named.
+    /// </summary>
+    [Fact]
+    public async Task A_created_and_published_product_has_both_facts_in_its_history()
+    {
+        SkipWithoutDocker();
+
+        var admin = await SignedInAdministratorAsync();
+        var catalogue = new CatalogScenario(admin, Cancellation);
+        var taxonomy = await catalogue.TaxonomyAsync();
+
+        var product = await catalogue.DraftAsync(taxonomy);
+
+        await ReadAsync(await catalogue.ActivateVariantAsync(product.VariantId));
+        await catalogue.PublishAsync(product.Id);
+
+        var history = await ReadAsync(await admin.GetAsync(
+            new Uri($"/api/v1/admin/audit-logs?entityType=Product&entityId={product.Id}&size=20", UriKind.Relative),
+            Cancellation));
+
+        var entries = history.GetProperty("items").EnumerateArray().ToList();
+        var actions = entries.Select(entry => entry.GetProperty("action").GetString()).ToList();
+
+        Assert.Contains("catalog.product.created", actions);
+        Assert.Contains(actions, action => action is not null && action != "catalog.product.created");
+        Assert.All(entries, entry =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(entry.GetProperty("actorDisplay").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(entry.GetProperty("targetLabel").GetString()));
+        });
+    }
+
+    /// <summary>
     /// The step's full acceptance criterion, end to end: "a variant with attributes, media and two
     /// competing vendor offers can be created, moderated, published and retrieved".
     /// </summary>

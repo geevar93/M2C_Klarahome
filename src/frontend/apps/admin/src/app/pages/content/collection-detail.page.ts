@@ -167,14 +167,14 @@ interface ConditionDraft {
             </ng-template>
           </kh-data-table>
 
-          <section class="panel" *khHasPermission="'content.content.manage'">
+          <section class="panel kh-panel" *khHasPermission="'content.content.manage'">
             <h3>Pin a product</h3>
             <p class="hint">A pinned product stays whatever the rule decides.</p>
             <div class="row">
               <kh-entity-picker
                 label="Product"
                 inputId="pin-product"
-                hint="Search by name or SKU, or paste a product id."
+                hint="Search by product name or SKU."
                 [search]="productSearch"
                 (chose)="pinProductId.set($event?.id ?? '')"
               />
@@ -186,7 +186,7 @@ interface ConditionDraft {
         </section>
 
         <aside>
-          <section class="panel" *khHasPermission="'content.content.manage'">
+          <section class="panel kh-panel" *khHasPermission="'content.content.manage'">
             <h2>The rule</h2>
             <p class="hint">
               Conditions are about facts the catalogue already holds. Leaving the rule off keeps the
@@ -327,7 +327,7 @@ interface ConditionDraft {
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel kh-panel">
             <h2>
               The collection
               @if (detailsDirty()) {
@@ -496,10 +496,6 @@ interface ConditionDraft {
 
     .panel {
       margin-block-start: var(--space-4);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-raised);
     }
 
     aside .panel {
@@ -522,6 +518,12 @@ interface ConditionDraft {
 
     .row > kh-field {
       flex: 1 1 8rem;
+    }
+
+    /* Bottom-aligned beside a kh-field, which keeps its bottom margin: the same margin on the
+       button lines its edge up with the input's. */
+    .row > [khButton] {
+      margin-block-end: var(--space-4);
     }
 
     .actions {

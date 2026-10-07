@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService, TwoFactorSetupResponse } from '@klarahome/data-access-auth';
 import { Alert, Button, Control, Field } from '@klarahome/ui-primitives';
@@ -53,9 +53,7 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       <h1>Klara Home back office</h1>
 
       @if (step() === 'set-password') {
-        <p class="lead">
-          This password was issued by an administrator. Set your own before signing in.
-        </p>
+        <p class="lead">This password was issued by an administrator. Set your own before signing in.</p>
 
         <form (submit)="submitNewPassword($event)" novalidate>
           @if (failure(); as message) {
@@ -150,13 +148,22 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
             <input
               khControl
               id="login-password"
-              type="password"
+              [type]="showPassword() ? 'text' : 'password'"
               autocomplete="current-password"
               [khInvalid]="!!form.fields.password.error()"
               [value]="form.fields.password.value()"
               (input)="form.fields.password.set($any($event.target).value)"
               (touched)="form.fields.password.markTouched()"
             />
+            <button
+              type="button"
+              class="linkish reveal"
+              [attr.aria-pressed]="showPassword()"
+              aria-controls="login-password"
+              (click)="showPassword.set(!showPassword())"
+            >
+              {{ showPassword() ? 'Hide password' : 'Show password' }}
+            </button>
           </kh-field>
 
           <button khButton type="submit" variant="primary" [block]="true" [disabled]="busy()">
@@ -233,7 +240,7 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       justify-content: center;
       min-height: 100vh;
       padding: var(--space-4);
-      background: var(--color-surface);
+      background: var(--color-bg);
     }
 
     .pane {
@@ -242,7 +249,9 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       padding: var(--space-6);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
-      background: var(--color-bg);
+      background: var(--color-surface-raised);
+      border-block-start: 3px solid var(--color-primary);
+      box-shadow: var(--shadow-md);
     }
 
     h1 {
@@ -293,6 +302,17 @@ const CHALLENGE_PASSWORD_CHANGE = 'password-change-required';
       text-align: center;
     }
 
+    .reveal {
+      margin-block-start: var(--space-1);
+      font-size: var(--text-sm);
+    }
+
+    @media (pointer: coarse) {
+      .reveal {
+        min-block-size: var(--touch-target-min);
+      }
+    }
+
     .linkish {
       padding: 0;
       border: 0;
@@ -334,6 +354,15 @@ export class LoginPage {
   );
 
   protected readonly step = signal<'password' | 'code' | 'set-password'>('password');
+  protected readonly showPassword = signal(false);
+
+  constructor() {
+    // The code field is the whole of the second step: put the cursor in it rather than leave focus
+    // on a button that no longer exists.
+    effect(() => {
+      if (this.step() === 'code') setTimeout(() => document.getElementById('login-code')?.focus());
+    });
+  }
 
   /**
    * The staged authenticator secret, set only when the second step is an enrolment rather than a
@@ -394,7 +423,9 @@ export class LoginPage {
         // A challenge this screen cannot answer. Saying so is the whole point: falling through to
         // the code box would ask for six digits that cannot satisfy it, and read as a broken login.
         this.challengeToken = null;
-        this.failure.set('This account needs a step this screen does not support yet. Ask an administrator for help.');
+        this.failure.set(
+          'This account needs a step this screen does not support yet. Ask an administrator for help.',
+        );
         return;
       }
 
@@ -447,7 +478,9 @@ export class LoginPage {
         this.challengeToken = null;
         this.setup.set(null);
         this.step.set('password');
-        this.failure.set('This account needs a step this screen does not support yet. Ask an administrator for help.');
+        this.failure.set(
+          'This account needs a step this screen does not support yet. Ask an administrator for help.',
+        );
         return;
       }
 

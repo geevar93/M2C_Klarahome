@@ -127,6 +127,109 @@ hr {
   border: 0;
 }
 
+// ---- Tables as cards -----------------------------------------------------------------------------
+// A hand-written data table that reads as a stack of cards on a phone and as a table from `md`.
+// Each cell names its column in `data-label`, which the card draws as the field's caption; the
+// cell marked `.kh-cards-title` is the card's heading and draws no caption. Mobile-first: the
+// card is the base state and the table is restored at 768px, in keeping with `_breakpoints.scss`.
+// The shared `kh-data-table` has its own copy of this behaviour, because its cells are generated;
+// this class is for the dozen tables that are not.
+.kh-cards {
+  display: block;
+  inline-size: 100%;
+}
+
+.kh-cards thead {
+  display: none;
+}
+
+.kh-cards tbody,
+.kh-cards tr {
+  display: block;
+}
+
+.kh-cards tr {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.kh-cards tr + tr {
+  margin-block-start: var(--space-2);
+}
+
+.kh-cards td {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  white-space: normal;
+}
+
+.kh-cards td[data-label]::before {
+  content: attr(data-label);
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.kh-cards td.kh-cards-title {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.kh-cards td:empty {
+  display: none;
+}
+
+// A cell left off the phone card: the card keeps the heading, the status and one or two figures,
+// and the rest is a table column from `md`. (Same idea as `DataTableColumn.card`.)
+.kh-cards td.kh-cards-extra {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .kh-cards {
+    display: table;
+  }
+
+  .kh-cards thead {
+    display: table-header-group;
+  }
+
+  .kh-cards tbody {
+    display: table-row-group;
+  }
+
+  .kh-cards tr {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .kh-cards tr + tr {
+    margin-block-start: 0;
+  }
+
+  .kh-cards td,
+  .kh-cards td.kh-cards-title,
+  .kh-cards td.kh-cards-extra {
+    display: table-cell;
+    font-weight: inherit;
+  }
+
+  .kh-cards td[data-label]::before {
+    content: none;
+  }
+
+  .kh-cards td:empty {
+    display: table-cell;
+  }
+}
+
 // The skip link — the first thing in the tab order, hidden until it is focused.
 .kh-skip-link {
   position: absolute;
@@ -150,6 +253,18 @@ main:focus {
   outline: none;
 }
 
+// The same applies to the page heading `RouteFocusManager` moves focus to (it adds `tabindex="-1"`
+// so the programmatic focus lands). A heading is not interactive: a 2px ink box around the H1 on
+// every direct landing reads as a bug, not as a focus indicator. Focus still moves there, so a
+// screen reader announces the new page; only the ring goes. Scoped to `main` and `-1` so a real
+// interactive `[tabindex]` element, or a `tabindex="0"` heading someone made focusable on purpose,
+// keeps its ring. `:focus` (not `:focus-visible`) because the ring rule above is `:where()` and
+// zero-specificity, but the browser may match `:focus-visible` after a script-driven focus.
+main :where(h1)[tabindex='-1']:focus,
+main :where(h1)[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
 // ---- Placeholder media -------------------------------------------------------------------------
 // Still a box at a fixed aspect ratio, so layout and CLS behave exactly as they will once real
 // photography lands — but a warm one now, tinted from the ramp rather than grey, because a grey
@@ -158,9 +273,10 @@ main:focus {
   display: grid;
   place-items: center;
   aspect-ratio: 1 / 1;
-  background:
-    linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-sunken) 100%);
-  border: 1px solid var(--color-border);
+  // The sunken surface, flat: a gradient on a tile that stands for "no picture" read as a
+  // decorative panel; a still, quiet well reads as a pending one.
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -244,7 +360,8 @@ main:focus {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  // The admin defines --shadow-card; the storefront does not and keeps its small shadow.
+  box-shadow: var(--shadow-card, var(--shadow-sm));
 }
 
 // A card that is a link or a button in its own right. The lift is `box-shadow` and `border-color`

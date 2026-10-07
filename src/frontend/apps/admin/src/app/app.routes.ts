@@ -46,6 +46,14 @@ export const appRoutes: Route[] = [
 
       ...adminRoutes(),
 
+      // The landing page behind the `More` door. Not a destination in `navigation.ts`, because it
+      // is not a screen with a guard of its own — it is the list of the screens behind it, drawn
+      // from the same declaration, and a session with none of them sees an honest empty page.
+      {
+        path: 'more',
+        loadComponent: () => import('./pages/more.page').then((m) => m.MorePage),
+        data: { title: 'More' },
+      },
       {
         path: 'profile',
         loadComponent: () => import('./pages/profile.page').then((m) => m.ProfilePage),

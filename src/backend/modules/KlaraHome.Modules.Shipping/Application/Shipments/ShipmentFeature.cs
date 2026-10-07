@@ -399,8 +399,9 @@ internal sealed class GetPickListQueryHandler(
 /// <summary>Puts units into a parcel.</summary>
 /// <param name="context">The Shipping data context.</param>
 /// <param name="orders">Supplies what the seller's part actually contains.</param>
-internal sealed class PackShipmentCommandHandler(ShippingDbContext context, IOrderFulfilment orders)
-    : ICommandHandler<PackShipmentCommand, ShipmentResponse>
+internal sealed class PackShipmentCommandHandler(
+    ShippingDbContext context,
+    IOrderFulfilment orders) : ICommandHandler<PackShipmentCommand, ShipmentResponse>
 {
     public async Task<Result<ShipmentResponse>> HandleAsync(
         PackShipmentCommand command,

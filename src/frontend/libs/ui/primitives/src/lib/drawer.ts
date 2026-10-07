@@ -58,6 +58,7 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
       /* Derived from a token rather than written as a colour: no component may hold a hex value,
          and a scrim that ignored the theme would stay dark-on-dark after Step 30. */
       background: color-mix(in srgb, var(--color-text) 55%, transparent);
+      animation: kh-backdrop-in var(--duration-base) var(--ease-standard);
     }
 
     .panel {
@@ -75,15 +76,20 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
     :host([data-side='start']) .panel,
     :host([data-side='end']) .panel {
       inset-block: 0;
-      width: min(20rem, 85vw);
+      /* A host may widen the side panel with --drawer-width (the admin's entity drawer does, for
+         tables); the storefront's menu drawers keep 20rem. */
+      width: min(var(--drawer-width, 20rem), 85vw);
     }
 
+    /* A side panel arrives from its own edge rather than rising from below like a sheet. */
     :host([data-side='start']) .panel {
       inset-inline-start: 0;
+      animation-name: kh-drawer-in-start;
     }
 
     :host([data-side='end']) .panel {
       inset-inline-end: 0;
+      animation-name: kh-drawer-in-end;
     }
 
     :host([data-side='bottom']) .panel {
@@ -113,6 +119,26 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
       }
     }
 
+    @keyframes kh-drawer-in-start {
+      from {
+        opacity: 0.6;
+        transform: translateX(calc(-1 * var(--space-8)));
+      }
+    }
+
+    @keyframes kh-drawer-in-end {
+      from {
+        opacity: 0.6;
+        transform: translateX(var(--space-8));
+      }
+    }
+
+    @keyframes kh-backdrop-in {
+      from {
+        opacity: 0;
+      }
+    }
+
     @keyframes kh-dialog-in {
       from {
         opacity: 0.6;
@@ -121,7 +147,8 @@ export type DrawerSide = 'start' | 'end' | 'bottom';
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .panel {
+      .panel,
+      .backdrop {
         animation: none;
       }
     }
