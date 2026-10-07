@@ -111,6 +111,16 @@ export class FulfilmentService {
     );
   }
 
+  /**
+   * Every parcel opened against one sub-order, as a one-shot read.
+   *
+   * For a screen resuming a part that is already under way, which wants the answer rather than a
+   * pageable list. A part has a handful of parcels at most, so one page of 50 is all of them.
+   */
+  parcelsFor(subOrderId: string): Observable<readonly ShipmentSummaryResponse[]> {
+    return this.api.adminListShipments({ subOrderId, size: 50 }).pipe(map((result) => result.items));
+  }
+
   shipment(id: string): Observable<ShipmentResponse> {
     return this.api.adminGetShipment(id);
   }

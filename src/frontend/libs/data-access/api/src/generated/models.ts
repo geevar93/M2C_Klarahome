@@ -4181,6 +4181,7 @@ export interface ShipmentResponse {
 
 export interface ShipmentSummaryResponse {
   id: string;
+  orderId: string;
   orderNumber: string;
   subOrderNumber: string;
   vendorId: string | null;

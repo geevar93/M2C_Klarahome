@@ -30,15 +30,36 @@ import { BulkAction, DataTableColumn, TablePage, TableSort } from './admin.model
  * </ng-template>
  * ```
  *
+ * `let-row` is untyped (`any`) on its own. Bind the table's rows to `khCellOf` and the template
+ * sees the row type instead, so a field the row does not have fails the build rather than
+ * rendering `undefined` in production:
+ *
+ * ```html
+ * <ng-template khCell="status" [khCellOf]="list.rows()" let-row>
+ * ```
+ *
  * A column definition is *data* — it is built in a `.ts` file, kept in a constant and sometimes
  * comes off the API — so it cannot carry a `TemplateRef`. This directive is how a `custom` column
  * gets one without the definition stopping being data.
  */
 @Directive({ selector: 'ng-template[khCell]' })
-export class CellTemplate {
+// `any` is the default so a template that does not bind `khCellOf` keeps the untyped `let-row` it
+// always had; `unknown` would break every such template at once.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export class CellTemplate<TRow = any> {
   /** The `key` of the column this template draws. */
   readonly khCell = input.required<string>();
+  /** The table's rows. Never read at runtime; it exists so the compiler can infer `TRow`. */
+  readonly khCellOf = input<readonly TRow[]>();
   readonly template = inject<TemplateRef<{ $implicit: unknown; index: number }>>(TemplateRef);
+
+  /** Types `let-row` as `TRow` inside the template, as `NgForOf` does for `ngForOf`. */
+  static ngTemplateContextGuard<TRow>(
+    _directive: CellTemplate<TRow>,
+    _context: unknown,
+  ): _context is { $implicit: TRow; index: number } {
+    return true;
+  }
 }
 
 /**

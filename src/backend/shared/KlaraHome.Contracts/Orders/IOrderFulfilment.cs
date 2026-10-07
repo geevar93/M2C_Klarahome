@@ -151,34 +151,27 @@ public interface IOrderFulfilment
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Records that the seller's part is fully boxed: accepts it if nobody has yet, then marks it packed.
+    /// Brings the seller's part forward to a warehouse stage, on the word of whoever is packing it.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Boxing a part <em>is</em> accepting it. The ordering machine keeps <c>Confirmed</c> ("new, to
-    /// accept"), <c>Processing</c> ("being picked") and <c>Packed</c> as three states, but the pack
-    /// screen has one button, and a parcel that exists against a sub-order still sitting at
-    /// <c>Confirmed</c> is the contradiction this method removes: the part would stay in the
-    /// "to pack" queue after it was packed, and dispatch would later be refused for want of the
-    /// <c>Packed -> Shipped</c> edge.
+    /// The warehouse stages are <c>Processing</c> and <c>Packed</c>, and the packing bench is where
+    /// they actually happen: closing the box is "processing", and a waybill on it is "packed". An
+    /// operator working a parcel should not also have to walk the order through the same two steps
+    /// on another screen before the courier may take it.
     /// </para>
     /// <para>
-    /// Taken as the operator who boxed it — <c>Vendor</c> for a seller, <c>Platform</c> for staff —
-    /// because <c>Confirmed -> Processing</c> and <c>Processing -> Packed</c> are closed to
-    /// <c>System</c>. Idempotent: a part already <c>Packed</c> is a success, and one already past it
-    /// (a second parcel of a partial shipment) is too. A part the machine cannot move — cancelled
-    /// while the packer worked — is refused.
+    /// It only ever moves forward, one named stage at a time, so the timeline reads as it would had
+    /// each been clicked. A sub-order already at the stage or past it — moved by hand, or shipped —
+    /// is left exactly where it is and that is a success; so is one that is not in the warehouse at
+    /// all. The moves are taken as <c>Platform</c>, because a person at the bench is who made them;
+    /// <see cref="AdvanceAsync"/> stays the courier's word and stays refused these edges.
     /// </para>
     /// </remarks>
     /// <param name="subOrderId">The seller's part.</param>
-    /// <param name="byVendor">Whether the seller (rather than platform staff) boxed it.</param>
-    /// <param name="actorId">The user who boxed it, for the timeline.</param>
+    /// <param name="stage">The stage to reach: <c>Processing</c> or <c>Packed</c>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<Result> MarkPackedAsync(
-        Guid subOrderId,
-        bool byVendor,
-        Guid? actorId,
-        CancellationToken cancellationToken = default);
+    Task<Result> PrepareAsync(Guid subOrderId, string stage, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Writes a line on the order's timeline without moving it.

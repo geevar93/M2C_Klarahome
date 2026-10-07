@@ -168,6 +168,21 @@ internal sealed partial class ShipmentWorkflow(
                 .ConfigureAwait(false);
         }
 
+        // A box with a waybill on it is what the order calls packed. A refusal is logged and
+        // swallowed: the courier has already accepted the consignment, so failing here would leave
+        // it live with them and absent from this platform, and dispatch brings the order forward
+        // again in any case.
+        if (!shipment.IsReturn)
+        {
+            var told = await orders.PrepareAsync(shipment.SubOrderId, "Packed", cancellationToken)
+                .ConfigureAwait(false);
+
+            if (told.IsFailure)
+            {
+                OrderRefusedMovement(logger, shipment.Id, shipment.Awb, "Packed", told.Error.Message);
+            }
+        }
+
         return Result.Success();
     }
 
@@ -192,6 +207,17 @@ internal sealed partial class ShipmentWorkflow(
         if (!shipment.IsBooked)
         {
             return Result.Failure(Application.ShippingErrors.NotBooked);
+        }
+
+        // A parcel booked before its order was walked through the warehouse stages - by an older
+        // build, or one whose order refused at booking - is brought up to Packed first, which is
+        // where the machine's edge to Shipped lives.
+        var prepared = await orders.PrepareAsync(shipment.SubOrderId, "Packed", cancellationToken)
+            .ConfigureAwait(false);
+
+        if (prepared.IsFailure)
+        {
+            return prepared;
         }
 
         var told = await orders

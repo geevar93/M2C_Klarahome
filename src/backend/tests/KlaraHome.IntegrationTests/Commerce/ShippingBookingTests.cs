@@ -66,8 +66,8 @@ public sealed class ShippingBookingTests(KlaraHomeSchemaFixture fixture) : Comme
         Assert.Equal("shiprocket", response.GetProperty("provider").GetString());
         Assert.NotEmpty(response.GetProperty("lines").EnumerateArray());
 
-        // Packing is accepting: the part has left the "Confirmed" to-pack queue, and the booking
-        // does not dispatch, so it is Packed and not yet Shipped.
+        // Booking the waybill brought the part to Packed, so it has left the not-yet-packed
+        // statuses; the booking does not dispatch, so it is not yet Shipped.
         var queued = await ReadAsync(await admin.GetAsync(
             new Uri("/api/v1/admin/sub-orders?status=Confirmed,Processing&size=100", UriKind.Relative),
             Cancellation));
@@ -103,6 +103,107 @@ public sealed class ShippingBookingTests(KlaraHomeSchemaFixture fixture) : Comme
         Assert.Contains(
             Factory.Courier.Bookings,
             request => request.ShipmentId == response.GetProperty("id").GetGuid());
+    }
+
+    /// <summary>
+    /// A zero weight is the admin screen's pack step: the parcel is packed and left a draft, nothing
+    /// is asked of a courier, and the weigh and book routes finish the job.
+    /// </summary>
+    [Fact]
+    public async Task A_parcel_packed_without_a_weight_stays_a_draft_until_it_is_weighed_and_booked()
+    {
+        SkipWithoutDocker();
+
+        var admin = await SignedInAdministratorAsync();
+        var vendors = Sellers(admin);
+        var catalogue = new CatalogScenario(admin, Cancellation);
+        var orders = new ShippingOrderScenario(admin, Cancellation);
+
+        var seller = await vendors.ActiveAsync();
+        var taxonomy = await catalogue.TaxonomyAsync();
+        var product = await catalogue.DraftAsync(taxonomy, seller.Id);
+        await catalogue.ActivateVariantAsync(product.VariantId);
+        await catalogue.PublishAsync(product.Id);
+        var listingId = await catalogue.OfferAsync(seller.Id, product.VariantId, sellingPrice: 999m);
+        await catalogue.StockAsync(listingId, 100, seller.Id);
+
+        var (shopper, _) = await SignedInShopperAsync();
+        var stateId = await vendors.StateIdAsync();
+
+        var placed = await orders.ConfirmedSubOrderAsync(shopper, stateId, seller.Id, listingId);
+
+        var packed = await ReadAsync(await admin.PostAsJsonAsync(
+            $"/api/v1/admin/sub-orders/{placed.SubOrderId}/shipments",
+            new
+            {
+                lines = Array.Empty<object>(),
+                weight = 0,
+                dimensions = (object?)null,
+                courier = (string?)null,
+                pickupLocationId = (Guid?)null,
+                manualAwb = (string?)null,
+                manualCourier = (string?)null,
+            },
+            Cancellation));
+
+        var shipmentId = packed.GetProperty("id").GetGuid();
+
+        Assert.Equal("Draft", packed.GetProperty("status").GetString());
+        Assert.NotEmpty(packed.GetProperty("lines").EnumerateArray());
+        Assert.DoesNotContain(Factory.Courier.Bookings, request => request.ShipmentId == shipmentId);
+
+        // Packing is what the order calls processing, and nobody had to say so on another screen.
+        Assert.Equal("Processing", await StatusAsync());
+
+        // Still on the packing queue, which asks for every part that has not left in one request.
+        var queue = await ReadAsync(await admin.GetAsync(
+            new Uri("/api/v1/admin/sub-orders?status=Confirmed,Processing,Packed&size=100", UriKind.Relative),
+            Cancellation));
+
+        Assert.Contains(
+            queue.GetProperty("items").EnumerateArray(),
+            entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId);
+
+        await ReadAsync(await admin.PostAsJsonAsync(
+            $"/api/v1/admin/shipments/{shipmentId}/weight",
+            new { weight = 500, dimensions = new { lengthCm = 20, widthCm = 15, heightCm = 10 } },
+            Cancellation));
+
+        var booked = await ReadAsync(await admin.PostAsJsonAsync(
+            $"/api/v1/admin/shipments/{shipmentId}/book",
+            new
+            {
+                courier = (string?)null,
+                pickupLocationId = (Guid?)null,
+                manualAwb = (string?)null,
+                manualCourier = (string?)null,
+            },
+            Cancellation));
+
+        Assert.Equal("LabelGenerated", booked.GetProperty("status").GetString());
+        Assert.Contains(Factory.Courier.Bookings, request => request.ShipmentId == shipmentId);
+
+        // A waybill on the box is packed, which is where the machine's edge to Shipped lives - so
+        // the handover goes through with no transition made by hand.
+        Assert.Equal("Packed", await StatusAsync());
+
+        await ReadAsync(await admin.PostAsync(
+            new Uri($"/api/v1/admin/shipments/{shipmentId}/dispatch", UriKind.Relative),
+            content: null,
+            Cancellation));
+
+        Assert.Equal("Shipped", await StatusAsync());
+
+        async Task<string?> StatusAsync()
+        {
+            var order = await ReadAsync(await admin.GetAsync(
+                new Uri($"/api/v1/admin/orders/{placed.OrderId}", UriKind.Relative),
+                Cancellation));
+
+            return order.GetProperty("subOrders").EnumerateArray()
+                .First(entry => entry.GetProperty("id").GetGuid() == placed.SubOrderId)
+                .GetProperty("status").GetString();
+        }
     }
 
     /// <summary>

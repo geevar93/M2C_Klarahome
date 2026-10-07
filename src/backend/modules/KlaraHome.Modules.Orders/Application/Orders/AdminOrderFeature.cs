@@ -39,7 +39,7 @@ internal sealed record GetOrderQuery(Guid OrderId) : IQuery<OrderResponse>;
 /// <summary>
 /// The fulfilment worklist: sub-orders by state, a seller's own when the caller is one.
 /// </summary>
-/// <param name="Status">Restrict to one sub-order status, or a comma-separated set of them.</param>
+/// <param name="Status">Restrict to one sub-order status, or to several separated by commas.</param>
 /// <param name="VendorId">Restrict to one seller. Ignored for a vendor caller, who has only their own.</param>
 /// <param name="WarehouseId">Restrict to the lines allocated to one warehouse, which is how a
 /// single site works its own queue rather than the whole network's.</param>
@@ -270,16 +270,15 @@ internal sealed class ListSubOrdersQueryHandler(
             .Include(subOrder => subOrder.Lines)
             .AsQueryable();
 
-        // One status or a comma-separated set ("Confirmed,Processing" is the to-pack queue: parts
-        // not yet accepted plus parts accepted and not yet boxed). An unparseable name narrows to
-        // nothing it recognises, which is the same as passing no filter, as before.
+        // One status or several, comma-separated: a packing queue is every part that has not left
+        // yet, which is three states and one list. A name the machine does not have is ignored.
         var statuses = (query.Status ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(name => Enum.TryParse<SubOrderStatus>(name, ignoreCase: true, out var parsed)
-                ? (SubOrderStatus?)parsed
-                : null)
-            .Where(parsed => parsed is not null)
-            .Select(parsed => parsed!.Value)
+            .Select(name => Enum.TryParse<SubOrderStatus>(name, ignoreCase: true, out var status)
+                ? status
+                : (SubOrderStatus?)null)
+            .OfType<SubOrderStatus>()
+            .Distinct()
             .ToArray();
 
         if (statuses.Length > 0)
