@@ -115,6 +115,14 @@ export class ContentApiClient {
   }
 
   /**
+   * Creates the home page or replaces its draft blocks with the template's. Never changes the status.
+   * `POST /api/v1/admin/storefront-templates/{id}/apply`
+   */
+  adminApplyStorefrontTemplate(id: string, options?: ApiRequestOptions): Observable<Models.PageResponse> {
+    return this.http.request<Models.PageResponse>('POST', `${this.baseUrl}/api/v1/admin/storefront-templates/${encodeURIComponent(String(id))}/apply`, undefined, undefined, options);
+  }
+
+  /**
    * Opens a banner.
    * `POST /api/v1/admin/banners`
    */
@@ -323,11 +331,35 @@ export class ContentApiClient {
   }
 
   /**
+   * The storefront templates: a home page, a header and a footer treatment, and palettes.
+   * `GET /api/v1/admin/storefront-templates`
+   */
+  adminListStorefrontTemplates(options?: ApiRequestOptions): Observable<Models.StorefrontTemplateResponse[]> {
+    return this.http.request<Models.StorefrontTemplateResponse[]>('GET', `${this.baseUrl}/api/v1/admin/storefront-templates`, undefined, undefined, options);
+  }
+
+  /**
+   * Renders unsaved blocks against a page as the storefront would. Saves nothing.
+   * `POST /api/v1/admin/pages/{id}/preview-draft`
+   */
+  adminPreviewDraftPage(id: string, body: Models.PreviewDraftBody, options?: ApiRequestOptions): Observable<Models.StorePageResponse> {
+    return this.http.request<Models.StorePageResponse>('POST', `${this.baseUrl}/api/v1/admin/pages/${encodeURIComponent(String(id))}/preview-draft`, body, undefined, options);
+  }
+
+  /**
    * Renders a page exactly as the storefront would, whatever its status.
    * `GET /api/v1/admin/pages/{id}/preview`
    */
   adminPreviewPage(id: string, query?: AdminPreviewPageQuery, options?: ApiRequestOptions): Observable<Models.StorePageResponse> {
     return this.http.request<Models.StorePageResponse>('GET', `${this.baseUrl}/api/v1/admin/pages/${encodeURIComponent(String(id))}/preview`, undefined, query, options);
+  }
+
+  /**
+   * A template filled from the catalogue and resolved as the storefront would. Saves nothing.
+   * `GET /api/v1/admin/storefront-templates/{id}/preview`
+   */
+  adminPreviewStorefrontTemplate(id: string, options?: ApiRequestOptions): Observable<Models.StorePageResponse> {
+    return this.http.request<Models.StorePageResponse>('GET', `${this.baseUrl}/api/v1/admin/storefront-templates/${encodeURIComponent(String(id))}/preview`, undefined, undefined, options);
   }
 
   /**

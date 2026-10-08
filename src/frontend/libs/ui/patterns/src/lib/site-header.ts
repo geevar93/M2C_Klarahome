@@ -7,6 +7,15 @@ import { filter, map } from 'rxjs';
 import { NavItem, isInternalHref } from './navigation.model';
 
 /**
+ * How the header is arranged, chosen per store in the storefront designer.
+ *
+ * `inline` is the original layout. The others only change where the same parts sit: the markup,
+ * the tab order, the drawer button, the announcement bar's place above and the mini-cart are shared
+ * by all four.
+ */
+export type HeaderStyle = 'inline' | 'centred' | 'search' | 'wordmark';
+
+/**
  * The site header.
  *
  * Mobile first, and the order of the markup is the order of the tab stops: menu, wordmark,
@@ -24,7 +33,7 @@ import { NavItem, isInternalHref } from './navigation.model';
   selector: 'kh-site-header',
   imports: [Badge, Button, Icon, RouterLink, RouterLinkActive],
   template: `
-    <header class="bar" [class.has-nav]="hasNav()">
+    <header class="bar" [class.has-nav]="hasNav()" [attr.data-style]="style()">
       <button
         khButton
         variant="tertiary"
@@ -297,10 +306,79 @@ import { NavItem, isInternalHref } from './navigation.model';
         padding-block: var(--space-2) var(--space-3);
       }
     }
+
+    /* The alternative treatments. They only re-place the same grid areas, so the markup and the tab
+       order are identical in every style, and \`inline\` has no rule here at all: it is the base
+       above, byte for byte. */
+
+    /* \`centred\` and \`wordmark\` set the name in the middle on every width. */
+    .bar[data-style='centred'] .wordmark,
+    .bar[data-style='wordmark'] .wordmark {
+      text-align: center;
+    }
+
+    /* The wordmark treatment: the name as a display-face mark, upper case and spaced out. Weight
+       stays at the one Fraunces weight that ships. Text only — no logo image is drawn in any
+       style, so there is nothing for it to ignore. */
+    .bar[data-style='wordmark'] .wordmark {
+      font-size: var(--text-lg);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    @media (min-width: 1024px) {
+      .bar[data-style='centred'],
+      .bar[data-style='wordmark'] {
+        grid-template-columns: 1fr auto 1fr;
+        grid-template-areas:
+          'search wordmark actions'
+          'primary primary primary';
+        row-gap: var(--space-1);
+      }
+
+      .bar[data-style='centred']:not(.has-nav),
+      .bar[data-style='wordmark']:not(.has-nav) {
+        grid-template-areas: 'search wordmark actions';
+      }
+
+      .bar[data-style='centred'] .search,
+      .bar[data-style='wordmark'] .search {
+        justify-self: start;
+        max-width: 20rem;
+      }
+
+      .bar[data-style='centred'] .actions,
+      .bar[data-style='wordmark'] .actions {
+        justify-self: end;
+      }
+
+      .bar[data-style='centred'] .primary,
+      .bar[data-style='wordmark'] .primary {
+        justify-content: center;
+        margin-inline-start: 0;
+      }
+
+      .bar[data-style='wordmark'] .wordmark {
+        font-size: var(--text-3xl);
+      }
+
+      /* \`search\`: the search field takes every spare pixel between the name and the actions, and
+         the menu becomes a ruled strip beneath, so the field reads as the header's main control. */
+      .bar[data-style='search'] .search {
+        max-width: none;
+      }
+
+      .bar[data-style='search'] .primary {
+        padding-block-start: var(--space-1);
+        border-block-start: 1px solid var(--color-border);
+      }
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SiteHeader {
+  /** The arrangement of the parts; the shell passes the store's chosen style. */
+  readonly style = input<HeaderStyle>('inline');
   readonly storeName = input('Klara Home');
   readonly menu = input<readonly NavItem[]>([]);
   readonly cartCount = input(0);

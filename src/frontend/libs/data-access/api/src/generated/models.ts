@@ -2789,6 +2789,10 @@ export interface PreferencesResponse {
   availableChannels: string[];
 }
 
+export interface PreviewDraftBody {
+  blocks: BlockBody[] | null;
+}
+
 export interface PriceListItemPayload {
   listingId: string;
   price: number;
@@ -4633,6 +4637,16 @@ export interface StorefrontProduct {
   seo: SeoPayload;
   ratingAverage: number | null;
   ratingCount: number;
+}
+
+export interface StorefrontTemplateResponse {
+  id: string;
+  name: string;
+  suits: string;
+  description: string;
+  headerStyle: string;
+  footerStyle: string;
+  paletteIds: string[];
 }
 
 export interface StorefrontVariant {

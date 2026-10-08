@@ -143,3 +143,76 @@ describe('SiteFooter content', () => {
     expect(grid?.firstElementChild?.classList.contains('brand')).toBe(true);
   });
 });
+
+/**
+ * The footer styles.
+ *
+ * `columns` is the default and must stay what the storefront shipped with. `slim` is one row built
+ * from the same data. `columnsNewsletter` adds a sign-up column, disabled for as long as the
+ * platform has no newsletter mechanism to send the address to.
+ */
+describe('SiteFooter styles', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [SiteFooter],
+      providers: [provideRouter([])],
+    }).compileComponents();
+  });
+
+  const menu = [
+    { label: 'Company', children: [{ label: 'Returns', href: '/pages/returns' }] },
+    { label: 'Help', children: [{ label: 'FAQ', href: '/pages/faq' }] },
+  ];
+
+  const render = (inputs: Record<string, unknown> = {}) => {
+    const fixture = TestBed.createComponent(SiteFooter);
+    for (const [name, value] of Object.entries(inputs)) fixture.componentRef.setInput(name, value);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  };
+
+  it('defaults to the columns layout with no sign-up column', () => {
+    const root = render({ menu });
+
+    expect(root.querySelector('.groups')).not.toBeNull();
+    expect(root.querySelector('.slim')).toBeNull();
+    expect(root.querySelector('.newsletter')).toBeNull();
+    expect(root.querySelectorAll('nav.group').length).toBe(4);
+  });
+
+  it('slim draws one row: copyright, the menu inline, the profiles, and no columns', () => {
+    const root = render({
+      style: 'slim',
+      menu,
+      social: [{ label: 'Instagram', href: 'https://instagram.com/klarahome' }],
+    });
+
+    expect(root.querySelector('.groups')).toBeNull();
+    expect(root.querySelector('.slim .legal')?.textContent).toContain('All rights reserved');
+    const links = Array.from(root.querySelectorAll('.slim-links a')).map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/pages/returns', '/pages/faq']);
+    expect(root.querySelectorAll('.slim .social li').length).toBe(1);
+  });
+
+  it('slim draws no menu landmark when there is no menu', () => {
+    const root = render({ style: 'slim' });
+
+    expect(root.querySelector('.slim-links')).toBeNull();
+  });
+
+  it('columnsNewsletter keeps the columns and adds a labelled, disabled email field and Join button', () => {
+    const root = render({ style: 'columnsNewsletter', menu });
+
+    expect(root.querySelectorAll('nav.group').length).toBe(4);
+    const form = root.querySelector('form.newsletter');
+    expect(form).not.toBeNull();
+    const input = form?.querySelector('input') as HTMLInputElement;
+    expect(input.type).toBe('email');
+    expect(input.disabled).toBe(true);
+    expect(form?.querySelector('label')?.getAttribute('for')).toBe(input.id);
+    const button = form?.querySelector('button') as HTMLButtonElement;
+    expect(button.textContent?.trim()).toBe('Join');
+    expect(button.disabled).toBe(true);
+    expect(form?.textContent).toContain('Coming soon');
+  });
+});
