@@ -62,12 +62,14 @@ internal sealed class ListStorefrontTemplatesQueryHandler
 /// yet and an empty catalogue leaves a carousel with nothing in it, and neither is a reason to refuse
 /// a preview.
 /// </remarks>
+/// <param name="context">The Content data context, to read the home page whose pictures are kept.</param>
 /// <param name="filler">Fills the reference fields from the catalogue.</param>
 /// <param name="binder">Validates and canonicalises the blocks.</param>
 /// <param name="composer">Resolves the blocks as the storefront does.</param>
 /// <param name="scope">Who is asking.</param>
 /// <param name="clock">The sanctioned clock.</param>
 internal sealed class PreviewStorefrontTemplateQueryHandler(
+    ContentDbContext context,
     StorefrontTemplateFiller filler,
     PageBlockBinder binder,
     PageComposer composer,
@@ -88,7 +90,11 @@ internal sealed class PreviewStorefrontTemplateQueryHandler(
             return Result.Failure<StorePageResponse>(ContentErrors.NotFound("storefront template"));
         }
 
-        var bodies = await filler.FillAsync(template, cancellationToken).ConfigureAwait(false);
+        var current = await ApplyStorefrontTemplateCommandHandler
+            .FindEditableHomeAsync(context, cancellationToken)
+            .ConfigureAwait(false);
+
+        var bodies = await filler.FillAsync(template, cancellationToken, current).ConfigureAwait(false);
 
         var bound = await binder
             .BindAsync(bodies, scope.CanWriteCustomHtml, cancellationToken, allowIncomplete: true)
@@ -153,6 +159,23 @@ internal sealed class ApplyStorefrontTemplateCommandHandler(
         return page;
     }
 
+    /// <summary>The newest home page that can still be edited, with its blocks; null when there is none.</summary>
+    /// <param name="context">The Content data context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task<ContentPage?> FindEditableHomeAsync(
+        ContentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        var homes = await context.Pages
+            .Include(row => row.Blocks)
+            .Where(row => row.Type == PageType.Home)
+            .OrderByDescending(row => row.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return homes.FirstOrDefault(row => PageLifecycle.IsEditable(row.Status));
+    }
+
     public async Task<Result<PageResponse>> HandleAsync(
         ApplyStorefrontTemplateCommand command,
         CancellationToken cancellationToken)
@@ -186,7 +209,7 @@ internal sealed class ApplyStorefrontTemplateCommandHandler(
             return Result.Failure<PageResponse>(ContentErrors.DuplicateSlug(HomeSlug));
         }
 
-        var bodies = await filler.FillAsync(template, cancellationToken).ConfigureAwait(false);
+        var bodies = await filler.FillAsync(template, cancellationToken, page).ConfigureAwait(false);
 
         var bound = await binder
             .BindAsync(bodies, scope.CanWriteCustomHtml, cancellationToken, allowIncomplete: true)

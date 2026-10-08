@@ -1,5 +1,6 @@
 using System.Text.Json;
 using KlaraHome.Contracts.Catalog;
+using KlaraHome.Contracts.Media;
 using KlaraHome.Contracts.Platform;
 using KlaraHome.Modules.Content.Application;
 using KlaraHome.Modules.Content.Domain;
@@ -120,7 +121,7 @@ public sealed class StorefrontTemplateTests
     [Fact]
     public async Task An_empty_catalogue_still_binds()
     {
-        var filler = new StorefrontTemplateFiller(Taxonomy([]), Products([]));
+        var filler = NewFiller(Taxonomy([]), Products([]));
         var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
 
         foreach (var template in StorefrontTemplateCatalog.All)
@@ -142,7 +143,7 @@ public sealed class StorefrontTemplateTests
     [Fact]
     public async Task Strict_binding_still_demands_the_hero_picture()
     {
-        var filler = new StorefrontTemplateFiller(Taxonomy([]), Products([]));
+        var filler = NewFiller(Taxonomy([]), Products([]));
         var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
         var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("loom")!, TestContext.Current.CancellationToken);
 
@@ -232,7 +233,7 @@ public sealed class StorefrontTemplateTests
         var wanted = Projection(start.AddDays(3), image: Guid.CreateVersion7());
         var older = Projection(start.AddDays(1), image: Guid.CreateVersion7());
 
-        var filler = new StorefrontTemplateFiller(Taxonomy([]), Products([newestNoImage, newestUnbuyable, older, wanted]));
+        var filler = NewFiller(Taxonomy([]), Products([newestNoImage, newestUnbuyable, older, wanted]));
         var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("loom")!, TestContext.Current.CancellationToken);
 
         var hero = bodies.Single(body => body.Type == nameof(BlockType.Hero));
@@ -264,7 +265,7 @@ public sealed class StorefrontTemplateTests
             Projection(start.AddDays(4), category: withImage, image: Guid.CreateVersion7()),
         };
 
-        var filler = new StorefrontTemplateFiller(Taxonomy([withImage, overridden, bare]), Products(products));
+        var filler = NewFiller(Taxonomy([withImage, overridden, bare]), Products(products));
         var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
         var tiles = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)));
 
@@ -293,7 +294,7 @@ public sealed class StorefrontTemplateTests
 
         categories.Add(Category("Child", "child", parent: categories[0].Id));
 
-        var filler = new StorefrontTemplateFiller(Taxonomy(categories), Products([]));
+        var filler = NewFiller(Taxonomy(categories), Products([]));
         var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
 
         var tiles = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)));
@@ -310,41 +311,77 @@ public sealed class StorefrontTemplateTests
         Assert.True(bound.IsSuccess);
     }
 
-    /// <summary>A banner takes the first product picture in its category, biggest category first; one without a picture is dropped.</summary>
+    /// <summary>A banner takes its category's second product picture, biggest category first; one without a picture is dropped.</summary>
     [Fact]
-    public async Task Banners_take_a_product_image_and_are_dropped_without_one()
+    public async Task Banners_take_the_second_product_image_and_are_dropped_without_one()
     {
         var big = Category("Big", "big", parent: null);
         var small = Category("Small", "small", parent: null);
         var noPicture = Category("Nothing", "nothing", parent: null);
         var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
-        var bigImage = Guid.CreateVersion7();
+        var bigFirst = Guid.CreateVersion7();
+        var bigSecond = Guid.CreateVersion7();
         var smallImage = Guid.CreateVersion7();
 
         var products = new[]
         {
-            Projection(start.AddDays(1), category: big, image: Guid.CreateVersion7()),
-            Projection(start.AddDays(2), category: big, image: bigImage),
+            Projection(start.AddDays(1), category: big, image: bigSecond),
+            Projection(start.AddDays(2), category: big, image: bigFirst),
             Projection(start.AddDays(3), category: big, image: null),
             Projection(start.AddDays(4), category: small, image: smallImage),
             Projection(start.AddDays(5), category: noPicture, image: null),
         };
 
-        var filler = new StorefrontTemplateFiller(Taxonomy([noPicture, small, big]), Products(products));
-        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
-        var banners = Items(bodies.Single(body => body.Type == nameof(BlockType.BannerGrid)));
+        var filler = NewFiller(Taxonomy([noPicture, small, big]), Products(products));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("atelier")!, TestContext.Current.CancellationToken);
+        var banners = Items(bodies.First(body => body.Type == nameof(BlockType.BannerGrid)));
 
-        Assert.Equal(2, banners.Count);
+        // Newest first, the tile (if any) would show bigFirst; the banner shows the next one.
+        Assert.Single(banners);
         Assert.Equal("Big", banners[0].GetProperty("caption").GetString());
-        Assert.Equal(bigImage.ToString(), banners[0].GetProperty("imageFileId").GetString());
-        Assert.Equal("/c/small", banners[1].GetProperty("href").GetString());
-        Assert.Equal(smallImage.ToString(), banners[1].GetProperty("imageFileId").GetString());
-        Assert.DoesNotContain(banners, banner => banner.GetProperty("caption").GetString() == "Nothing");
+        Assert.Equal(bigSecond.ToString(), banners[0].GetProperty("imageFileId").GetString());
+
+        // Only one category with a picture is left for the pair, which needs two: it is dropped.
+        Assert.Single(bodies, body => body.Type == nameof(BlockType.BannerGrid));
+        Assert.DoesNotContain(
+            bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).SelectMany(Items),
+            banner => banner.GetProperty("caption").GetString() == "Nothing");
 
         var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
         var bound = await binder.BindAsync(bodies, false, TestContext.Current.CancellationToken, allowIncomplete: true);
 
         Assert.True(bound.IsSuccess);
+    }
+
+    /// <summary>A banner prefers the category's own picture, then the demonstration one, over any product shot.</summary>
+    [Fact]
+    public async Task Banners_prefer_the_category_picture_then_the_demonstration_picture()
+    {
+        var own = Category("Alpha", "own", parent: null, image: Guid.CreateVersion7());
+        var demo = Category("Beta", "demo", parent: null);
+        var also = Category("Gamma", "also", parent: null);
+        var demoImage = Guid.CreateVersion7();
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var products = new[]
+        {
+            Projection(start.AddDays(1), category: own, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(2), category: own, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(3), category: demo, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(4), category: demo, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(5), category: also, image: Guid.CreateVersion7()),
+        };
+
+        var filler = NewFiller(
+            Taxonomy([own, demo, also]),
+            Products(products),
+            Media(("demo-category-demo", demoImage), ("demo-category-also", Guid.CreateVersion7()), ("demo-category-own", Guid.CreateVersion7())));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("atelier")!, TestContext.Current.CancellationToken);
+        var grids = bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).Select(Items).ToList();
+
+        Assert.Single(grids[0]);
+        Assert.Equal(own.ImageFileId.ToString(), grids[0][0].GetProperty("imageFileId").GetString());
+        Assert.Equal(demoImage.ToString(), grids[1][0].GetProperty("imageFileId").GetString());
     }
 
     /// <summary>Descendant categories count towards their top-level category's banner.</summary>
@@ -357,13 +394,175 @@ public sealed class StorefrontTemplateTests
 
         var product = Projection(DateTimeOffset.UtcNow, category: child, image: image, path: $"/{parent.Id}/{child.Id}/");
 
-        var filler = new StorefrontTemplateFiller(Taxonomy([parent, child]), Products([product]));
-        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+        var filler = NewFiller(Taxonomy([parent, child]), Products([product]));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("atelier")!, TestContext.Current.CancellationToken);
         var banners = Items(bodies.Single(body => body.Type == nameof(BlockType.BannerGrid)));
 
-        // One banner left: a single banner, which the storefront draws full width.
+        // One banner left: a single banner, which the storefront draws full width. The category has a
+        // single picture, so the "second" one is that one.
         Assert.Single(banners);
         Assert.Equal(image.ToString(), banners[0].GetProperty("imageFileId").GetString());
+    }
+
+    /// <summary>Bazaar shows tiles for the categories it has, so a banner never repeats one: with two categories it ships none.</summary>
+    [Fact]
+    public async Task Bazaar_with_two_categories_ships_tiles_and_no_banner_grid()
+    {
+        var a = Category("Alpha", "alpha", parent: null);
+        var b = Category("Beta", "beta", parent: null);
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var products = new[]
+        {
+            Projection(start.AddDays(1), category: a, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(2), category: a, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(3), category: b, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(4), category: b, image: Guid.CreateVersion7()),
+        };
+
+        var bodies = await NewFiller(Taxonomy([a, b]), Products(products))
+            .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles))).Count);
+        Assert.DoesNotContain(bodies, body => body.Type == nameof(BlockType.BannerGrid));
+    }
+
+    /// <summary>With more categories than tiles, Bazaar's banners are the categories no tile shows.</summary>
+    [Fact]
+    public async Task A_banner_never_repeats_a_tile_category()
+    {
+        var categories = Enumerable.Range(0, 9)
+            .Select(index => Category($"Room {index:00}", $"room-{index:00}", parent: null))
+            .ToList();
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var products = categories
+            .SelectMany((category, index) => new[]
+            {
+                Projection(start.AddDays(index), category: category, image: Guid.CreateVersion7()),
+                Projection(start.AddDays(index).AddHours(1), category: category, image: Guid.CreateVersion7()),
+            })
+            .ToList();
+
+        var bodies = await NewFiller(Taxonomy(categories), Products(products))
+            .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+
+        var tiled = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)))
+            .Select(tile => tile.GetProperty("categoryId").GetString())
+            .ToList();
+        var bannered = bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).SelectMany(Items).ToList();
+
+        Assert.Equal(StorefrontTemplateFiller.MaxTiles, tiled.Count);
+        Assert.NotEmpty(bannered);
+        Assert.All(
+            bannered,
+            banner => Assert.DoesNotContain(
+                categories.Single(category => "/c/" + category.Slug == banner.GetProperty("href").GetString()).Id.ToString(),
+                tiled));
+    }
+
+    /// <summary>A top-level category with no picture shows a picture a category below it carries (own, then demonstration) before any product shot.</summary>
+    [Fact]
+    public async Task A_top_level_category_borrows_a_picture_from_below_before_a_product_shot()
+    {
+        var parentId = Guid.CreateVersion7();
+        var childId = Guid.CreateVersion7();
+        var parent = new CategoryNode(parentId, null, "Soft Furnishings", "soft", $"/{parentId}/", 0, true, null, null);
+        var child = new CategoryNode(childId, parentId, "Cushion Covers", "cushions", $"/{parentId}/{childId}/", 1, true, null, null);
+        var demoImage = Guid.CreateVersion7();
+        var product = Projection(DateTimeOffset.UtcNow, category: child, image: Guid.CreateVersion7(), path: child.Path);
+
+        var filler = NewFiller(Taxonomy([parent, child]), Products([product]), Media(("demo-category-cushions", demoImage)));
+
+        var atelier = await filler.FillAsync(StorefrontTemplateCatalog.Find("atelier")!, TestContext.Current.CancellationToken);
+        var banner = Items(atelier.First(body => body.Type == nameof(BlockType.BannerGrid)))[0];
+
+        Assert.Equal(demoImage.ToString(), banner.GetProperty("imageFileId").GetString());
+
+        var bazaar = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+        var tile = Items(bazaar.Single(body => body.Type == nameof(BlockType.CategoryTiles)))[0];
+
+        Assert.Equal(demoImage.ToString(), tile.GetProperty("imageFileId").GetString());
+    }
+
+    /// <summary>The hero keeps the picture the current home page already has, over the demonstration and product pictures.</summary>
+    [Fact]
+    public async Task The_hero_keeps_the_current_home_pages_picture()
+    {
+        var kept = Guid.CreateVersion7();
+        var product = Projection(DateTimeOffset.UtcNow, image: Guid.CreateVersion7());
+        var home = HomePage(
+            (BlockType.RichText, new { body = "<p>Hi</p>" }),
+            (BlockType.Hero, new { headline = "Mine", imageFileId = kept, align = "left" }));
+
+        var filler = NewFiller(Taxonomy([]), Products([product]), Media(("demo-hero", Guid.CreateVersion7())));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("loom")!, TestContext.Current.CancellationToken, home);
+
+        Assert.Equal(kept.ToString(), bodies.Single(body => body.Type == nameof(BlockType.Hero)).Config.GetProperty("imageFileId").GetString());
+    }
+
+    /// <summary>With no home page, the demonstration hero is used; with no demonstration media, the newest product picture.</summary>
+    [Fact]
+    public async Task The_hero_uses_the_demonstration_picture_when_there_is_no_home_page()
+    {
+        var demoHero = Guid.CreateVersion7();
+        var productImage = Guid.CreateVersion7();
+        var product = Projection(DateTimeOffset.UtcNow, image: productImage);
+        var loom = StorefrontTemplateCatalog.Find("loom")!;
+
+        var withDemo = await NewFiller(Taxonomy([]), Products([product]), Media(("demo-hero", demoHero)))
+            .FillAsync(loom, TestContext.Current.CancellationToken);
+
+        Assert.Equal(demoHero.ToString(), withDemo.Single(body => body.Type == nameof(BlockType.Hero)).Config.GetProperty("imageFileId").GetString());
+
+        // A home page without a hero does not change that.
+        var heroless = HomePage((BlockType.RichText, new { body = "<p>Hi</p>" }));
+        var stillDemo = await NewFiller(Taxonomy([]), Products([product]), Media(("demo-hero", demoHero)))
+            .FillAsync(loom, TestContext.Current.CancellationToken, heroless);
+
+        Assert.Equal(demoHero.ToString(), stillDemo.Single(body => body.Type == nameof(BlockType.Hero)).Config.GetProperty("imageFileId").GetString());
+
+        var withoutDemo = await NewFiller(Taxonomy([]), Products([product]))
+            .FillAsync(loom, TestContext.Current.CancellationToken);
+
+        Assert.Equal(productImage.ToString(), withoutDemo.Single(body => body.Type == nameof(BlockType.Hero)).Config.GetProperty("imageFileId").GetString());
+    }
+
+    /// <summary>Tile picture order: own, the current page's override, the demonstration picture, a product shot.</summary>
+    [Fact]
+    public async Task Tiles_prefer_the_current_override_then_the_demonstration_picture()
+    {
+        var own = Category("Own", "own", parent: null, image: Guid.CreateVersion7());
+        var kept = Category("Kept", "kept", parent: null);
+        var demo = Category("Demo", "demo", parent: null);
+        var shot = Category("Shot", "shot", parent: null);
+        var keptImage = Guid.CreateVersion7();
+        var demoImage = Guid.CreateVersion7();
+        var shotImage = Guid.CreateVersion7();
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var products = new[]
+        {
+            Projection(start.AddDays(1), category: kept, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(2), category: demo, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(3), category: shot, image: shotImage),
+        };
+
+        var home = HomePage((
+            BlockType.CategoryTiles,
+            new { items = new object[] { new { categoryId = kept.Id, imageFileId = keptImage } } }));
+
+        var filler = NewFiller(
+            Taxonomy([own, kept, demo, shot]),
+            Products(products),
+            Media(("demo-category-kept", Guid.CreateVersion7()), ("demo-category-demo", demoImage)));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken, home);
+        var tiles = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)));
+
+        // Alphabetical: Demo, Kept, Own, Shot.
+        Assert.Equal(demoImage.ToString(), tiles[0].GetProperty("imageFileId").GetString());
+        Assert.Equal(keptImage.ToString(), tiles[1].GetProperty("imageFileId").GetString());
+        Assert.False(tiles[2].TryGetProperty("imageFileId", out _), "the category's own picture needs no override");
+        Assert.Equal(shotImage.ToString(), tiles[3].GetProperty("imageFileId").GetString());
     }
 
     /// <summary>Atelier: biggest category alone, then a pair only when two more categories have a picture.</summary>
@@ -385,7 +584,7 @@ public sealed class StorefrontTemplateTests
             Projection(start.AddDays(4), category: c, image: Guid.CreateVersion7()),
         };
 
-        var bodies = await new StorefrontTemplateFiller(Taxonomy([a, b, c]), Products(three))
+        var bodies = await NewFiller(Taxonomy([a, b, c]), Products(three))
             .FillAsync(template, TestContext.Current.CancellationToken);
         var grids = bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).Select(Items).ToList();
 
@@ -398,7 +597,7 @@ public sealed class StorefrontTemplateTests
         // Only two with pictures: the single stays, the pair is dropped rather than made a second single.
         var two = three.Take(3).ToList();
 
-        bodies = await new StorefrontTemplateFiller(Taxonomy([a, b, c]), Products(two))
+        bodies = await NewFiller(Taxonomy([a, b, c]), Products(two))
             .FillAsync(template, TestContext.Current.CancellationToken);
         grids = [.. bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).Select(Items)];
 
@@ -417,7 +616,7 @@ public sealed class StorefrontTemplateTests
 
         foreach (var (id, limit) in new[] { ("loom", 6), ("atelier", 4), ("edit", 6) })
         {
-            var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+            var bodies = await NewFiller(Taxonomy([]), Products(projections))
                 .FillAsync(StorefrontTemplateCatalog.Find(id)!, TestContext.Current.CancellationToken);
 
             var ids = bodies.Single(body => body.Type == nameof(BlockType.ProductCarousel))
@@ -428,7 +627,7 @@ public sealed class StorefrontTemplateTests
             Assert.Equal(projections[12].ProductId.ToString(), ids[0]);
         }
 
-        var bazaar = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+        var bazaar = await NewFiller(Taxonomy([]), Products(projections))
             .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
 
         var rails = bazaar.Where(body => body.Type == nameof(BlockType.ProductCarousel))
@@ -455,7 +654,7 @@ public sealed class StorefrontTemplateTests
             .Select((price, index) => Projection(start.AddDays(index), price: price))
             .ToList();
 
-        var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+        var bodies = await NewFiller(Taxonomy([]), Products(projections))
             .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
 
         var carousels = bodies.Where(body => body.Type == nameof(BlockType.ProductCarousel)).ToList();
@@ -489,7 +688,7 @@ public sealed class StorefrontTemplateTests
             Projection(start.AddDays(4), price: 2000m),
         };
 
-        var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+        var bodies = await NewFiller(Taxonomy([]), Products(projections))
             .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
 
         var carousels = bodies.Where(body => body.Type == nameof(BlockType.ProductCarousel)).ToList();
@@ -498,6 +697,43 @@ public sealed class StorefrontTemplateTests
         Assert.Equal("Trending now", carousels[0].Config.GetProperty("heading").GetString());
         Assert.DoesNotContain(bodies, body => body.Type == nameof(BlockType.ProductCarousel)
             && body.Config.GetProperty("heading").GetString() == "Under ₹999");
+    }
+
+    private static StorefrontTemplateFiller NewFiller(
+        ICatalogTaxonomy taxonomy,
+        IProductProjectionSource products,
+        IDemoMediaCatalogue? media = null)
+        => new(taxonomy, products, media ?? Media());
+
+    private static IDemoMediaCatalogue Media(params (string Key, Guid Id)[] files)
+    {
+        var catalogue = Substitute.For<IDemoMediaCatalogue>();
+
+        catalogue.ListAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<string, Guid>>(
+                files.ToDictionary(file => file.Key, file => file.Id, StringComparer.Ordinal)));
+
+        return catalogue;
+    }
+
+    /// <summary>A home page in memory with the given blocks, as the apply handler would load it.</summary>
+    private static ContentPage HomePage(params (BlockType Type, object Config)[] blocks)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var page = ContentPage.Create("home", PageType.Home, "Home");
+
+        page.Describe("home", "Home", null, new SeoMetadata(), null, null, [], now);
+        page.SyncBlocks(
+            [.. blocks.Select(block => new BlockDraft(
+                null,
+                block.Type,
+                JsonSerializer.Serialize(block.Config),
+                IsVisible: true,
+                StartsAt: null,
+                EndsAt: null))],
+            now);
+
+        return page;
     }
 
     private static List<JsonElement> Items(BlockBody body)

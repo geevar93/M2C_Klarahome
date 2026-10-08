@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KlaraHome.Contracts.Catalog;
+using KlaraHome.Contracts.Media;
 using KlaraHome.Modules.Content.Application;
 using KlaraHome.Modules.Content.Domain;
 
@@ -22,16 +23,24 @@ namespace KlaraHome.Modules.Content.Infrastructure.Blocks;
 /// The rules, in one place:
 /// </para>
 /// <list type="bullet">
-/// <item>The hero takes the picture of the newest purchasable product that has one.</item>
 /// <item>
-/// A banner takes the first product picture in its category (descendants included, newest first),
-/// or the category's own picture when no product has one. A banner with no picture is dropped, a grid
-/// below its <see cref="StorefrontBlockFill.MinItems"/> is dropped, and a grid left with one banner
-/// is that one banner.
+/// The hero takes, in order: the picture of the hero the current home page already has, the
+/// demonstration hero picture (<c>demo-hero</c>), the newest purchasable product picture.
 /// </item>
 /// <item>
-/// A category tile shows the category's own picture; failing that it carries an image override
-/// pointing at the first product picture in the category.
+/// A category tile shows, in order: the category's own picture; the picture the current home page's
+/// tile for that category already overrides it with; the demonstration category picture
+/// (<c>demo-category-&lt;slug&gt;</c>); a picture a category below it carries; an override pointing at the
+/// first product picture in the category.
+/// </item>
+/// <item>
+/// A banner takes, in order: the category's own picture, the demonstration category picture, a
+/// picture a category below it carries, the
+/// second product picture in the category (so it never repeats a tile's product shot; the first when
+/// the category has only one). A banner grid skips the categories a category-tiles block on the same
+/// template already shows. A banner with no picture is dropped, a grid below its
+/// <see cref="StorefrontBlockFill.MinItems"/> is dropped, and a grid left with one banner is that one
+/// banner.
 /// </item>
 /// <item>
 /// A carousel holds at most its own <c>limit</c> products, newest first, within its price cap if it
@@ -49,7 +58,11 @@ namespace KlaraHome.Modules.Content.Infrastructure.Blocks;
 /// </remarks>
 /// <param name="taxonomy">The category tree.</param>
 /// <param name="products">The product projections.</param>
-internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProductProjectionSource products)
+/// <param name="media">Finds the demonstration pictures, if this deployment has them.</param>
+internal sealed class StorefrontTemplateFiller(
+    ICatalogTaxonomy taxonomy,
+    IProductProjectionSource products,
+    IDemoMediaCatalogue media)
 {
     /// <summary>The most category tiles a template shows.</summary>
     internal const int MaxTiles = 6;
@@ -72,9 +85,11 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
     /// <summary>The blocks of a template, with the catalogue filled in.</summary>
     /// <param name="template">The template.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="current">The home page being replaced, whose hero and tile pictures are kept; null when there is none.</param>
     public async Task<IReadOnlyList<BlockBody>> FillAsync(
         StorefrontTemplate template,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ContentPage? current = null)
     {
         ArgumentNullException.ThrowIfNull(template);
 
@@ -83,6 +98,7 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
             block.Type is BlockType.Hero or BlockType.CategoryTiles or BlockType.BannerGrid or BlockType.ProductCarousel);
 
         IReadOnlyList<CategoryNode> topLevel = [];
+        IReadOnlyList<CategoryNode> active = [];
         IReadOnlyList<Item> pool = [];
 
         if (needsCategories)
@@ -90,6 +106,8 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
             var nodes = await taxonomy
                 .ListCategoriesAsync(activeOnly: true, cancellationToken)
                 .ConfigureAwait(false);
+
+            active = [.. nodes.Where(node => node.IsActive)];
 
             topLevel =
             [
@@ -127,6 +145,18 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
             ];
         }
 
+        IReadOnlyDictionary<string, Guid> demo = new Dictionary<string, Guid>();
+
+        if (template.Blocks.Any(block => block.Type is BlockType.Hero or BlockType.CategoryTiles or BlockType.BannerGrid))
+        {
+            demo = await media.ListAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var (currentHero, currentTiles) = ReadCurrent(current);
+        HashSet<Guid> tileCategories = template.Blocks.Any(block => block.Type == BlockType.CategoryTiles)
+            ? [.. topLevel.Take(MaxTiles).Select(category => category.Id)]
+            : [];
+
         var bodies = new List<BlockBody>(template.Blocks.Count);
         var shown = new HashSet<Guid>();
 
@@ -138,7 +168,9 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
             switch (block.Type)
             {
                 case BlockType.Hero:
-                    if (pool.FirstOrDefault(item => item.ImageId is not null)?.ImageId is { } heroImage)
+                    if ((currentHero
+                         ?? (demo.TryGetValue("demo-hero", out var demoHero) ? demoHero : (Guid?)null)
+                         ?? pool.FirstOrDefault(item => item.ImageId is not null)?.ImageId) is { } heroImage)
                     {
                         config["imageFileId"] = heroImage.ToString();
                     }
@@ -152,7 +184,10 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
                             var tile = new JsonObject { ["categoryId"] = category.Id.ToString() };
 
                             if (category.ImageFileId is null
-                                && FirstImage(pool, category) is { } image)
+                                && (CurrentTile(currentTiles, category)
+                                    ?? DemoCategory(demo, category)
+                                    ?? FromBelow(active, demo, category)
+                                    ?? FirstImage(pool, category)) is { } image)
                             {
                                 tile["imageFileId"] = image.ToString();
                             }
@@ -163,10 +198,11 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
 
                 case BlockType.BannerGrid:
                     var banners = topLevel
+                        .Where(category => !tileCategories.Contains(category.Id))
                         .Select(category => (
                             Category: category,
                             Count: pool.Count(item => BelongsTo(item, category)),
-                            Image: FirstImage(pool, category) ?? category.ImageFileId))
+                            Image: category.ImageFileId ?? DemoCategory(demo, category) ?? FromBelow(active, demo, category) ?? BannerImage(pool, category)))
                         .Where(candidate => candidate.Image is not null)
                         .OrderByDescending(candidate => candidate.Count)
                         .ThenBy(candidate => candidate.Category.Name, StringComparer.OrdinalIgnoreCase)
@@ -232,6 +268,91 @@ internal sealed class StorefrontTemplateFiller(ICatalogTaxonomy taxonomy, IProdu
         }
 
         return bodies;
+    }
+
+    /// <summary>The hero picture and the per-category tile overrides of the page being replaced.</summary>
+    private static (Guid? Hero, Dictionary<Guid, Guid> Tiles) ReadCurrent(ContentPage? page)
+    {
+        Guid? hero = null;
+        var tiles = new Dictionary<Guid, Guid>();
+
+        foreach (var block in (page?.Blocks ?? []).OrderBy(block => block.Position))
+        {
+            JsonNode? node;
+
+            try
+            {
+                node = JsonNode.Parse(block.Config);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            if (node is not JsonObject config)
+            {
+                continue;
+            }
+
+            if (block.Type == BlockType.Hero)
+            {
+                if (hero is null
+                    && Guid.TryParse(config["imageFileId"]?.GetValue<string>(), out var heroId)
+                    && heroId != Guid.Empty)
+                {
+                    hero = heroId;
+                }
+            }
+            else if (block.Type == BlockType.CategoryTiles && config["items"] is JsonArray items)
+            {
+                foreach (var item in items.OfType<JsonObject>())
+                {
+                    if (Guid.TryParse(item["categoryId"]?.GetValue<string>(), out var categoryId)
+                        && Guid.TryParse(item["imageFileId"]?.GetValue<string>(), out var imageId)
+                        && imageId != Guid.Empty)
+                    {
+                        tiles.TryAdd(categoryId, imageId);
+                    }
+                }
+            }
+        }
+
+        return (hero, tiles);
+    }
+
+    /// <summary>The picture the current home page gives a category's tile, if any.</summary>
+    private static Guid? CurrentTile(Dictionary<Guid, Guid> tiles, CategoryNode category)
+    => tiles.TryGetValue(category.Id, out var id) ? id : null;
+
+    /// <summary>
+    /// A picture a category's descendants carry, own picture before demonstration picture, nearest and
+    /// then alphabetically first. A top-level category usually has no picture of its own while the
+    /// categories under it do, and either is a better face for it than a product shot.
+    /// </summary>
+    private static Guid? FromBelow(IReadOnlyList<CategoryNode> active, IReadOnlyDictionary<string, Guid> demo, CategoryNode category)
+        => active
+            .Where(node => node.Id != category.Id
+                           && node.Path.Contains("/" + category.Id.ToString() + "/", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(node => node.Level)
+            .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(node => node.ImageFileId ?? DemoCategory(demo, node))
+            .FirstOrDefault(id => id is not null);
+
+    /// <summary>The demonstration picture for a category, when this deployment has it.</summary>
+    private static Guid? DemoCategory(IReadOnlyDictionary<string, Guid> demo, CategoryNode category)
+        => demo.TryGetValue("demo-category-" + category.Slug, out var id) ? id : null;
+
+    /// <summary>The second product picture in a category (the first when there is only one).</summary>
+    private static Guid? BannerImage(IReadOnlyList<Item> pool, CategoryNode category)
+    {
+        var images = pool
+            .Where(item => item.ImageId is not null && BelongsTo(item, category))
+            .Select(item => item.ImageId!.Value)
+            .Distinct()
+            .Take(2)
+            .ToList();
+
+        return images.Count == 0 ? null : images[^1];
     }
 
     /// <summary>The first (newest) product picture in a category, descendants included.</summary>

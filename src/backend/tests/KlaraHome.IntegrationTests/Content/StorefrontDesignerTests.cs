@@ -194,6 +194,63 @@ public sealed class StorefrontDesignerTests(KlaraHomeSchemaFixture fixture) : Co
             card => Assert.True(card.GetProperty("price").GetDecimal() <= 999m));
     }
 
+    /// <summary>Applying a template keeps the picture the current home page's hero already has, rather than a product shot.</summary>
+    [Fact]
+    public async Task Apply_keeps_the_existing_home_pages_hero_picture()
+    {
+        SkipWithoutDocker();
+
+        var admin = await SignedInAdministratorAsync();
+        var search = new SearchScenario(admin, Factory, Database, Cancellation);
+        var catalogue = search.Catalog;
+        var taxonomy = await catalogue.TaxonomyAsync();
+        var seller = await search.DefaultSellerAsync();
+        var product = await catalogue.DraftAsync(taxonomy);
+
+        await ReadAsync(await catalogue.SetProductMediaAsync(product.Id, await catalogue.ImageAsync("shot.png")));
+        await catalogue.ActivateVariantAsync(product.VariantId);
+        await catalogue.PublishAsync(product.Id);
+        await catalogue.OfferAsync(seller.Id, product.VariantId, 500m);
+
+        // No home page yet and no demonstration media in this database: the product picture is used.
+        var first = await ReadAsync(await admin.PostAsync($"{Admin}/storefront-templates/loom/apply", content: null, Cancellation));
+        var productShot = first.GetProperty("blocks")[0].GetProperty("config").GetProperty("imageFileId").GetGuid();
+        var id = first.GetProperty("id").GetGuid();
+
+        // The merchant chooses their own hero picture.
+        var chosen = await catalogue.ImageAsync("my-hero.png");
+
+        await ReadAsync(await admin.PutAsJsonAsync(
+            $"{Admin}/pages/{id}",
+            new
+            {
+                slug = "home",
+                title = "Home",
+                blocks = new object[]
+                {
+                    new
+                    {
+                        type = "Hero",
+                        config = new { headline = "Mine", imageFileId = chosen, align = "left" },
+                        isVisible = true,
+                    },
+                },
+            },
+            Cancellation));
+
+        Assert.NotEqual(productShot, chosen);
+
+        // Both the preview and the apply keep it, whichever template follows.
+        var preview = await ReadAsync(await admin.GetAsync($"{Admin}/storefront-templates/atelier/preview", Cancellation));
+
+        Assert.Equal(chosen, preview.GetProperty("blocks")[0].GetProperty("config").GetProperty("imageFileId").GetGuid());
+
+        var applied = await ReadAsync(await admin.PostAsync($"{Admin}/storefront-templates/edit/apply", content: null, Cancellation));
+        var hero = applied.GetProperty("blocks").EnumerateArray().Single(b => b.GetProperty("type").GetString() == "Hero");
+
+        Assert.Equal(chosen, hero.GetProperty("config").GetProperty("imageFileId").GetGuid());
+    }
+
     /// <summary>A draft preview renders unsaved blocks, saves nothing, and refuses bad ones like a save does.</summary>
     [Fact]
     public async Task Preview_draft_renders_unsaved_blocks_without_persisting_them()
