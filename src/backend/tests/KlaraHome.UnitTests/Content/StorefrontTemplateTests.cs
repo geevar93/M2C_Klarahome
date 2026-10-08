@@ -129,7 +129,12 @@ public sealed class StorefrontTemplateTests
             var bound = await binder.BindAsync(bodies, false, TestContext.Current.CancellationToken, allowIncomplete: true);
 
             Assert.True(bound.IsSuccess, template.Id);
-            Assert.Equal(template.Blocks.Count, bound.Value.Count);
+            // Only banner grids (no picture to show) and capped carousels (nothing under the cap) are
+            // dropped from an empty catalogue; everything else is kept as a draft.
+            var dropped = template.Blocks.Count(block => block.Type == BlockType.BannerGrid || block.Fill?.MaxPrice is not null);
+
+            Assert.Equal(template.Blocks.Count - dropped, bound.Value.Count);
+            Assert.DoesNotContain(bound.Value, draft => draft.Type == BlockType.BannerGrid);
         }
     }
 
@@ -146,9 +151,138 @@ public sealed class StorefrontTemplateTests
         Assert.True(bound.IsFailure);
     }
 
-    /// <summary>Tiles take up to six top-level active categories; the banner grid links to the first two.</summary>
+    /// <summary>Limits, copy and arrangement the template review calls for.</summary>
     [Fact]
-    public async Task Categories_fill_the_tiles_and_the_banner_links()
+    public void Templates_ship_the_reviewed_arrangement()
+    {
+        static List<string> Types(string id)
+            => [.. StorefrontTemplateCatalog.Find(id)!.Blocks.Select(block => block.Type.ToString())];
+
+        static List<int> Limits(string id) => [.. StorefrontTemplateCatalog.Find(id)!.Blocks
+            .Where(block => block.Type == BlockType.ProductCarousel)
+            .Select(block => JsonDocument.Parse(block.ConfigJson).RootElement.GetProperty("limit").GetInt32())];
+
+        Assert.Equal(["Hero", "CategoryTiles", "ProductCarousel", "Testimonial", "RichText"], Types("loom"));
+        Assert.Equal(["Hero", "BannerGrid", "BannerGrid", "ProductCarousel", "Faq"], Types("atelier"));
+        Assert.Equal(["CategoryTiles", "BannerGrid", "ProductCarousel", "ProductCarousel", "RichText"], Types("bazaar"));
+        Assert.Equal(["RichText", "Hero", "ProductCarousel", "Testimonial"], Types("edit"));
+
+        Assert.DoesNotContain("Hero", Types("bazaar"));
+        Assert.Equal([6], Limits("loom"));
+        Assert.Equal([4], Limits("atelier"));
+        Assert.Equal([6, 6], Limits("bazaar"));
+        Assert.Equal([6], Limits("edit"));
+
+        var edit = StorefrontTemplateCatalog.Find("edit")!.Blocks.Single(block => block.Type == BlockType.Testimonial);
+
+        Assert.Equal(3, JsonDocument.Parse(edit.ConfigJson).RootElement.GetProperty("items").GetArrayLength());
+
+        static string AlignOf(string id) => JsonDocument
+            .Parse(StorefrontTemplateCatalog.Find(id)!.Blocks.Single(block => block.Type == BlockType.RichText).ConfigJson)
+            .RootElement.GetProperty("align").GetString()!;
+
+        Assert.Equal("centre", AlignOf("loom"));
+        Assert.Equal("start", AlignOf("bazaar"));
+        Assert.Equal("start", AlignOf("edit"));
+    }
+
+    /// <summary>No em-dash or en-dash anywhere in the copy.</summary>
+    [Fact]
+    public void Template_copy_has_no_dashes_of_the_long_kind()
+    {
+        foreach (var template in StorefrontTemplateCatalog.All)
+        {
+            var text = string.Join(' ', template.Blocks.Select(block => block.ConfigJson))
+                + template.Name + template.Suits + template.Description;
+
+            Assert.DoesNotContain('—', text);
+            Assert.DoesNotContain('–', text);
+        }
+    }
+
+    /// <summary>The rich-text align field is optional and takes start or centre only.</summary>
+    [Fact]
+    public void Rich_text_align_is_an_optional_start_or_centre_choice()
+    {
+        var field = BlockCatalog.Describe(BlockType.RichText).Fields.Single(f => f.Name == "align");
+
+        Assert.False(field.IsRequired);
+        Assert.Equal(["start", "centre"], field.Choices);
+
+        var errors = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var legacy = JsonDocument.Parse("""{ "body": "<p>Hi</p>" }""").RootElement.Clone();
+
+        Assert.NotNull(BlockValidator.Validate(BlockType.RichText, legacy, "block", errors));
+        Assert.Empty(errors);
+
+        var bad = JsonDocument.Parse("""{ "body": "<p>Hi</p>", "align": "right" }""").RootElement.Clone();
+
+        BlockValidator.Validate(BlockType.RichText, bad, "block", errors);
+
+        Assert.NotEmpty(errors);
+    }
+
+    /// <summary>The hero takes the picture of the newest purchasable product that has one.</summary>
+    [Fact]
+    public async Task The_hero_takes_the_newest_purchasable_product_image()
+    {
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var newestNoImage = Projection(start.AddDays(5), image: null);
+        var newestUnbuyable = Projection(start.AddDays(4), purchasable: false, image: Guid.CreateVersion7());
+        var wanted = Projection(start.AddDays(3), image: Guid.CreateVersion7());
+        var older = Projection(start.AddDays(1), image: Guid.CreateVersion7());
+
+        var filler = new StorefrontTemplateFiller(Taxonomy([]), Products([newestNoImage, newestUnbuyable, older, wanted]));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("loom")!, TestContext.Current.CancellationToken);
+
+        var hero = bodies.Single(body => body.Type == nameof(BlockType.Hero));
+
+        Assert.Equal(wanted.PrimaryImageFileId.ToString(), hero.Config.GetProperty("imageFileId").GetString());
+
+        // With a picture, even strict binding of the hero now passes.
+        var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
+        var bound = await binder.BindAsync([hero], false, TestContext.Current.CancellationToken);
+
+        Assert.True(bound.IsSuccess);
+    }
+
+    /// <summary>Tiles keep a category's own picture; otherwise they override it with the first product picture.</summary>
+    [Fact]
+    public async Task Category_tiles_use_the_category_image_or_an_override_to_a_product_image()
+    {
+        var withImage = Category("Bedroom", "bedroom", parent: null, image: Guid.CreateVersion7());
+        var overridden = Category("Kitchen", "kitchen", parent: null);
+        var bare = Category("Outdoor", "outdoor", parent: null);
+
+        var kitchenImage = Guid.CreateVersion7();
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var products = new[]
+        {
+            Projection(start.AddDays(1), category: bare, image: null),
+            Projection(start.AddDays(2), category: overridden, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(3), category: overridden, image: kitchenImage),
+            Projection(start.AddDays(4), category: withImage, image: Guid.CreateVersion7()),
+        };
+
+        var filler = new StorefrontTemplateFiller(Taxonomy([withImage, overridden, bare]), Products(products));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+        var tiles = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)));
+
+        Assert.Equal(3, tiles.Count);
+        Assert.False(tiles[0].TryGetProperty("imageFileId", out _), "the category already has a picture");
+        Assert.Equal(kitchenImage.ToString(), tiles[1].GetProperty("imageFileId").GetString());
+        Assert.False(tiles[2].TryGetProperty("imageFileId", out _), "no product in the category has a picture");
+
+        // The override is exactly what the composer reads back.
+        var overrides = BlockReferenceReader.ReadCategoryImageOverrides(BlockType.CategoryTiles, JsonSerializer.SerializeToElement(
+            new { items = tiles }));
+
+        Assert.Equal(kitchenImage, overrides[overridden.Id]);
+    }
+
+    /// <summary>Tiles take up to six top-level active categories.</summary>
+    [Fact]
+    public async Task Tiles_take_six_top_level_categories()
     {
         var categories = new List<CategoryNode>();
 
@@ -163,15 +297,12 @@ public sealed class StorefrontTemplateTests
         var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
 
         var tiles = Items(bodies.Single(body => body.Type == nameof(BlockType.CategoryTiles)));
-        var banners = Items(bodies.Single(body => body.Type == nameof(BlockType.BannerGrid)));
 
         Assert.Equal(StorefrontTemplateFiller.MaxTiles, tiles.Count);
         Assert.DoesNotContain(tiles, tile => tile.GetProperty("categoryId").GetString() == categories[^1].Id.ToString());
 
-        Assert.Equal(2, banners.Count);
-        Assert.Equal("/c/room-00", banners[0].GetProperty("href").GetString());
-        Assert.Equal("Room 01", banners[1].GetProperty("caption").GetString());
-        Assert.False(banners[0].TryGetProperty("imageFileId", out _));
+        // No pictures anywhere: the banner grid is dropped, not shipped empty.
+        Assert.DoesNotContain(bodies, body => body.Type == nameof(BlockType.BannerGrid));
 
         var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
         var bound = await binder.BindAsync(bodies, false, TestContext.Current.CancellationToken, allowIncomplete: true);
@@ -179,37 +310,194 @@ public sealed class StorefrontTemplateTests
         Assert.True(bound.IsSuccess);
     }
 
-    /// <summary>Carousels get the newest purchasable products, at most eight, each carousel the same set.</summary>
+    /// <summary>A banner takes the first product picture in its category, biggest category first; one without a picture is dropped.</summary>
     [Fact]
-    public async Task Recent_products_fill_every_carousel()
+    public async Task Banners_take_a_product_image_and_are_dropped_without_one()
     {
+        var big = Category("Big", "big", parent: null);
+        var small = Category("Small", "small", parent: null);
+        var noPicture = Category("Nothing", "nothing", parent: null);
         var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
-        var projections = Enumerable.Range(0, 12)
-            .Select(index => Projection(start.AddDays(index), purchasable: index != 11))
-            .ToList();
+        var bigImage = Guid.CreateVersion7();
+        var smallImage = Guid.CreateVersion7();
 
-        var filler = new StorefrontTemplateFiller(Taxonomy([]), Products(projections));
-        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
-
-        var carousels = bodies.Where(body => body.Type == nameof(BlockType.ProductCarousel)).ToList();
-
-        Assert.Equal(2, carousels.Count);
-
-        foreach (var carousel in carousels)
+        var products = new[]
         {
-            var ids = carousel.Config.GetProperty("productIds").EnumerateArray().Select(id => id.GetString()).ToList();
+            Projection(start.AddDays(1), category: big, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(2), category: big, image: bigImage),
+            Projection(start.AddDays(3), category: big, image: null),
+            Projection(start.AddDays(4), category: small, image: smallImage),
+            Projection(start.AddDays(5), category: noPicture, image: null),
+        };
 
-            Assert.Equal(StorefrontTemplateFiller.MaxProducts, ids.Count);
-            // Newest purchasable first: index 11 is not purchasable, so index 10 leads.
-            Assert.Equal(projections[10].ProductId.ToString(), ids[0]);
-        }
+        var filler = new StorefrontTemplateFiller(Taxonomy([noPicture, small, big]), Products(products));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+        var banners = Items(bodies.Single(body => body.Type == nameof(BlockType.BannerGrid)));
+
+        Assert.Equal(2, banners.Count);
+        Assert.Equal("Big", banners[0].GetProperty("caption").GetString());
+        Assert.Equal(bigImage.ToString(), banners[0].GetProperty("imageFileId").GetString());
+        Assert.Equal("/c/small", banners[1].GetProperty("href").GetString());
+        Assert.Equal(smallImage.ToString(), banners[1].GetProperty("imageFileId").GetString());
+        Assert.DoesNotContain(banners, banner => banner.GetProperty("caption").GetString() == "Nothing");
 
         var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
         var bound = await binder.BindAsync(bodies, false, TestContext.Current.CancellationToken, allowIncomplete: true);
 
         Assert.True(bound.IsSuccess);
-        Assert.All(bound.Value.Where(draft => draft.Type == BlockType.ProductCarousel),
-            draft => Assert.Contains("productIds", draft.Config, StringComparison.Ordinal));
+    }
+
+    /// <summary>Descendant categories count towards their top-level category's banner.</summary>
+    [Fact]
+    public async Task A_banner_reaches_into_child_categories()
+    {
+        var parent = Category("Living", "living", parent: null);
+        var child = Category("Sofas", "sofas", parent: parent.Id);
+        var image = Guid.CreateVersion7();
+
+        var product = Projection(DateTimeOffset.UtcNow, category: child, image: image, path: $"/{parent.Id}/{child.Id}/");
+
+        var filler = new StorefrontTemplateFiller(Taxonomy([parent, child]), Products([product]));
+        var bodies = await filler.FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+        var banners = Items(bodies.Single(body => body.Type == nameof(BlockType.BannerGrid)));
+
+        // One banner left: a single banner, which the storefront draws full width.
+        Assert.Single(banners);
+        Assert.Equal(image.ToString(), banners[0].GetProperty("imageFileId").GetString());
+    }
+
+    /// <summary>Atelier: biggest category alone, then a pair only when two more categories have a picture.</summary>
+    [Fact]
+    public async Task Atelier_shows_one_full_width_banner_then_a_pair_only_if_images_exist()
+    {
+        var a = Category("Alpha", "alpha", parent: null);
+        var b = Category("Beta", "beta", parent: null);
+        var c = Category("Gamma", "gamma", parent: null);
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var template = StorefrontTemplateCatalog.Find("atelier")!;
+
+        // Three categories with pictures: single, then a pair.
+        var three = new[]
+        {
+            Projection(start.AddDays(1), category: a, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(2), category: a, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(3), category: b, image: Guid.CreateVersion7()),
+            Projection(start.AddDays(4), category: c, image: Guid.CreateVersion7()),
+        };
+
+        var bodies = await new StorefrontTemplateFiller(Taxonomy([a, b, c]), Products(three))
+            .FillAsync(template, TestContext.Current.CancellationToken);
+        var grids = bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).Select(Items).ToList();
+
+        Assert.Equal(2, grids.Count);
+        Assert.Single(grids[0]);
+        Assert.Equal("Alpha", grids[0][0].GetProperty("caption").GetString());
+        Assert.Equal(2, grids[1].Count);
+        Assert.Equal(["Beta", "Gamma"], grids[1].Select(item => item.GetProperty("caption").GetString()));
+
+        // Only two with pictures: the single stays, the pair is dropped rather than made a second single.
+        var two = three.Take(3).ToList();
+
+        bodies = await new StorefrontTemplateFiller(Taxonomy([a, b, c]), Products(two))
+            .FillAsync(template, TestContext.Current.CancellationToken);
+        grids = [.. bodies.Where(body => body.Type == nameof(BlockType.BannerGrid)).Select(Items)];
+
+        Assert.Single(grids);
+        Assert.Single(grids[0]);
+    }
+
+    /// <summary>Each carousel holds at most its limit; two carousels do not share a set when there are enough products.</summary>
+    [Fact]
+    public async Task Carousels_honour_their_limit_and_do_not_repeat_each_other()
+    {
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var projections = Enumerable.Range(0, 14)
+            .Select(index => Projection(start.AddDays(index), purchasable: index != 13, price: 500m))
+            .ToList();
+
+        foreach (var (id, limit) in new[] { ("loom", 6), ("atelier", 4), ("edit", 6) })
+        {
+            var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+                .FillAsync(StorefrontTemplateCatalog.Find(id)!, TestContext.Current.CancellationToken);
+
+            var ids = bodies.Single(body => body.Type == nameof(BlockType.ProductCarousel))
+                .Config.GetProperty("productIds").EnumerateArray().Select(value => value.GetString()).ToList();
+
+            Assert.Equal(limit, ids.Count);
+            // Newest purchasable first: index 13 is not purchasable, so index 12 leads.
+            Assert.Equal(projections[12].ProductId.ToString(), ids[0]);
+        }
+
+        var bazaar = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+            .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+
+        var rails = bazaar.Where(body => body.Type == nameof(BlockType.ProductCarousel))
+            .Select(body => body.Config.GetProperty("productIds").EnumerateArray().Select(value => value.GetString()!).ToList())
+            .ToList();
+
+        Assert.Equal(2, rails.Count);
+        Assert.All(rails, rail => Assert.Equal(6, rail.Count));
+        Assert.Empty(rails[0].Intersect(rails[1]));
+
+        var binder = new PageBlockBinder(Substitute.For<IFeatureFlags>());
+        var bound = await binder.BindAsync(bazaar, false, TestContext.Current.CancellationToken, allowIncomplete: true);
+
+        Assert.True(bound.IsSuccess);
+    }
+
+    /// <summary>"Under 999" holds only products priced at or under 999, newest first.</summary>
+    [Fact]
+    public async Task Under_999_filters_by_price_newest_first()
+    {
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var prices = new[] { 500m, 999m, 1000m, 1500m, 999.01m, 300m, 998m, 5000m, 700m, 2500m };
+        var projections = prices
+            .Select((price, index) => Projection(start.AddDays(index), price: price))
+            .ToList();
+
+        var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+            .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+
+        var carousels = bodies.Where(body => body.Type == nameof(BlockType.ProductCarousel)).ToList();
+
+        Assert.Equal(2, carousels.Count);
+
+        var under = carousels[1].Config.GetProperty("productIds").EnumerateArray().Select(value => value.GetString()!).ToList();
+
+        // 700, 998, 300, 999, 500 qualify (five), newest first. Trending already showed the six newest
+        // overall, which includes 700, 998 and 300, so the unseen qualifying ones (999, 500) come first.
+        Assert.Equal(5, under.Count);
+        Guid[] expected = [projections[1].ProductId, projections[0].ProductId, projections[8].ProductId, projections[6].ProductId, projections[5].ProductId];
+
+        Assert.Equal(expected.Select(id => id.ToString()), under);
+
+        var qualifying = projections.Where(p => p.SellingPrice <= 999m).Select(p => p.ProductId.ToString()).ToHashSet();
+
+        Assert.All(under, id => Assert.Contains(id, qualifying));
+    }
+
+    /// <summary>"Under 999" is dropped when fewer than three products qualify.</summary>
+    [Fact]
+    public async Task Under_999_is_dropped_with_fewer_than_three_qualifying_products()
+    {
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var projections = new[]
+        {
+            Projection(start.AddDays(1), price: 400m),
+            Projection(start.AddDays(2), price: 800m),
+            Projection(start.AddDays(3), price: 1200m),
+            Projection(start.AddDays(4), price: 2000m),
+        };
+
+        var bodies = await new StorefrontTemplateFiller(Taxonomy([]), Products(projections))
+            .FillAsync(StorefrontTemplateCatalog.Find("bazaar")!, TestContext.Current.CancellationToken);
+
+        var carousels = bodies.Where(body => body.Type == nameof(BlockType.ProductCarousel)).ToList();
+
+        Assert.Single(carousels);
+        Assert.Equal("Trending now", carousels[0].Config.GetProperty("heading").GetString());
+        Assert.DoesNotContain(bodies, body => body.Type == nameof(BlockType.ProductCarousel)
+            && body.Config.GetProperty("heading").GetString() == "Under ₹999");
     }
 
     private static List<JsonElement> Items(BlockBody body)
@@ -240,11 +528,20 @@ public sealed class StorefrontTemplateTests
 
 #pragma warning restore CA2012
 
-    private static CategoryNode Category(string name, string slug, Guid? parent)
-        => new(Guid.CreateVersion7(), parent, name, slug, "/" + slug, parent is null ? 0 : 1, true, null, null);
+    private static CategoryNode Category(string name, string slug, Guid? parent, Guid? image = null)
+        => new(Guid.CreateVersion7(), parent, name, slug, "/" + slug, parent is null ? 0 : 1, true, image, null);
 
-    private static ProductProjection Projection(DateTimeOffset publishedAt, bool purchasable)
-        => new(
+    private static ProductProjection Projection(
+        DateTimeOffset publishedAt,
+        bool purchasable = true,
+        decimal price = 900m,
+        Guid? image = null,
+        CategoryNode? category = null,
+        string? path = null)
+    {
+        var categoryId = category?.Id ?? Guid.CreateVersion7();
+
+        return new ProductProjection(
             Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             "Vendor",
@@ -257,23 +554,24 @@ public sealed class StorefrontTemplateTests
             "Variant",
             "product",
             null,
-            Guid.CreateVersion7(),
-            "Category",
-            "category",
-            "category",
+            categoryId,
+            category?.Name ?? "Category",
+            category?.Slug ?? "category",
+            path ?? $"/{categoryId}/",
             null,
             null,
             null,
             purchasable,
             true,
-            1000m,
-            900m,
+            price + 100m,
+            price,
             "INR",
             null,
             0,
             true,
             true,
-            null,
+            image,
             publishedAt,
             []);
+    }
 }

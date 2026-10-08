@@ -84,13 +84,15 @@ public sealed class StorefrontDesignerTests(KlaraHomeSchemaFixture fixture) : Co
         var replaced = await ReadAsync(await admin.PostAsync($"{Admin}/storefront-templates/atelier/apply", content: null, Cancellation));
 
         Assert.Equal(id, replaced.GetProperty("id").GetGuid());
-        Assert.Equal(4, replaced.GetProperty("blocks").GetArrayLength());
+        // Banner grids without a picture to show are dropped, so the count depends on the catalogue
+        // the shared database happens to hold: hero, carousel and FAQ always, up to two banner grids.
+        Assert.InRange(replaced.GetProperty("blocks").GetArrayLength(), 3, 5);
         Assert.Equal("Hero", replaced.GetProperty("blocks")[0].GetProperty("type").GetString());
         Assert.Equal("left", replaced.GetProperty("blocks")[0].GetProperty("config").GetProperty("align").GetString());
 
         var reread = await ReadAsync(await admin.GetAsync($"{Admin}/pages/{id}", Cancellation));
 
-        Assert.Equal(4, reread.GetProperty("blocks").GetArrayLength());
+        Assert.Equal(replaced.GetProperty("blocks").GetArrayLength(), reread.GetProperty("blocks").GetArrayLength());
 
         homes = await ReadAsync(await admin.GetAsync($"{Admin}/pages?type=Home", Cancellation));
 
@@ -126,7 +128,70 @@ public sealed class StorefrontDesignerTests(KlaraHomeSchemaFixture fixture) : Co
 
         Assert.Equal(id, again.GetProperty("id").GetGuid());
         Assert.Equal("Published", again.GetProperty("status").GetString());
-        Assert.Equal(5, again.GetProperty("blocks").GetArrayLength());
+        // Bazaar: tiles, carousel and rich text always; the banner pair and "Under 999" depend on the catalogue.
+        Assert.InRange(again.GetProperty("blocks").GetArrayLength(), 3, 5);
+        Assert.NotEqual("Hero", again.GetProperty("blocks")[0].GetProperty("type").GetString());
+    }
+
+    /// <summary>With real products, the previews carry pictures, honour limits and respect the price cap.</summary>
+    [Fact]
+    public async Task Preview_fills_pictures_limits_and_the_under_999_rail_from_the_catalogue()
+    {
+        SkipWithoutDocker();
+
+        var admin = await SignedInAdministratorAsync();
+        var search = new SearchScenario(admin, Factory, Database, Cancellation);
+        var catalogue = search.Catalog;
+        var taxonomy = await catalogue.TaxonomyAsync();
+        var seller = await search.DefaultSellerAsync();
+
+        // Three products with a picture, priced under 999, so "Under 999" has its minimum.
+        for (var index = 0; index < 3; index++)
+        {
+            var product = await catalogue.DraftAsync(taxonomy);
+            await ReadAsync(await catalogue.SetProductMediaAsync(product.Id, await catalogue.ImageAsync($"cover-{index}.png")));
+            await catalogue.ActivateVariantAsync(product.VariantId);
+            await catalogue.PublishAsync(product.Id);
+            await catalogue.OfferAsync(seller.Id, product.VariantId, 500m);
+        }
+
+        var loom = await ReadAsync(await admin.GetAsync($"{Admin}/storefront-templates/loom/preview", Cancellation));
+        var hero = loom.GetProperty("blocks")[0];
+
+        Assert.Equal("Hero", hero.GetProperty("type").GetString());
+        Assert.True(hero.GetProperty("config").TryGetProperty("imageFileId", out var heroImage));
+        Assert.NotEqual(Guid.Empty, heroImage.GetGuid());
+
+        var loomCarousel = loom.GetProperty("blocks").EnumerateArray().Single(b => b.GetProperty("type").GetString() == "ProductCarousel");
+
+        Assert.InRange(loomCarousel.GetProperty("products").GetArrayLength(), 3, 6);
+
+        var atelier = await ReadAsync(await admin.GetAsync($"{Admin}/storefront-templates/atelier/preview", Cancellation));
+        var atelierBlocks = atelier.GetProperty("blocks").EnumerateArray().ToList();
+
+        Assert.InRange(atelierBlocks.Single(b => b.GetProperty("type").GetString() == "ProductCarousel").GetProperty("products").GetArrayLength(), 3, 4);
+
+        var banners = atelierBlocks.Where(b => b.GetProperty("type").GetString() == "BannerGrid").ToList();
+
+        Assert.NotEmpty(banners);
+        Assert.Equal(1, banners[0].GetProperty("config").GetProperty("items").GetArrayLength());
+        Assert.All(
+            banners.SelectMany(b => b.GetProperty("config").GetProperty("items").EnumerateArray()),
+            item => Assert.True(item.TryGetProperty("imageFileId", out _), "a banner always has a picture"));
+
+        var bazaar = await ReadAsync(await admin.GetAsync($"{Admin}/storefront-templates/bazaar/preview", Cancellation));
+        var bazaarBlocks = bazaar.GetProperty("blocks").EnumerateArray().ToList();
+
+        Assert.Equal("CategoryTiles", bazaarBlocks[0].GetProperty("type").GetString());
+        Assert.DoesNotContain(bazaarBlocks, b => b.GetProperty("type").GetString() == "Hero");
+
+        var rails = bazaarBlocks.Where(b => b.GetProperty("type").GetString() == "ProductCarousel").ToList();
+
+        Assert.Equal(2, rails.Count);
+        Assert.All(rails, rail => Assert.InRange(rail.GetProperty("config").GetProperty("productIds").GetArrayLength(), 3, 6));
+        Assert.All(
+            rails[1].GetProperty("products").EnumerateArray(),
+            card => Assert.True(card.GetProperty("price").GetDecimal() <= 999m));
     }
 
     /// <summary>A draft preview renders unsaved blocks, saves nothing, and refuses bad ones like a save does.</summary>
