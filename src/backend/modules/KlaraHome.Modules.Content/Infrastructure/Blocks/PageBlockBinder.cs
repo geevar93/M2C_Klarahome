@@ -32,11 +32,16 @@ internal sealed class PageBlockBinder(IFeatureFlags flags)
     /// <param name="bodies">The blocks, in the order they should render.</param>
     /// <param name="canWriteCustomHtml">Whether this caller holds the custom-HTML permission.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="allowIncomplete">
+    /// Draft mode for the storefront designer: see <see cref="BlockValidator.Validate"/>. Used by the
+    /// template preview and apply and by the draft preview, never by the page save.
+    /// </param>
     /// <returns>The blocks, or the failure that names every field that is wrong.</returns>
     public async Task<Result<List<BlockDraft>>> BindAsync(
         IReadOnlyList<BlockBody> bodies,
         bool canWriteCustomHtml,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowIncomplete = false)
     {
         ArgumentNullException.ThrowIfNull(bodies);
 
@@ -76,7 +81,7 @@ internal sealed class PageBlockBinder(IFeatureFlags flags)
                 return Result.Failure<List<BlockDraft>>(ContentErrors.InvalidWindow);
             }
 
-            var validated = BlockValidator.Validate(descriptor.Type, body.Config, path, errors);
+            var validated = BlockValidator.Validate(descriptor.Type, body.Config, path, errors, allowIncomplete);
 
             if (validated is null)
             {

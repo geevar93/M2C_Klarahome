@@ -52,7 +52,18 @@ internal sealed class BrandingSettingsValidator : AbstractValidator<BrandingSett
         RuleFor(branding => branding.ThemeTokens)
             .Must(tokens => tokens.Count <= 100)
             .WithMessage("At most one hundred theme token overrides.");
+
+        RuleFor(branding => branding.TemplateId).MaximumLength(40);
+
+        RuleFor(branding => branding.HeaderStyle).MustBeOneOf(HeaderStyles);
+        RuleFor(branding => branding.FooterStyle).MustBeOneOf(FooterStyles);
     }
+
+    /// <summary>The header treatments the storefront draws.</summary>
+    internal static readonly IReadOnlyList<string> HeaderStyles = ["inline", "centred", "search", "wordmark"];
+
+    /// <summary>The footer treatments the storefront draws.</summary>
+    internal static readonly IReadOnlyList<string> FooterStyles = ["columns", "slim", "columnsNewsletter"];
 
     /// <summary>A CSS custom property name: two leading hyphens, then lower-kebab-case.</summary>
     internal const string ThemeTokenKeyPattern = "^--[a-z][a-z0-9-]*$";

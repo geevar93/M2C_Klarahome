@@ -29,27 +29,53 @@ Block type keys are the server's (`Hero`, `BannerGrid`, `ProductCarousel`, `Cate
 
 **Filling.** When a template is previewed or applied, the server fills reference fields so the page is alive at once: `CategoryTiles` get up to 6 top-level active categories; each `ProductCarousel` gets up to 8 recent active products (the second carousel in Bazaar may reuse the same set); `BannerGrid` gets two banners with a headline and a link to the first two categories and no image. The hero image stays empty (the editor's picker fills it). If the catalogue is empty, reference fields stay empty and the page must still validate.
 
-## API (Content module, `/admin/content`, permission `content.content.manage`)
+## API (Content module, `/api/v1/admin`, permission `content.content.manage`)
+
+Implemented. Paths are under `/api/v1/admin` (there is no `/content` segment; pages live at `/admin/pages`).
 
 ```
-GET  /storefront-templates
+GET  /api/v1/admin/storefront-templates
      -> StorefrontTemplateResponse[]
         { id, name, suits, description, headerStyle, footerStyle, paletteIds: string[] }
 
-GET  /storefront-templates/{id}/preview
+GET  /api/v1/admin/storefront-templates/{id}/preview
      -> StorePageResponse   (the template, filled, bound and resolved; NOT persisted)
 
-POST /storefront-templates/{id}/apply
+POST /api/v1/admin/storefront-templates/{id}/apply
      -> PageResponse        (the home page: created if absent (slug "home", PageType.Home),
                              otherwise its draft blocks replaced by the filled template.
                              A published page is not transitioned; only its draft changed.)
 
-POST /pages/{id}/preview-draft
+POST /api/v1/admin/pages/{id}/preview-draft
      body: { blocks: BlockBody[] }   (the same block shape UpdatePageBody carries)
      -> StorePageResponse   (bound with PageBlockBinder, composed with PageComposer against the
-                             page's metadata but THESE blocks; untracked; NOT persisted;
-                             validation failures return the same 400 shape as a save)
+                             page's metadata but THESE blocks; untracked; NOT persisted)
 ```
+
+Operation names: `adminListStorefrontTemplates`, `adminPreviewStorefrontTemplate`,
+`adminApplyStorefrontTemplate`, `adminPreviewDraftPage`. An unknown template id or page id is 404.
+
+**Validation errors are 422, not 400.** A bad block returns HTTP 422 with code `CONTENT_INVALID_BLOCK`
+and the field paths in `errors` (for example `blocks[0].imageFileId`), exactly as the page save does.
+`preview-draft` returns the same response.
+
+**Lenient save, strict publish.** A draft is allowed to be incomplete: a hero with no picture, a
+banner with no image, a carousel that names no products (an empty catalogue). Therefore template
+preview and apply, `preview-draft` and the page save (`PUT /admin/pages/{id}`) all bind in draft mode
+(`allowIncomplete`), which relaxes only a missing required media reference and the carousel "needs a
+collection or products" rule. Every other rule still applies. Going live is strict:
+`POST /admin/pages/{id}/transition` to `Published` or `Scheduled` re-validates the page's current blocks
+strictly and returns the same 422 shape with the block named, leaving the page where it was. Custom
+HTML blocks are skipped by that re-check (they are gated by their own permission and flag at write
+time). Rollback binds strictly too.
+
+**Block keys.** The server keys are `Hero`, `BannerGrid`, `ProductCarousel`, `CategoryTiles`,
+`RichText`, `Faq`, `Testimonial` (singular, not `Testimonials`) and `CustomHtml`.
+
+**Hero full-width versus split.** The hero has no layout field, only `align` (`left`, `centre`,
+`right`). Templates use `align: "centre"` for the full-width hero (Loom) and `align: "left"` for the
+split hero (Atelier, Edit). `right` is unused. The storefront and the editor canvas should read it
+that way.
 
 ## Platform settings (`branding` section, public, part of `/store/config`)
 

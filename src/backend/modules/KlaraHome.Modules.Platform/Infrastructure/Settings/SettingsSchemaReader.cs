@@ -89,7 +89,7 @@ internal static class SettingsSchemaReader
                 constraint?.Maximum,
                 constraint?.MaxLength,
                 constraint?.Pattern,
-                ChoicesOf(elementType)));
+                constraint?.Choices ?? ChoicesOf(elementType)));
         }
     }
 
@@ -189,6 +189,12 @@ internal static class SettingsSchemaReader
     /// </remarks>
     private static void Apply(Constraints entry, IPropertyValidator validator)
     {
+        if (validator is IChoiceValidator choice)
+        {
+            entry.Choices = [.. choice.Choices];
+            return;
+        }
+
         switch (validator.Name)
         {
             case "NotNullValidator":
@@ -285,6 +291,8 @@ internal static class SettingsSchemaReader
         public int? MaxLength { get; set; }
 
         public string? Pattern { get; set; }
+
+        public string[]? Choices { get; set; }
     }
 }
 

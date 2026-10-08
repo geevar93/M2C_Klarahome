@@ -156,12 +156,19 @@ internal static class BlockValidator
     /// app puts the message beside the input that caused it, so the key has to name the input.
     /// </param>
     /// <param name="errors">The field errors so far. Added to, never replaced.</param>
+    /// <param name="allowIncomplete">
+    /// Draft mode, for the storefront designer: a required media reference may be absent (a hero the
+    /// editor has not picked a picture for yet) and a carousel may name nothing yet (an empty
+    /// catalogue). Every other rule - types, bounds, links, unknown properties, sanitising - still
+    /// applies. A normal save never sets it.
+    /// </param>
     /// <returns>The canonical document and its references, or null when the block was refused.</returns>
     public static BlockValidation? Validate(
         BlockType type,
         JsonElement config,
         string path,
-        Dictionary<string, List<string>> errors)
+        Dictionary<string, List<string>> errors,
+        bool allowIncomplete = false)
     {
         ArgumentNullException.ThrowIfNull(errors);
 
@@ -191,18 +198,21 @@ internal static class BlockValidator
 
             foreach (var field in descriptor.Fields)
             {
-                WriteField(field, config, $"{path}.{field.Name}", writer, errors, media, products, categories, collections);
+                WriteField(field, config, $"{path}.{field.Name}", writer, errors, media, products, categories, collections, allowIncomplete);
             }
 
             if (descriptor.Items is { Count: > 0 })
             {
-                WriteItems(descriptor, config, path, writer, errors, media, products, categories, collections);
+                WriteItems(descriptor, config, path, writer, errors, media, products, categories, collections, allowIncomplete);
             }
 
             writer.WriteEndObject();
         }
 
-        CheckTypeRules(type, products, collections, path, errors);
+        if (!allowIncomplete)
+        {
+            CheckTypeRules(type, products, collections, path, errors);
+        }
 
         if (errors.Sum(entry => entry.Value.Count) > before)
         {
@@ -290,7 +300,8 @@ internal static class BlockValidator
         List<Guid> media,
         List<Guid> products,
         List<Guid> categories,
-        List<string> collections)
+        List<string> collections,
+        bool allowIncomplete)
     {
         writer.WritePropertyName(ItemsProperty);
         writer.WriteStartArray();
@@ -358,7 +369,8 @@ internal static class BlockValidator
                     media,
                     products,
                     categories,
-                    collections);
+                    collections,
+                    allowIncomplete);
             }
 
             writer.WriteEndObject();
@@ -378,7 +390,8 @@ internal static class BlockValidator
         List<Guid> media,
         List<Guid> products,
         List<Guid> categories,
-        List<string> collections)
+        List<string> collections,
+        bool allowIncomplete)
     {
         var present = owner.ValueKind == JsonValueKind.Object
                       && owner.TryGetProperty(field.Name, out var value)
@@ -386,7 +399,7 @@ internal static class BlockValidator
 
         if (!present)
         {
-            if (field.IsRequired)
+            if (field.IsRequired && !(allowIncomplete && field.Kind == BlockFieldKind.MediaRef))
             {
                 Add(errors, path, "This is required.");
             }

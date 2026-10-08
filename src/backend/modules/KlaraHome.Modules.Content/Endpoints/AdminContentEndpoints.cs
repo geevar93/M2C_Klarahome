@@ -9,6 +9,7 @@ using KlaraHome.Modules.Content.Application.Menus;
 using KlaraHome.Modules.Content.Application.Pages;
 using KlaraHome.Modules.Content.Application.Redirects;
 using KlaraHome.Modules.Content.Application.Seo;
+using KlaraHome.Modules.Content.Application.Templates;
 using KlaraHome.Modules.Content.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -41,6 +42,10 @@ internal sealed record UpdatePageBody(
     string? Author,
     IReadOnlyList<string>? Tags,
     IReadOnlyList<BlockBody>? Blocks);
+
+/// <summary>The body of a draft preview.</summary>
+/// <param name="Blocks">The blocks to render, in the shape a page save carries.</param>
+internal sealed record PreviewDraftBody(IReadOnlyList<BlockBody>? Blocks);
 
 /// <summary>The body of a workflow move.</summary>
 /// <param name="Status">Where the page is being moved to.</param>
@@ -181,6 +186,7 @@ internal static class AdminContentEndpoints
         ArgumentNullException.ThrowIfNull(admin);
 
         MapPages(admin);
+        MapStorefrontTemplates(admin);
         MapMenus(admin);
         MapBanners(admin);
         MapCollections(admin);
@@ -380,6 +386,71 @@ internal static class AdminContentEndpoints
             .WithSummary("Renders a page exactly as the storefront would, whatever its status.")
             .RequirePermission(ContentPermissions.ContentManage)
             .Produces<StorePageResponse>();
+
+        // A POST because the blocks are the request. Nothing is written, and the permission is the
+        // read one: it is a preview of what a save would do, not a save.
+        group.MapPost("/{id:guid}/preview-draft", async (
+                Guid id,
+                PreviewDraftBody body,
+                IDispatcher dispatcher,
+                HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new PreviewDraftQuery(id, body.Blocks ?? []), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminPreviewDraftPage")
+            .WithSummary("Renders unsaved blocks against a page as the storefront would. Saves nothing.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .Produces<StorePageResponse>();
+    }
+
+    /// <summary>The storefront designer's ready-made templates.</summary>
+    private static void MapStorefrontTemplates(IEndpointRouteBuilder admin)
+    {
+        var group = admin.MapGroup("/storefront-templates").WithTags("Content");
+
+        group.MapGet("/", async (IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new ListStorefrontTemplatesQuery(), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminListStorefrontTemplates")
+            .WithSummary("The storefront templates: a home page, a header and a footer treatment, and palettes.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .Produces<IReadOnlyList<StorefrontTemplateResponse>>();
+
+        group.MapGet("/{id}/preview", async (string id, IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .QueryAsync(new PreviewStorefrontTemplateQuery(id), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminPreviewStorefrontTemplate")
+            .WithSummary("A template filled from the catalogue and resolved as the storefront would. Saves nothing.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .Produces<StorePageResponse>();
+
+        group.MapPost("/{id}/apply", async (string id, IDispatcher dispatcher, HttpContext context) =>
+            {
+                var result = await dispatcher
+                    .SendAsync(new ApplyStorefrontTemplateCommand(id), context.RequestAborted)
+                    .ConfigureAwait(false);
+
+                return result.ToOk(context);
+            })
+            .WithName("adminApplyStorefrontTemplate")
+            .WithSummary("Creates the home page or replaces its draft blocks with the template's. Never changes the status.")
+            .RequirePermission(ContentPermissions.ContentManage)
+            .RequireRateLimiting(RateLimitPolicies.AdminWrite)
+            .Produces<PageResponse>();
     }
 
     /// <summary>The navigation menus and the footer.</summary>

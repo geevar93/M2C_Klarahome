@@ -297,6 +297,10 @@ internal sealed class CreatePageCommandHandler(
 /// keystroke log.
 /// </para>
 /// <para>
+/// Blocks are bound in draft mode: a draft may be incomplete (a hero with no picture yet), and
+/// <see cref="TransitionPageCommandHandler"/> re-validates strictly when the page goes live.
+/// </para>
+/// <para>
 /// A scheduled page is refused. It has been approved and frozen, and letting an edit through would
 /// mean the content that goes live is not the content that was approved.
 /// </para>
@@ -356,7 +360,7 @@ internal sealed class UpdatePageCommandHandler(
         if (command.Blocks is not null)
         {
             var bound = await binder
-                .BindAsync(command.Blocks, scope.CanWriteCustomHtml, cancellationToken)
+                .BindAsync(command.Blocks, scope.CanWriteCustomHtml, cancellationToken, allowIncomplete: true)
                 .ConfigureAwait(false);
 
             if (bound.IsFailure)
