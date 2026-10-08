@@ -165,3 +165,27 @@ Identity per template (the point of having four):
 - **Atelier**: split hero, one full-width banner (the biggest category) then one half banner pair only if images exist, carousel of 4 large cards, FAQ. Inline header, slim footer. Section gap one step larger than the others.
 - **Bazaar**: no hero; tiles first (up to 6), banner pair, two distinct carousels of 6, delivery promise as start-aligned rich text. Search header, columns-with-newsletter footer. Section gap one step smaller.
 - **Edit**: start-aligned editorial opener (65ch at the gutter), split hero, carousel of 6, three testimonials. Wordmark header, slim footer.
+
+### Second pass (same day, after the first fixes)
+
+Seen on the live storefront after the first round. The four pages now differ in opener, rhythm and density, and nothing says "No image" any more. What remains:
+
+1. **Product shots are the wrong pictures for heroes, tiles and banners.** The filler takes the newest product image, which is a small square studio shot with the product name printed along its bottom edge. Blown up to a full-bleed hero it is blurry and its caption strip shows through the scrim on a phone; as a 4:5 split-hero picture its caption reads as a second headline; in tiles and banners the product's name is bigger than the category's. The demo seed already has a wide hero picture and a picture per category (`DemoMediaCatalogue`, keys `demo-hero` and `demo-category-<slug>`, which `DemoHomePageSeeder` already looks up). A real store has the same shapes: the existing home page's hero picture and the category's own picture.
+2. **Pictures do not fill their tiles.** Category tiles and banners draw the image at its intrinsic width centred in a tinted box; the single full-width banner in Atelier becomes a 1000px-tall image.
+3. **Bazaar shows the same two pictures twice in a row.** The tiles and the banner pair both resolve to the same two categories and the same two product shots.
+4. **Rail cards change size between rails on one page.** The rail fills the row exactly, so Bazaar's six-card rail and its four-card rail have different card widths.
+5. **The split hero is mostly empty panel.** The picture column is a fixed 20rem, so at desktop the copy column is a wide flat panel with a small headline floating in it.
+
+Fixes:
+
+Frontend:
+- Tiles and banners: the picture fills the tile (`object-fit: cover`), tiles at 4:3, a banner pair at 3:2, a single full-width banner at 21:9 capped at 420px on desktop and 4:3 on a phone. The category or banner caption is the primary label, set in the display face at the card-title size, below the picture; no secondary tiny label.
+- Product rail: the card width comes from the block's `limit` (4 or fewer means four across, otherwise six across at desktop), not from the number of cards; fewer cards leave space on the right. Phone unchanged.
+- Split hero: picture column 42% at desktop, copy column uses the display size one step larger than today, copy max-width 36ch, vertically centred. Phone unchanged.
+- Full-bleed hero on a phone: the scrim under the copy goes opaque enough that nothing of the picture shows through the text block (today the picture's bottom edge shows behind the CTA).
+
+Backend (`StorefrontTemplateFiller`):
+- Hero picture, in order: the current home page's hero picture if the page already has a hero; else the media file the demo seeder calls `demo-hero` (reuse the same lookup the seeder uses); else the newest product picture.
+- Tile picture, in order: the category's own picture; else the current home page's tile override for that category; else `demo-category-<slug>`; else the first product picture in the category.
+- Banner picture: the category's own picture; else `demo-category-<slug>`; else the second product picture in the category, so a banner never repeats the tile beside it.
+- A banner grid skips categories already shown by a CategoryTiles block on the same template; if none remain it is dropped. (Bazaar with two categories therefore has tiles and no banners; Atelier, which has no tiles, keeps its banner.)
