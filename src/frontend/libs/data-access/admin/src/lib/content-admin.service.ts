@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   AddCollectionItemBody,
+  BlockBody,
   BannerBody,
   BannerPlacement,
   BannerResponse,
@@ -25,6 +26,7 @@ import {
   SetCollectionItemsBody,
   SetCollectionRuleBody,
   StorePageResponse,
+  StorefrontTemplateResponse,
   TransitionPageBody,
   UpdateCollectionBody,
   UpdateMenuBody,
@@ -34,6 +36,9 @@ import {
 import { Observable, map } from 'rxjs';
 
 import { CursorList, CursorPage } from './cursor-list';
+
+/** Re-exported so the admin's storefront screens take it from this library like every other model they use. */
+export type { StorefrontTemplateResponse } from '@klarahome/data-access-api';
 
 export interface PageFilters {
   readonly search?: string;
@@ -149,6 +154,42 @@ export class ContentAdminService {
   /** Restores a snapshot as the current draft. The snapshot itself is untouched. */
   rollbackPage(id: string, version: number): Observable<PageResponse> {
     return this.api.adminRollbackPage(id, version);
+  }
+
+  /** The home page's summary, or `null` when the store has none yet. */
+  homePage(): Observable<PageSummaryResponse | null> {
+    return this.api.adminListPages({ type: 'Home', size: 1 }).pipe(map((page) => page.items[0] ?? null));
+  }
+
+  // ---- Storefront designer ----------------------------------------------------------------------
+  // The designer's four calls (docs/design/storefront-designer.md). All generated; the routes live
+  // under `/api/v1/admin/storefront-templates` and `/api/v1/admin/pages/{id}/preview-draft`.
+
+  /** The static template catalogue. */
+  storefrontTemplates(): Observable<StorefrontTemplateResponse[]> {
+    return this.api.adminListStorefrontTemplates();
+  }
+
+  /** The template, filled from the catalogue, bound and resolved. Nothing is persisted. */
+  previewStorefrontTemplate(id: string): Observable<StorePageResponse> {
+    return this.api.adminPreviewStorefrontTemplate(id);
+  }
+
+  /**
+   * Replaces the home page's draft with the filled template, creating the page when absent. A
+   * published page is not transitioned: only its draft changes, and its last published version
+   * stays in the history.
+   */
+  applyStorefrontTemplate(id: string): Observable<PageResponse> {
+    return this.api.adminApplyStorefrontTemplate(id);
+  }
+
+  /**
+   * Renders these unsaved blocks as the storefront would, against the page's own metadata.
+   * Not persisted; a block that would not validate is refused with the same 422 a save returns.
+   */
+  previewDraft(pageId: string, blocks: readonly BlockBody[]): Observable<StorePageResponse> {
+    return this.api.adminPreviewDraftPage(pageId, { blocks: [...blocks] });
   }
 
   // ---- Banners ----------------------------------------------------------------------------------

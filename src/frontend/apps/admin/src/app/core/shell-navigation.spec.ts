@@ -129,4 +129,30 @@ describe('Shell navigation', () => {
     await go('/dashboard');
     expect(categoryFor(categories, '/more')).toBeNull();
   });
+
+  it('shows the designer as one tab under Storefront, and keeps it current on its hidden steps', async () => {
+    await go('/storefront');
+    expect(current(sidebarLinks())).toEqual(['Grow']);
+    expect(sections().map((a) => text(a))).toEqual(['Promotions', 'Storefront', 'Storefront tools']);
+    expect(current(sections())).toEqual(['Storefront']);
+    // One screen in the section, so no tab row: the section heading is the way back to it.
+    expect(tabs()).toHaveLength(0);
+
+    await go('/storefront/editor');
+    expect(current(sidebarLinks())).toEqual(['Grow']);
+    expect(current(sections())).toEqual(['Storefront']);
+  });
+
+  it('moves the CMS screens to Storefront tools without changing their paths', async () => {
+    await go('/content/pages/abc');
+    expect(current(sections())).toEqual(['Storefront tools']);
+    expect(tabs().map((a) => text(a))).toEqual(['Pages', 'Menus', 'Banners', 'Collections']);
+    expect(current(tabs())).toEqual(['Pages']);
+    expect(tabs().map((a) => a.getAttribute('href'))).toEqual([
+      '/content/pages',
+      '/content/menus',
+      '/content/banners',
+      '/content/collections',
+    ]);
+  });
 });

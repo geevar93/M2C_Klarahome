@@ -196,6 +196,53 @@ describe('Admin navigation rules', () => {
     expect(categories.find((category) => category.key === 'home')?.badge).toBe(0);
   });
 
+  it('splits Grow into Promotions, the storefront designer and the storefront tools', () => {
+    const everything = navCategories(
+      session({ permissions: DESTINATIONS.flatMap((entry) => entry.permissions ?? []) }),
+      new Map(),
+    );
+    const grow = everything.find((category) => category.key === 'grow');
+    expect(grow?.sections.map((section) => section.label)).toEqual(['Promotions', 'Storefront', 'Storefront tools']);
+
+    const items = (label: string) =>
+      grow?.sections.find((section) => section.label === label)?.items.map((item) => [item.label, item.path]);
+    // The designer's three steps are hidden: only the overview is a tab.
+    expect(items('Storefront')).toEqual([['Your storefront', '/storefront']]);
+    // The CMS screens keep their paths, byte for byte, under their new heading.
+    expect(items('Storefront tools')).toEqual([
+      ['Pages', '/content/pages'],
+      ['Menus', '/content/menus'],
+      ['Banners', '/content/banners'],
+      ['Collections', '/content/collections'],
+    ]);
+  });
+
+  it('guards the designer for platform staff with content.content.manage, and the editor against lost work', () => {
+    const designer = DESTINATIONS.filter((entry) => entry.path === 'storefront' || entry.path.startsWith('storefront/'));
+    expect(designer.map((entry) => entry.path)).toEqual([
+      'storefront',
+      'storefront/templates',
+      'storefront/palette',
+      'storefront/editor',
+    ]);
+    for (const entry of designer) {
+      expect(entry.platformOnly).toBe(true);
+      expect(entry.permissions).toEqual(['content.content.manage']);
+      expect(entry.load).toBeDefined();
+      expect(entry.hidden === true).toBe(entry.path !== 'storefront');
+    }
+    expect(designer.filter((entry) => entry.guardUnsavedChanges).map((entry) => entry.path)).toEqual([
+      'storefront/editor',
+    ]);
+
+    const manager = session({ permissions: ['content.content.manage'] });
+    const seller = session({ vendorId: 'v1', permissions: ['content.content.manage'] });
+    for (const entry of designer) {
+      expect(canReach(manager, entry)).toBe(true);
+      expect(canReach(seller, entry)).toBe(false);
+    }
+  });
+
   it('builds one guarded route per destination, and every route lazily', () => {
     const routes = adminRoutes();
 
