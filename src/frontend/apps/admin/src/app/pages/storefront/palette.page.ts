@@ -54,10 +54,18 @@ import { ViewportToggle } from './viewport-toggle';
         <kh-alert tone="danger" heading="It could not be applied">{{ message }}</kh-alert>
       }
 
-      <kh-alert tone="warning" heading="Continuing replaces the home page draft">
-        The template's blocks take the place of the current draft. The version shoppers see now stays
-        in the page's history until you publish.
-      </kh-alert>
+      @if (homeIsLive()) {
+        <kh-alert tone="warning" heading="Continuing changes the live home page straight away">
+          The home page is published, and a published page has no separate draft: shoppers see the
+          new template as soon as you continue. The version they see now is kept in the page's
+          version history and can be restored from Advanced.
+        </kh-alert>
+      } @else {
+        <kh-alert tone="warning" heading="Continuing replaces the home page draft">
+          The template's blocks take the place of the current draft. Nothing reaches shoppers until
+          you publish.
+        </kh-alert>
+      }
 
       <div class="layout">
         <section class="kh-panel choices">
@@ -146,6 +154,12 @@ export class StorefrontPalettePage {
   protected readonly branding = signal<Branding | null>(null);
   protected readonly frames = signal<readonly CanvasFrame[]>([]);
   protected readonly chosen = signal<string | null>(null);
+  /**
+   * Whether the home page is published. A published page serves its blocks directly (the composer's
+   * "Save & update live site"), so applying a template to it is a live change, and the warning
+   * above has to say so rather than promise a draft that does not exist.
+   */
+  protected readonly homeIsLive = signal(false);
   protected readonly viewport = signal<CanvasViewport>('desktop');
 
   protected readonly presets = computed(() => presetsFor(this.template()));
@@ -159,6 +173,11 @@ export class StorefrontPalettePage {
       void this.router.navigate(['/storefront/templates']);
       return;
     }
+
+    this.content
+      .homePage()
+      .pipe(catchError(() => of(null)))
+      .subscribe((home) => this.homeIsLive.set(home?.status === 'Published'));
 
     this.studio
       .templates()

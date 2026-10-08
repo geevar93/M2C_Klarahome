@@ -23,7 +23,12 @@ export interface MirrorActivity {
 }
 
 /** The document the frame starts with; everything else is mirrored in. */
-const BLANK_DOCUMENT = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
+// `data-kh-mirror` marks the document this component wrote, because an iframe fires `load` for the
+// `about:blank` document it starts with as well, and wiring that one up left the styles in a
+// document that was thrown away the moment `srcdoc` was set - an unstyled preview that also threw
+// "Cannot set properties of null" while the real document was still parsing.
+const BLANK_DOCUMENT =
+  '<!doctype html><html><head><meta charset="utf-8"></head><body data-kh-mirror></body></html>';
 
 /**
  * A page drawn at its own width, inside an `<iframe>`, from content the admin rendered.
@@ -142,7 +147,8 @@ export class FrameMirror {
   /** Wires the frame once its document exists: styles, observers, event delegation, first mirror. */
   protected start(): void {
     const doc = this.frame().nativeElement.contentDocument;
-    if (this.started || !doc?.body) return;
+    // Only the srcdoc document (see BLANK_DOCUMENT): `load` also fires for the initial about:blank.
+    if (this.started || !doc?.body?.hasAttribute('data-kh-mirror')) return;
     this.started = true;
 
     const base = doc.createElement('base');
@@ -201,12 +207,14 @@ export class FrameMirror {
     cancelAnimationFrame(this.pending);
     this.pending = requestAnimationFrame(() => {
       const doc = this.frame().nativeElement.contentDocument;
-      if (doc) this.mirror(doc);
+      if (doc?.body?.hasAttribute('data-kh-mirror')) this.mirror(doc);
     });
   }
 
   /** Replaces the frame body with the source's markup, then measures it and restores focus. */
   private mirror(doc: Document): void {
+    // Between `srcdoc` being set and its `load`, the frame's document has no body yet.
+    if (!doc.body) return;
     const focused = doc.activeElement && doc.activeElement !== doc.body ? focusKeyOf(doc.activeElement) : null;
 
     doc.body.innerHTML = this.source().nativeElement.innerHTML;

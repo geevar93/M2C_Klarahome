@@ -12,7 +12,7 @@ Collections screens, unchanged routes).
 - Typography never changes. Fraunces headings + system sans stay as docs/10-design-system.md fixes them.
 - A template covers the **home page blocks, the header treatment and the footer treatment**. Product and category pages are untouched.
 - Platform staff only (`content.content.manage`, `platformOnly`). Sellers get nothing.
-- Applying a template **replaces the home page draft**; the last published version stays in version history (rollback already exists).
+- Applying a template **replaces the home page's blocks**. A published page has no separate draft (its blocks are what the storefront serves, as the composer's "Save & update live site" already says), so on a published home page the template goes live at once; the previous published snapshot stays in version history and can be rolled back. On a draft page nothing reaches shoppers until publish. The palette step's warning says which of the two applies.
 - Palettes are **curated only** from the eight presets in `libs/util/src/lib/theme-presets.ts`. Each template names 3 or 4. No per-palette tweaking in this flow; the token JSON stays under Advanced for staff.
 - Preview is **embedded in the admin**: the admin renders the shared `CmsBlockRenderer` (`libs/ui/patterns`) against the unsaved draft, resolved through a draft-preview API call. No signed storefront preview URL.
 
