@@ -124,3 +124,44 @@ exactly one category must be updated.
 - **Palette**: the template's curated presets as swatch cards (reuse `ThemePicker` filtered to those ids, or the same card style); the preview re-colours live. *Continue* calls `POST apply`, then PUTs the `branding` section with `{ themeTokens: {"--kh-theme": id}, templateId, headerStyle, footerStyle }` merged over the current section value, then navigates to the editor.
 - **Editor**: full-page canvas (desktop and phone toggle) of the home page draft, each block wrapped in a selectable frame with its label; click opens a side panel with that block's fields through the existing `SchemaField` and `ReferenceTags` controls (same as the composer); a `+` between blocks adds from the block library; keyboard: arrow keys move, Delete removes. Text is typed in the side panel (in-canvas contenteditable is a later nicety, not required). The canvas re-renders from `POST /pages/{id}/preview-draft`, debounced about 400 ms after a change, while the local draft stays the source of truth. Save draft and Publish use the existing `updatePage` and transition calls. The old composer remains at `content/pages/:id` for Advanced.
 - The canvas wrapper sets the storefront palette tokens inline (`--color-*` from the preset, see `theme-presets.ts`) and `--font-display` to Fraunces if the admin can load the face from the shared primitives assets; otherwise the system face is acceptable inside the canvas.
+
+## Template review (2026-10-08, after the first build)
+
+Design read: four home page templates for a premium DTC home-goods store in India, trust-first commerce. Typography (Fraunces display, system sans) and the eight palettes are fixed brand decisions and are not under review. What a template may vary: block arrangement, block configuration, header and footer treatment. Reviewed on the live storefront at 1366 and 390 wide, screenshots in the session scratchpad under `shots/templates/`.
+
+### What is wrong
+
+1. **Every hero is the same dark slab.** With no picture, the hero renders as a 300px block of ink with text on it, in all four templates. Loom's "full-width" hero and Atelier's "split" hero differ only in text alignment, and the "full-width" one is an inset rounded card, not full width. The template gallery promises four different openers and delivers one.
+2. **Shoppers see "No image" placeholders.** Atelier and Bazaar ship a BannerGrid whose two tiles are 400px tall grey boxes with a broken-image glyph and the words "No image", directly under the hero. That is an admin-only state leaking onto the public site.
+3. **Category tiles are blank white cards.** "Shop by room" / "Browse the shop" draws two text-only white boxes in a tinted band, filling a third of the row. It reads unfinished rather than minimal.
+4. **The product carousel is not a carousel and ends ragged.** The block wraps as a grid; eight products at six per row leave an orphan row of two on every template. Bazaar stacks two identical rails ("Trending now" and "Under ₹999" show the same eight products).
+5. **Grids do not match their content.** Edit's testimonials put two quotes in a three-column grid; Loom's tiles put two tiles in a row sized for three or more. A grid has exactly as many cells as it has content.
+6. **Rich text floats.** "Made slowly, sent quickly" and Edit's opener are a left-aligned paragraph inside a centred 52ch column, so the text sits at an odd offset with uneven margins. Either centre the column and its text (Loom, centred language) or align it to the page gutter (Edit, editorial language).
+7. **Band rhythm is accidental.** Some sections sit in a tinted rounded band (tiles, testimonials, FAQ), others on the bare page (carousel, rich text), in an order that depends on which blocks happened to land next to each other. Two bands never touch today only by luck.
+8. **The newsletter footer breaks its own grid.** At desktop the Newsletter column wraps under the five link columns as a lone row with a 220px input and a disabled Join button; it was meant to be a column.
+9. **Template identity is only header deep.** Loom, Atelier, Bazaar and Edit share identical block styling and density. Beyond the opener and the header, a shopper could not tell them apart.
+
+### What to change
+
+Frontend (`libs/ui/patterns`, storefront, admin canvas follows automatically):
+- **Hero**: `align=centre` renders full-bleed (edge to edge, no card radius, no inset) with the picture as the ground and the scrim as today; `align=left` renders a split card: copy on the left, picture on the right at 4:5. Without a picture, a hero is at most 240px tall at desktop, sits on `--color-surface` (not ink), uses ink text and a primary CTA. Never a 300px ink slab with nothing in it.
+- **Banner grid and category tiles without an image**: a tinted tile (`--color-surface-sunken`) with the caption set in the display face inside it, no glyph, no "No image" text. The "No image" wording belongs in the admin editor only (the canvas may label it).
+- **Category tiles**: when the tile has an image (or an image override) show it; the grid is `auto-fit` with a minimum so two tiles fill the row at desktop as two halves, not as two-thirds.
+- **Product carousel**: at `md` and above it is a true horizontal scroll-snap rail with a visible "View all" and no orphan row; on phone it stays a two-column grid of at most the first four, then "View all". Honour the block's `limit`.
+- **Testimonials**: grid is `auto-fit` so two quotes become two columns; three stay three.
+- **Rich text**: a `centred` presentation (centre the column and its text) and a `start` presentation (page gutter, 65ch). Pick per block via its existing `align`-style field if the catalog has one; otherwise add one to the block schema and default to `start`.
+- **Section bands**: a band gets its tint from the block type as today, but two bands in a row collapse their shared gap so bands read as one surface; a band never sits directly under the hero with a page-ground gap of less than one section gap.
+- **Newsletter footer**: the newsletter is a full-width row above the copyright line, email field and Join inline, not a sixth column.
+
+Backend (`StorefrontTemplateFiller`, `StorefrontTemplateCatalog`):
+- **Hero picture**: fill the hero's `imageFileId` with the first product image from the catalogue (newest product with an image) so no template opens with an empty hero; the merchant replaces it in the editor.
+- **Banner grid pictures**: each banner takes the first product image found in its category; if none, the banner is dropped rather than shipped empty. A grid with one banner becomes a single full-width banner.
+- **Category tile pictures**: use the category's image when it has one, else the image override to the first product image in that category (the `ReadCategoryImageOverrides` mechanism already exists).
+- **Carousels**: `limit` per template (Atelier 4 large, Loom 6, Bazaar 6, Edit 6) and the filler respects it. Bazaar's "Under ₹999" is filled with products whose price is at or under ₹999, newest first, and is dropped from the applied page if fewer than 3 qualify. Two carousels on one template never share the same set when the catalogue has enough products.
+- **Testimonials**: Edit ships three quotes, not two.
+
+Identity per template (the point of having four):
+- **Loom**: full-bleed hero, tiles in a band, carousel of 6, testimonials in a band, centred rich text. Centred header, columns footer.
+- **Atelier**: split hero, one full-width banner (the biggest category) then one half banner pair only if images exist, carousel of 4 large cards, FAQ. Inline header, slim footer. Section gap one step larger than the others.
+- **Bazaar**: no hero; tiles first (up to 6), banner pair, two distinct carousels of 6, delivery promise as start-aligned rich text. Search header, columns-with-newsletter footer. Section gap one step smaller.
+- **Edit**: start-aligned editorial opener (65ch at the gutter), split hero, carousel of 6, three testimonials. Wordmark header, slim footer.
