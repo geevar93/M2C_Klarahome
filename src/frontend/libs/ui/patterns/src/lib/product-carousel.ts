@@ -8,9 +8,10 @@ import { ProductCard } from './product-card';
  * A titled set of products — related items, recently viewed, a merchandised block.
  *
  * **Two presentations, one list.** From 'md' it is a true horizontal rail: scroll-snap, one card
- * per snap point, sized so the visible cards exactly fill the row (six across a desktop, four on a
- * tablet, fewer when the set is smaller) and any further products are a swipe or a trackpad away.
- * There is never an orphan row of two. On a phone a sideways scroller hides everything past the
+ * per snap point, sized from the block's `limit`, not from how many cards there are (six across a desktop, or four
+ * when the limit is four or fewer; four on a tablet), so every rail on a page has the same card
+ * width and a short rail leaves space on the right. Any further products are a swipe or a trackpad
+ * away. On a phone a sideways scroller hides everything past the
  * first card and a half behind a swipe most shoppers never make, so there it is a two-column grid
  * of at most the first four with "View all" beneath; a set with nowhere to send the shopper (no
  * `viewAllHref`) shows every product instead of hiding some behind a link that does not exist.
@@ -187,10 +188,19 @@ export class ProductCarousel {
     const all = this.products();
     return limit !== null && limit > 0 ? all.slice(0, limit) : all;
   });
-  /** Columns in view on a tablet: a whole number of cards, at least three, at most four. */
-  protected readonly mdColumns = computed(() => Math.max(3, Math.min(4, this.shown().length)));
-  /** Columns in view on a desktop: at least four, at most six, so four large cards fill the row. */
-  protected readonly lgColumns = computed(() => Math.max(4, Math.min(6, this.shown().length)));
+  /**
+   * Columns in view on a tablet: four. It is fixed, not read from how many cards came back, so every
+   * rail on a page has the same card width and a short rail leaves space on the right.
+   */
+  protected readonly mdColumns = computed(() => 4);
+  /**
+   * Columns in view on a desktop, from the block's `limit` and not from the card count: four across
+   * when the limit is four or fewer, otherwise six.
+   */
+  protected readonly lgColumns = computed(() => {
+    const limit = this.limit();
+    return limit !== null && limit > 0 && limit <= 4 ? 4 : 6;
+  });
 
   readonly opened = output<ProductCardView>();
   readonly wishlistToggled = output<ProductCardView>();

@@ -86,7 +86,7 @@ import { ProductCarousel } from './product-carousel';
                     class="hero-image"
                     [source]="block.image"
                     [priority]="first && prioritiseFirst()"
-                    sizes="(min-width: 1024px) 24rem, (min-width: 768px) 20rem, 100vw"
+                    sizes="(min-width: 768px) 42vw, 100vw"
                   />
                 </div>
               </div>
@@ -95,7 +95,7 @@ import { ProductCarousel } from './product-carousel';
         }
 
         @case ('bannerGrid') {
-          <section>
+          <section class="banners" [attr.data-count]="block.items.length === 1 ? 'single' : 'multi'">
             @if (block.heading) {
               <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
@@ -113,27 +113,31 @@ import { ProductCarousel } from './product-carousel';
                 @if (item.href) {
                   <a class="banner" [class.banner--flat]="!item.image" [routerLink]="item.href">
                     @if (item.image) {
-                      <kh-product-image
-                        [source]="item.image"
-                        ratio="4 / 3"
-                        sizes="(min-width: 768px) 33vw, 100vw"
-                      />
+                      <span class="pic">
+                        <kh-product-image
+                          [source]="item.image"
+                          [placeholder]="item.caption"
+                          sizes="(min-width: 768px) 50vw, 100vw"
+                        />
+                      </span>
                     }
                     @if (item.caption) {
-                      <span>{{ item.caption }}</span>
+                      <span class="label">{{ item.caption }}</span>
                     }
                   </a>
                 } @else {
                   <div class="banner" [class.banner--flat]="!item.image">
                     @if (item.image) {
-                      <kh-product-image
-                        [source]="item.image"
-                        ratio="4 / 3"
-                        sizes="(min-width: 768px) 33vw, 100vw"
-                      />
+                      <span class="pic">
+                        <kh-product-image
+                          [source]="item.image"
+                          [placeholder]="item.caption"
+                          sizes="(min-width: 768px) 50vw, 100vw"
+                        />
+                      </span>
                     }
                     @if (item.caption) {
-                      <span>{{ item.caption }}</span>
+                      <span class="label">{{ item.caption }}</span>
                     }
                   </div>
                 }
@@ -174,14 +178,15 @@ import { ProductCarousel } from './product-carousel';
                      that carries the label once, in the display face. -->
                 <a class="tile" [class.tile--flat]="!tile.image" [routerLink]="tile.href">
                   @if (tile.image) {
-                    <kh-product-image
-                      [source]="tile.image"
-                      [placeholder]="tile.label"
-                      ratio="4 / 3"
-                      sizes="(min-width: 768px) 25vw, 45vw"
-                    />
+                    <span class="pic">
+                      <kh-product-image
+                        [source]="tile.image"
+                        [placeholder]="tile.label"
+                        sizes="(min-width: 768px) 25vw, 45vw"
+                      />
+                    </span>
                   }
-                  <span>{{ tile.label }}</span>
+                  <span class="label">{{ tile.label }}</span>
                 </a>
               }
             </kh-grid>
@@ -446,7 +451,7 @@ import { ProductCarousel } from './product-carousel';
     /* Phone backing. A bottom-up gradient on the copy's own box rather than a percentage of the
        hero: the copy's height varies with what an editor types, and a box-relative "opaque to 60%"
        stops covering the first line of a long headline. This one is opaque (the same 92% tint, so
-       the same 9.8:1) exactly as far up as the copy goes, and the \`--hero-fade\` strip above it —
+       fully opaque, so nothing of the photograph shows behind the text or the call to action; 9.8:1 is the floor and this is higher) exactly as far up as the copy goes, and the \`--hero-fade\` strip above it —
        which holds no text — is what fades into the photograph. z-index -1 stays above the photo
        and below the text because \`.hero-copy\` is its own stacking context. */
     .hero-media .hero-copy::before {
@@ -457,7 +462,7 @@ import { ProductCarousel } from './product-carousel';
       border-radius: 0 0 var(--hero-radius) var(--hero-radius);
       background: linear-gradient(
         to top,
-        color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) calc(100% - var(--hero-fade)),
+        var(--color-surface-inverse) calc(100% - var(--hero-fade)),
         transparent 100%
       );
     }
@@ -486,8 +491,8 @@ import { ProductCarousel } from './product-carousel';
 
     /* The split card: a light panel, copy on one side and the picture at 4:5 on the other. On a
        phone the picture comes first and is cropped shorter (4:3), so the headline is on screen
-       with it; from 'md' the picture column is a fixed width, which is what keeps a 4:5 picture from
-       being taller than the viewport. */
+       with it; from 'md' the picture column is 42% of the card, and the card is as tall as the picture's 4:5 at
+       that width. */
     .hero-split {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -511,21 +516,27 @@ import { ProductCarousel } from './product-carousel';
 
     @media (min-width: 768px) {
       .hero-split {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+        grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
       }
 
       .hero-split .hero-copy {
         padding: var(--space-8);
+        max-inline-size: 36ch;
+      }
+
+      .hero-split .hero-copy h2 {
+        font-size: var(--text-display-md);
       }
 
       .hero-pic {
         order: 0;
         aspect-ratio: 4 / 5;
+        max-block-size: 36rem;
       }
 
       /* Mirrored when the block asks for the copy on the right. */
       .hero[data-align='right'] .hero-split {
-        grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
       }
 
       .hero[data-align='right'] .hero-pic {
@@ -534,12 +545,12 @@ import { ProductCarousel } from './product-carousel';
     }
 
     @media (min-width: 1024px) {
-      .hero-split {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+      .hero-split .hero-copy {
+        padding-inline: var(--space-10);
       }
 
-      .hero[data-align='right'] .hero-split {
-        grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+      .hero-split .hero-copy h2 {
+        font-size: var(--text-display-lg);
       }
     }
 
@@ -586,8 +597,54 @@ import { ProductCarousel } from './product-carousel';
       min-width: 0;
       color: var(--color-text);
       text-decoration: none;
-      font-size: var(--text-sm);
       text-align: center;
+    }
+
+    /* The picture fills a fixed-aspect box and is cropped to it (\`object-fit: cover\`), never drawn
+       at its intrinsic width centred in a tinted box. The image is laid over the box rather than
+       sizing it, so the aspect ratio below is the whole story: tiles 4:3, a banner pair 3:2, a
+       single banner 4:3 on a phone and 21:9 (capped at 420px) from 'md'. */
+    .pic {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-sunken);
+    }
+
+    .pic kh-product-image {
+      --kh-image-block-size: 100%;
+      --kh-image-fit: cover;
+      position: absolute;
+      inset: 0;
+      contain: size;
+    }
+
+    .banner .pic {
+      aspect-ratio: 3 / 2;
+    }
+
+    .banners[data-count='single'] .banner .pic {
+      aspect-ratio: 4 / 3;
+    }
+
+    @media (min-width: 768px) {
+      .banners[data-count='single'] .banner .pic {
+        aspect-ratio: 21 / 9;
+        max-block-size: 420px;
+        inline-size: 100%;
+      }
+    }
+
+    /* The caption is the primary label: the display face at the card-title size, under the picture.
+       There is no second, smaller label. */
+    .label {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: var(--weight-display);
+      letter-spacing: var(--tracking-display);
+      line-height: var(--leading-tight);
     }
 
     /* The image-less banner and category tile: one tinted tile, the caption set in the display face

@@ -53,13 +53,19 @@ describe('ProductCarousel', () => {
     expect(render(3, { limit: 6 }).querySelectorAll('.items > li').length).toBe(3);
   });
 
-  it('feeds the rail a whole number of columns per breakpoint, never more than it has cards', () => {
-    const rail = render(8, { limit: 6 }).querySelector('.items') as HTMLElement;
-    expect(rail.style.getPropertyValue('--cols-md')).toBe('4');
-    expect(rail.style.getPropertyValue('--cols-lg')).toBe('6');
+  it('sizes the rail from the limit, not from how many cards it has', () => {
+    const rail = (root: HTMLElement) => root.querySelector('.items') as HTMLElement;
+    const six = rail(render(8, { limit: 6 }));
+    expect(six.style.getPropertyValue('--cols-md')).toBe('4');
+    expect(six.style.getPropertyValue('--cols-lg')).toBe('6');
 
-    const small = render(4, { limit: 4 }).querySelector('.items') as HTMLElement;
-    expect(small.style.getPropertyValue('--cols-lg')).toBe('4');
+    // Fewer cards than the limit: same card width, space left on the right.
+    expect(rail(render(2, { limit: 6 })).style.getPropertyValue('--cols-lg')).toBe('6');
+    expect(rail(render(3)).style.getPropertyValue('--cols-lg')).toBe('6');
+
+    // A limit of four or fewer is four across.
+    expect(rail(render(4, { limit: 4 })).style.getPropertyValue('--cols-lg')).toBe('4');
+    expect(rail(render(2, { limit: 3 })).style.getPropertyValue('--cols-lg')).toBe('4');
   });
 
   it('caps the phone grid at four only when there is a View all to carry the rest', () => {

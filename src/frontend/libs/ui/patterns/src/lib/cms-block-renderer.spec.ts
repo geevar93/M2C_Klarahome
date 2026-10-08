@@ -79,6 +79,18 @@ describe('CmsBlockRenderer', () => {
       expect(grid.style.gridTemplateColumns).toContain('/ 2)');
     });
 
+    it('crops a photographed tile or banner to a fixed-aspect box and sets the caption as the label', () => {
+      const image = { url: '/m/a.jpg', alt: '', width: 800, height: 800 } as never;
+      const root = render([
+        { kind: 'categoryTiles', id: 't', heading: null, columns: 2, items: [{ label: 'Sofas', href: '/c/1', image }] },
+        { kind: 'bannerGrid', id: 'b', heading: null, columns: 1, items: [{ image, caption: 'New in', href: '/new' }] },
+      ]);
+      expect(root.querySelectorAll('.pic kh-product-image').length).toBe(2);
+      expect(root.querySelector('.tile .label')?.textContent).toContain('Sofas');
+      expect(root.querySelector('.banner .label')?.textContent).toContain('New in');
+      expect(root.querySelector('.banners')?.getAttribute('data-count')).toBe('single');
+    });
+
     it('draws an image-less tile or banner as a flat tile with no placeholder text', () => {
       const root = render([
         { kind: 'categoryTiles', id: 't', heading: null, columns: 2, items: [tile(1), tile(2)] },
