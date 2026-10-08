@@ -215,4 +215,17 @@ describe('SiteFooter styles', () => {
     expect(button.disabled).toBe(true);
     expect(form?.textContent).toContain('Coming soon');
   });
+
+  it('draws the newsletter as a full-width row above the copyright, not a column of the grid', () => {
+    const root = render({ style: 'columnsNewsletter', menu });
+
+    expect(root.querySelector('.groups form')).toBeNull();
+    const form = root.querySelector('form.newsletter') as HTMLElement;
+    const bottom = root.querySelector('.bottom') as HTMLElement;
+    expect(form.parentElement).toBe(bottom.parentElement);
+    expect(form.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The field and the button share one control row.
+    expect(form.querySelector('.newsletter-controls input')).not.toBeNull();
+    expect(form.querySelector('.newsletter-controls button')).not.toBeNull();
+  });
 });

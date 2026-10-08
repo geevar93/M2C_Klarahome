@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { ProductCardView } from './catalog.model';
@@ -7,20 +7,17 @@ import { ProductCard } from './product-card';
 /**
  * A titled set of products — related items, recently viewed, a merchandised block.
  *
- * **It wraps; it does not scroll sideways.** This used to be a horizontal `scroll-snap` rail, and
- * on a phone that hid all but the first card and a half behind a swipe most shoppers never make —
- * the products below the fold of a sideways scroller are products nobody sees. Every large
- * marketplace stacks them instead: as many columns as the width allows (two on a 360px phone, five
- * or six on a desktop) and as many rows as there are products, so the page scrolls in the one
- * direction a shopper is already scrolling. Still no timer and no auto-advance, which
- * docs/05-frontend-architecture.md §3.3 bans on mobile anyway.
+ * **Two presentations, one list.** From 'md' it is a true horizontal rail: scroll-snap, one card
+ * per snap point, sized so the visible cards exactly fill the row (six across a desktop, four on a
+ * tablet, fewer when the set is smaller) and any further products are a swipe or a trackpad away.
+ * There is never an orphan row of two. On a phone a sideways scroller hides everything past the
+ * first card and a half behind a swipe most shoppers never make, so there it is a two-column grid
+ * of at most the first four with "View all" beneath; a set with nowhere to send the shopper (no
+ * `viewAllHref`) shows every product instead of hiding some behind a link that does not exist.
+ * Still no timer and no auto-advance, which docs/05-frontend-architecture.md §3.3 bans on mobile.
  *
- * The selector and inputs keep the old name, so the CMS `productCarousel` block and every page
- * that renders one are unchanged.
- *
- * The column floor is 9rem, not the listing grid's old 10rem: two 10rem columns plus the gap are
- * 332px, 4px more than a 360px phone has inside its 16px gutters, and the grid silently fell back
- * to one enormous card per row.
+ * `limit` caps the set (the CMS block's own field); the selector and the other inputs keep their
+ * old names, so every page that renders one is unchanged.
  */
 @Component({
   selector: 'kh-product-carousel',
@@ -29,12 +26,18 @@ import { ProductCard } from './product-card';
     <div class="head">
       <h2 class="kh-section-heading">{{ heading() }}</h2>
       @if (viewAllHref()) {
-        <a class="view-all" [routerLink]="viewAllHref()">View all</a>
+        <a class="view-all view-all--head" [routerLink]="viewAllHref()">View all</a>
       }
     </div>
 
-    <ol class="items" [attr.aria-label]="heading()">
-      @for (product of products(); track product.variantId) {
+    <ol
+      class="items"
+      [class.capped]="!!viewAllHref()"
+      [attr.aria-label]="heading()"
+      [style.--cols-md]="mdColumns()"
+      [style.--cols-lg]="lgColumns()"
+    >
+      @for (product of shown(); track product.variantId) {
         <li>
           <kh-product-card
             [product]="product"
@@ -46,6 +49,10 @@ import { ProductCard } from './product-card';
         </li>
       }
     </ol>
+
+    @if (viewAllHref() && shown().length > 4) {
+      <a class="view-all view-all--foot" [routerLink]="viewAllHref()">View all</a>
+    }
   `,
   styles: `
     :host {
@@ -75,10 +82,29 @@ import { ProductCard } from './product-card';
       white-space: nowrap;
     }
 
-    /* The same auto-fill rule \`kh-grid\` uses, so the column count follows the container rather
-       than the viewport: a set inside the PDP's full-width band and one inside a narrower CMS
-       column each fit what they actually have. \`min(9rem, 100%)\` keeps a single column from
-       overflowing a container narrower than the floor. */
+    /* On a phone the link sits beneath the grid, where the shopper's thumb has just stopped; from
+       'md' it is in the heading row beside the rail. */
+    .view-all--head {
+      display: none;
+    }
+
+    .view-all--foot {
+      margin-block-start: var(--space-2);
+    }
+
+    @media (min-width: 768px) {
+      .view-all--head {
+        display: inline-flex;
+      }
+
+      .view-all--foot {
+        display: none;
+      }
+    }
+
+    /* Phone: the same auto-fill rule \`kh-grid\` uses, so the column count follows the container.
+       \`min(9rem, 100%)\` keeps a single column from overflowing a container narrower than the
+       floor. */
     .items {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
@@ -86,6 +112,11 @@ import { ProductCard } from './product-card';
       margin: 0;
       padding: 0;
       list-style: none;
+    }
+
+    /* Only the first four on a phone, and only when "View all" is there to carry the rest. */
+    .items.capped > li:nth-child(n + 5) {
+      display: none;
     }
 
     .items > li {
@@ -98,10 +129,46 @@ import { ProductCard } from './product-card';
       min-inline-size: 0;
     }
 
+    /* 'md' and up: the rail. Each card is a share of the visible width, computed from the number
+       of columns the template put in \`--cols-md\` / \`--cols-lg\` (never more than there are
+       products, never fewer than three or four), so the first screenful is always whole cards and
+       the rest scroll in. Snapping is mandatory on the card edge; the scrollbar is thin but
+       visible, because a mouse user with no trackpad needs something to drag. The block padding is
+       room for the card's hover shadow, which a scroll container would otherwise clip. */
     @media (min-width: 768px) {
       .items {
-        grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-        gap: var(--space-4);
+        --gap: var(--space-4);
+        --cols: var(--cols-md, 4);
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-columns: none;
+        grid-auto-columns: calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));
+        gap: var(--gap);
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+        padding-block: var(--space-1) var(--space-3);
+      }
+
+      .items > li {
+        scroll-snap-align: start;
+      }
+
+      .items.capped > li:nth-child(n + 5) {
+        display: flex;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .items {
+        --cols: var(--cols-lg, 6);
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .items {
+        scroll-behavior: smooth;
       }
     }
   `,
@@ -111,7 +178,19 @@ export class ProductCarousel {
   readonly heading = input.required<string>();
   readonly products = input.required<readonly ProductCardView[]>();
   readonly viewAllHref = input<string | null>(null);
+  /** The most products to show. Null or zero means all of them. */
+  readonly limit = input<number | null>(null);
   readonly showWishlist = input(false);
+
+  protected readonly shown = computed(() => {
+    const limit = this.limit();
+    const all = this.products();
+    return limit !== null && limit > 0 ? all.slice(0, limit) : all;
+  });
+  /** Columns in view on a tablet: a whole number of cards, at least three, at most four. */
+  protected readonly mdColumns = computed(() => Math.max(3, Math.min(4, this.shown().length)));
+  /** Columns in view on a desktop: at least four, at most six, so four large cards fill the row. */
+  protected readonly lgColumns = computed(() => Math.max(4, Math.min(6, this.shown().length)));
 
   readonly opened = output<ProductCardView>();
   readonly wishlistToggled = output<ProductCardView>();

@@ -24,6 +24,10 @@ body {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
+  // A full-bleed block (the centred hero) is sized in `vw`, which counts the scrollbar's width; the
+  // overshoot is clipped here rather than becoming a sideways scroll. `clip`, not `hidden`, so
+  // the body does not become a scroll container and sticky headers keep working.
+  overflow-x: clip;
   // Kept off: a font smoothing override makes text thinner than the OS intends, which costs
   // contrast on exactly the low-end Android screens this storefront is built for.
 }

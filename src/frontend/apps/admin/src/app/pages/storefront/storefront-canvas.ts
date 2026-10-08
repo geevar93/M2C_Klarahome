@@ -117,7 +117,7 @@ function chromeTokens(): Record<string, string> {
                 <span class="tag">{{ item.label }}</span>
                 <div class="body" inert>
                   @if (item.blocks.length > 0) {
-                    <kh-cms-block-renderer [blocks]="item.blocks" [prioritiseFirst]="false" />
+                    <kh-cms-block-renderer [blocks]="item.blocks" [prioritiseFirst]="false" [fullBleed]="false" />
                   } @else {
                     <p class="empty">{{ item.note ?? 'Nothing to show for this block yet.' }}</p>
                   }
@@ -140,7 +140,7 @@ function chromeTokens(): Record<string, string> {
               </div>
             }
           } @else {
-            <kh-cms-block-renderer [blocks]="plainViews()" [prioritiseFirst]="false" />
+            <kh-cms-block-renderer [blocks]="plainViews()" [prioritiseFirst]="false" [fullBleed]="false" />
           }
         </main>
 

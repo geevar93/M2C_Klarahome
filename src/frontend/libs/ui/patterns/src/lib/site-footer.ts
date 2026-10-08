@@ -176,14 +176,20 @@ export type FooterStyle = 'columns' | 'slim' | 'columnsNewsletter';
               </ul>
             </nav>
           }
+        </div>
 
-          @if (style() === 'columnsNewsletter') {
-            <!-- No newsletter mechanism exists on the storefront or the API yet, so the control is
-                 drawn, disabled, with the reason beside it. It is not a dead end: a disabled field
-                 with a stated reason is honest, a working-looking field that drops the address is
-                 not. -->
-            <form class="group newsletter" aria-labelledby="newsletter-title" (submit)="$event.preventDefault()">
+        @if (style() === 'columnsNewsletter') {
+          <!-- A full-width row above the copyright line, not a sixth column: a column squeezed the
+               field to the track width and wrapped it alone under the links. No newsletter mechanism
+               exists on the storefront or the API yet, so the control is drawn, disabled, with the
+               reason beside it. A disabled field with a stated reason is honest; a working-looking
+               field that drops the address is not. -->
+          <form class="newsletter" aria-labelledby="newsletter-title" (submit)="$event.preventDefault()">
+            <div class="newsletter-copy">
               <h2 class="group-title" id="newsletter-title">Newsletter</h2>
+              <p class="newsletter-hint" id="newsletter-hint">Coming soon</p>
+            </div>
+            <div class="newsletter-controls">
               <label class="kh-visually-hidden" for="newsletter-email">Email address</label>
               <input
                 id="newsletter-email"
@@ -195,10 +201,9 @@ export type FooterStyle = 'columns' | 'slim' | 'columnsNewsletter';
                 aria-describedby="newsletter-hint"
               />
               <button khButton variant="primary" type="submit" disabled>Join</button>
-              <p class="newsletter-hint" id="newsletter-hint">Coming soon</p>
-            </form>
-          }
-        </div>
+            </div>
+          </form>
+        }
 
         <div class="bottom">
           <p class="legal">© {{ year }} {{ storeName() }}. All rights reserved.</p>
@@ -469,18 +474,45 @@ export type FooterStyle = 'columns' | 'slim' | 'columnsNewsletter';
       padding-block-end: calc(var(--bottom-bar-height) + var(--space-4));
     }
 
-    /* The sign-up column. A stacked field and button: a row of the two does not fit the narrowest
-       track the grid allows. */
+    /* The sign-up row: the title and its note on the left, the field and Join inline on the right,
+       closed by the same hairline as the link columns. On a phone it stacks, with the field and
+       the button still on one line. */
     .newsletter {
       display: flex;
       flex-direction: column;
-      align-items: stretch;
-      gap: var(--space-2);
-      margin: 0;
+      gap: var(--space-3);
+      margin: 0 0 var(--space-6);
+      padding-block-end: var(--space-6);
+      border-block-end: 1px solid var(--color-border-inverse);
     }
 
     .newsletter .group-title {
       margin: 0;
+    }
+
+    .newsletter-controls {
+      display: flex;
+      gap: var(--space-2);
+      inline-size: 100%;
+    }
+
+    .newsletter-controls .newsletter-field {
+      flex: 1;
+      min-inline-size: 0;
+    }
+
+    @media (min-width: 768px) {
+      .newsletter {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-6);
+      }
+
+      .newsletter-controls {
+        inline-size: auto;
+        flex: 0 1 28rem;
+      }
     }
 
     .newsletter-field {
