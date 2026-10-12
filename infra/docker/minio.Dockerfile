@@ -71,7 +71,7 @@ RUN mkdir /out/licenses \
     && cp /src/mc/LICENSE /out/licenses/mc-LICENSE
 
 # --- Runtime -----------------------------------------------------------------
-FROM alpine:3.23.6
+FROM alpine:3.24.2
 RUN apk add --no-cache ca-certificates
 
 COPY --from=build /out/minio /out/mc /usr/bin/
