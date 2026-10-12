@@ -20,7 +20,7 @@
 # =============================================================================
 
 # --- Build -------------------------------------------------------------------
-FROM golang:1.24.13-alpine3.23 AS build
+FROM golang:1.27.0-alpine3.23 AS build
 RUN apk add --no-cache git
 
 ARG MINIO_RELEASE=RELEASE.2025-09-07T16-13-09Z
