@@ -22,11 +22,11 @@
       },
       "AWSSDK.S3": {
         "type": "Direct",
-        "requested": "[4.0.102.5, )",
-        "resolved": "4.0.102.5",
-        "contentHash": "eMGywCE5J932OFTjjynQRjinkz4p8WQqrX0+VHtwhAE0BBIZWy07W64lloPwKvgVtumqszOiFo5Mbj6VKRZ/mw==",
+        "requested": "[4.0.104.4, )",
+        "resolved": "4.0.104.4",
+        "contentHash": "Qi+NicEv1md8Vxm6c40zf5pRsQ9DzPm4UwewjxSk4zbHpdzAMZK8bDZJGdp4Za9/vHP8GTbSdnDuseZQ5h9tmw==",
         "dependencies": {
-          "AWSSDK.Core": "[4.0.102.3, 5.0.0)"
+          "AWSSDK.Core": "[4.0.102.11, 5.0.0)"
         }
       },
       "EFCore.NamingConventions": {
@@ -192,8 +192,8 @@
       },
       "AWSSDK.Core": {
         "type": "Transitive",
-        "resolved": "4.0.102.3",
-        "contentHash": "hGysXQOtru5CQmROaDLQURs5HK3W385ClLodTKZcLnd6o64YDOwvBaQrjYlfU9BEVLv7sdDR/ZRaATjpdBJ5Xw=="
+        "resolved": "4.0.102.11",
+        "contentHash": "K9PP9/qHQ7pqSB0lYwStJrpXQ8P1xc7Fbn3CyPg8EX78p4+yz8dhIiwiRc3aVbVrUZxmPAPRvmZm+ey1euIXGg=="
       },
       "Microsoft.EntityFrameworkCore.Abstractions": {
         "type": "Transitive",
