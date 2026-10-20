@@ -33,7 +33,7 @@
     "@types/express": "^5.0.6",
     "@types/jest": "~30.0.0",
     "@types/node": "^24.0.0",
-    "eslint": "^9.8.0",
+    "eslint": "^10.10.0",
     "jest": "~30.3.0",
     "jest-environment-jsdom": "~30.3.0",
     "jest-environment-node": "~30.3.0",
