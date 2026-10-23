@@ -181,7 +181,17 @@ public sealed class KlaraHomeSchemaFixture : IAsyncLifetime
             .RunAsync(cancellationToken);
     }
 
-    private static ServiceProvider BuildServices(string connectionString)
+    /// <summary>
+    /// The provider the migrator composes: persistence, every module, the runner.
+    /// </summary>
+    /// <param name="connectionString">The database to migrate.</param>
+    /// <param name="environmentName">
+    /// The hosting environment. Development by default; the non-superuser test passes Production
+    /// because that is the environment the deployed migrator runs in.
+    /// </param>
+    internal static ServiceProvider BuildServices(
+        string connectionString,
+        string environmentName = "Development")
     {
         var settings = SharedSettings(connectionString);
         settings["Database:RunSeeders"] = "true";
@@ -196,7 +206,7 @@ public sealed class KlaraHomeSchemaFixture : IAsyncLifetime
         services.AddSingleton<Microsoft.Extensions.Hosting.IHostEnvironment>(
             new Microsoft.Extensions.Hosting.Internal.HostingEnvironment
             {
-                EnvironmentName = Microsoft.Extensions.Hosting.Environments.Development,
+                EnvironmentName = environmentName,
                 ApplicationName = "KlaraHome.Tests",
                 ContentRootPath = AppContext.BaseDirectory,
             });
