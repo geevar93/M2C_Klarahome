@@ -2,6 +2,7 @@ using KlaraHome.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using StackExchange.Redis;
 
 namespace KlaraHome.Infrastructure.Health;
 
@@ -43,8 +44,19 @@ public static class HealthCheckExtensions
         var redis = configuration.GetConnectionString("Redis");
         if (!string.IsNullOrWhiteSpace(redis))
         {
-            builder.AddRedis(
+            // Built from the connection string with the settings a restricted ACL user needs, so
+            // that the probe on a shared Redis server issues only commands that user may run
+            // (RedisConnection.CreateOptions). One multiplexer for the process, connected on the
+            // first readiness check and disposed with the container.
+            var prefix = configuration[$"{RedisOptions.SectionName}:{nameof(RedisOptions.KeyPrefix)}"];
+            var redisOptions = RedisConnection.CreateOptions(
                 redis,
+                string.IsNullOrWhiteSpace(prefix) ? RedisOptions.DefaultKeyPrefix : prefix);
+
+            services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
+
+            builder.AddRedis(
+                provider => provider.GetRequiredService<IConnectionMultiplexer>(),
                 name: "redis",
                 failureStatus: HealthStatus.Degraded,
                 tags: [ReadyTag],
