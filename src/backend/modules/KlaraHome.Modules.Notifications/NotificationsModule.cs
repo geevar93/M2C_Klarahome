@@ -63,7 +63,11 @@ public sealed class NotificationsModule : IModule
 
         services.AddModuleDbContext<NotificationsDbContext>(configuration, this);
         services.AddValidatedOptions<NotificationOptions>(configuration, NotificationOptions.SectionName);
-        services.AddValidatedOptions<EmailOptions>(configuration, EmailOptions.SectionName);
+        services.AddValidatedOptions<EmailOptions>(
+            configuration,
+            EmailOptions.SectionName,
+            options => options.IsKnownProvider,
+            "Email:Provider must be 'smtp' or 'none' (or empty, which sends nothing).");
         services.AddValidatedOptions<SmsOptions>(configuration, SmsOptions.SectionName);
 
         services.AddSingleton<IFeatureFlagSource, NotificationFeatureFlagSource>();

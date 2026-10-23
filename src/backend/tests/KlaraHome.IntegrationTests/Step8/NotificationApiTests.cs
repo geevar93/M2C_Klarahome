@@ -123,6 +123,20 @@ public sealed class NotificationApiTests(KlaraHomeSchemaFixture fixture) : Step8
         Assert.Equal("Suppressed", message.GetProperty("status").GetString());
         Assert.Equal("NoProvider", message.GetProperty("suppression").GetString());
         Assert.Empty(Factory.Sms.Sent);
+
+        // The only trace in the logs: one short line naming the event, channel and reason - never
+        // the number the message was addressed to, and never what it said.
+        string[] lines;
+
+        lock (Factory.Logged)
+        {
+            lines = [.. Factory.Logged.Where(line => line.Contains("was not sent", StringComparison.Ordinal))];
+        }
+
+        var notSent = Assert.Single(lines, line => line.Contains(NotificationEvents.ChannelTest, StringComparison.Ordinal)
+                                                   && line.Contains("Sms", StringComparison.Ordinal));
+        Assert.Contains("NoProvider", notSent, StringComparison.Ordinal);
+        Assert.DoesNotContain("9876500001", notSent, StringComparison.Ordinal);
     }
 
     [Fact]

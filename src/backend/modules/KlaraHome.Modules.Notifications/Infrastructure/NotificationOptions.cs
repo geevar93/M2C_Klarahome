@@ -56,8 +56,25 @@ internal sealed class EmailOptions
     /// <summary>Configuration section this binds to.</summary>
     public const string SectionName = "Email";
 
-    /// <summary>Which transport to use. <c>smtp</c>, or empty for none.</summary>
+    /// <summary>The transport that sends nothing: every message is recorded as suppressed and logged as not sent.</summary>
+    public const string ProviderNone = "none";
+
+    /// <summary>The SMTP transport.</summary>
+    public const string ProviderSmtp = "smtp";
+
+    /// <summary>
+    /// Which transport to use: <c>smtp</c>, or <c>none</c> (or empty) to send nothing. With none,
+    /// every email is recorded in the delivery log as <c>Suppressed / NoProvider</c> and one short
+    /// "not sent" line is logged, with no recipient or body. Any other value is refused at startup,
+    /// because a misspelt provider would otherwise silently stop all email.
+    /// </summary>
     public string Provider { get; set; } = string.Empty;
+
+    /// <summary>Whether <see cref="Provider"/> names a transport this build knows.</summary>
+    public bool IsKnownProvider
+        => string.IsNullOrWhiteSpace(Provider)
+           || string.Equals(Provider, ProviderNone, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(Provider, ProviderSmtp, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Envelope sender address.</summary>
     public string FromAddress { get; set; } = string.Empty;
@@ -73,7 +90,7 @@ internal sealed class EmailOptions
 
     /// <summary>Whether email can actually be sent.</summary>
     public bool IsConfigured
-        => string.Equals(Provider, "smtp", StringComparison.OrdinalIgnoreCase)
+        => string.Equals(Provider, ProviderSmtp, StringComparison.OrdinalIgnoreCase)
            && !string.IsNullOrWhiteSpace(Smtp.Host)
            && !string.IsNullOrWhiteSpace(FromAddress);
 }

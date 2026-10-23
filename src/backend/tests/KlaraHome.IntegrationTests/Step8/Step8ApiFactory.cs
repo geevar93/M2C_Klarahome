@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace KlaraHome.IntegrationTests.Step8;
 
@@ -28,6 +29,9 @@ public sealed class Step8ApiFactory(string connectionString) : KlaraHomeApiFacto
 
     /// <summary>Everything this host has "sent", by channel.</summary>
     internal RecordingChannelSender Email { get; } = new(NotificationChannel.Email);
+
+    /// <summary>Every log line the host has written, rendered, for tests that assert on what is logged.</summary>
+    internal List<string> Logged { get; } = [];
 
     /// <summary>The SMS sender. Left unconfigured by default, which is the deployment's real state.</summary>
     internal RecordingChannelSender Sms { get; } = new(NotificationChannel.Sms) { IsConfigured = false };
@@ -87,6 +91,15 @@ public sealed class Step8ApiFactory(string connectionString) : KlaraHomeApiFacto
         {
             services.Replace(ServiceDescriptor.Singleton<IFileStorage>(Storage));
 
+            // The app logs through Serilog, which replaces the logger factory outright, so a plain
+            // logging provider would never be asked. Replacing the factory again, after that, is
+            // what lets a test read what the host reported. (Host output goes to the capture
+            // instead of the console, which these tests have no use for.)
+            services.Replace(ServiceDescriptor.Singleton<ILoggerFactory>(
+                LoggerFactory.Create(logging => logging
+                    .SetMinimumLevel(LogLevel.Information)
+                    .AddProvider(new CapturingLoggerProvider(Logged)))));
+
             // The real senders are removed rather than overlaid: the development SMS sender would
             // otherwise deliver to the recorder, and these tests are asserting what a deployment
             // with no SMS provider does.
@@ -95,5 +108,41 @@ public sealed class Step8ApiFactory(string connectionString) : KlaraHomeApiFacto
             services.AddSingleton<IChannelSender>(Sms);
             services.AddSingleton<IChannelSender, InAppSender>();
         });
+    }
+}
+
+/// <summary>Collects rendered log messages so a test can assert on what a host reported.</summary>
+/// <param name="sink">Where each rendered message is appended.</param>
+internal sealed class CapturingLoggerProvider(List<string> sink) : ILoggerProvider
+{
+    /// <inheritdoc />
+    public ILogger CreateLogger(string categoryName) => new CapturingLogger(sink);
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+    }
+
+    private sealed class CapturingLogger(List<string> sink) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+
+            lock (sink)
+            {
+                sink.Add(formatter(state, exception));
+            }
+        }
     }
 }

@@ -77,6 +77,7 @@ internal sealed partial class Notifier(
             if (template is null)
             {
                 message.Suppress(NotificationSuppression.NoTemplate);
+                NotSent(logger, request.EventKey, channel, NotificationSuppression.NoTemplate);
                 results.Add(Describe(message));
                 continue;
             }
@@ -89,6 +90,7 @@ internal sealed partial class Notifier(
             if (suppression != NotificationSuppression.None)
             {
                 message.Suppress(suppression);
+                NotSent(logger, request.EventKey, channel, suppression);
                 results.Add(Describe(message));
                 continue;
             }
@@ -339,6 +341,17 @@ internal sealed partial class Notifier(
         string notificationEventKey,
         string notificationChannel,
         string notificationMissingVariables);
+
+    // Deliberately carries the event, the channel and the reason and nothing else: no recipient, no
+    // subject, no body, no variable values. With the email provider switched off (Email:Provider
+    // "none") this line is the only trace in the logs that a message was meant to go out.
+    [LoggerMessage(EventId = 1532, Level = LogLevel.Information,
+        Message = "A {NotificationEventKey} message on {NotificationChannel} was not sent: {NotificationSuppression}.")]
+    private static partial void NotSent(
+        ILogger logger,
+        string notificationEventKey,
+        NotificationChannel notificationChannel,
+        NotificationSuppression notificationSuppression);
 
     [LoggerMessage(EventId = 1531, Level = LogLevel.Warning,
         Message = "A {NotificationEventKey} message could not be delivered on {NotificationChannel}: "
