@@ -276,7 +276,8 @@ internal sealed class ProductProjectionSource(
                 row.RatingCount,
                 row.IsCodAllowed,
                 row.IsReturnable,
-                images.GetValueOrDefault(row.ListingId),
+                // No picture is null, not Guid.Empty: an empty id reads downstream as a picture that exists.
+                images.TryGetValue(row.ListingId, out var image) ? image : null,
                 row.PublishedAt,
                 [.. byProduct, .. byVariant]));
         }

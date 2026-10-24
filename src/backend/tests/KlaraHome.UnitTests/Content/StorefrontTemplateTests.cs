@@ -699,6 +699,32 @@ public sealed class StorefrontTemplateTests
             && body.Config.GetProperty("heading").GetString() == "Under ₹999");
     }
 
+    [Fact]
+    public async Task The_whole_catalogue_is_read_so_the_newest_product_on_a_later_page_wins_the_hero()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var oldShot = Guid.CreateVersion7();
+        var newShot = Guid.CreateVersion7();
+        var older = Projection(now.AddDays(-30), image: oldShot);
+        var newest = Projection(now, image: newShot);
+
+        // The walk is in variant-id order, oldest first: the newest product is on the second page.
+        var source = Substitute.For<IProductProjectionSource>();
+#pragma warning disable CA2012
+        source.EnumerateAsync(null, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new ValueTask<ProductProjectionPage>(new ProductProjectionPage([older.VariantId], [older], older.VariantId)));
+        source.EnumerateAsync(older.VariantId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new ValueTask<ProductProjectionPage>(new ProductProjectionPage([newest.VariantId], [newest], null)));
+#pragma warning restore CA2012
+
+        var bodies = await NewFiller(Taxonomy([]), source)
+            .FillAsync(StorefrontTemplateCatalog.Find("loom")!, TestContext.Current.CancellationToken);
+
+        var hero = bodies.Single(body => body.Type == nameof(BlockType.Hero));
+
+        Assert.Equal(newShot, hero.Config.GetProperty("imageFileId").GetGuid());
+    }
+
     private static StorefrontTemplateFiller NewFiller(
         ICatalogTaxonomy taxonomy,
         IProductProjectionSource products,

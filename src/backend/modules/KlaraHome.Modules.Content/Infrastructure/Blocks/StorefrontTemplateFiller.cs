@@ -70,8 +70,11 @@ internal sealed class StorefrontTemplateFiller(
     /// <summary>How many carousel products a block without a <c>limit</c> gets.</summary>
     internal const int DefaultLimit = 6;
 
-    /// <summary>How many projections are read to find the recent products.</summary>
+    /// <summary>How many variants each page of the catalogue walk reads.</summary>
     private const int ProjectionWindow = 200;
+
+    /// <summary>The most pages the walk reads (10,000 variants), so a preview stays bounded.</summary>
+    private const int MaxProjectionPages = 50;
 
     /// <summary>One product, reduced to what the filler needs.</summary>
     private sealed record Item(
@@ -119,13 +122,30 @@ internal sealed class StorefrontTemplateFiller(
 
         if (needsProducts)
         {
-            var page = await products
-                .EnumerateAsync(afterVariantId: null, ProjectionWindow, cancellationToken)
-                .ConfigureAwait(false);
+            // The walk is in variant-id order, which is oldest first, so "newest" can only be decided
+            // after reading all of it. One page alone would fill a large catalogue from its oldest
+            // products.
+            var items = new List<ProductProjection>();
+            Guid? cursor = null;
+
+            for (var pages = 0; pages < MaxProjectionPages; pages++)
+            {
+                var page = await products
+                    .EnumerateAsync(cursor, ProjectionWindow, cancellationToken)
+                    .ConfigureAwait(false);
+
+                items.AddRange(page.Items);
+                cursor = page.NextVariantCursor;
+
+                if (cursor is null)
+                {
+                    break;
+                }
+            }
 
             pool =
             [
-                .. page.Items
+                .. items
                     .Where(item => item.IsPurchasable)
                     .GroupBy(item => item.ProductId)
                     .Select(group =>
