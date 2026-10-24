@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using KlaraHome.IntegrationTests.Commerce;
 using KlaraHome.IntegrationTests.Database;
 
@@ -296,27 +297,29 @@ public sealed class StorefrontDesignerTests(KlaraHomeSchemaFixture fixture) : Co
         AssertNoEmptyPicture(await ReadAsync(await admin.PostAsync($"{Admin}/storefront-templates/loom/apply", content: null, Cancellation)));
     }
 
-    /// <summary>No block, and no item inside one, points at <see cref="Guid.Empty"/> as its picture.</summary>
-    private static void AssertNoEmptyPicture(System.Text.Json.JsonElement page)
+    /// <summary>No block, and no item inside one, points at <see cref="Guid.Empty"/> as its picture (null is "none yet").</summary>
+    private static void AssertNoEmptyPicture(JsonElement page)
     {
         foreach (var block in page.GetProperty("blocks").EnumerateArray())
         {
             var config = block.GetProperty("config");
 
-            if (config.TryGetProperty("imageFileId", out var image))
-            {
-                Assert.NotEqual(Guid.Empty, image.GetGuid());
-            }
+            AssertPicture(config);
 
-            if (config.TryGetProperty("items", out var items) && items.ValueKind == System.Text.Json.JsonValueKind.Array)
+            if (config.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in items.EnumerateArray())
                 {
-                    if (item.TryGetProperty("imageFileId", out var itemImage))
-                    {
-                        Assert.NotEqual(Guid.Empty, itemImage.GetGuid());
-                    }
+                    AssertPicture(item);
                 }
+            }
+        }
+
+        static void AssertPicture(JsonElement owner)
+        {
+            if (owner.TryGetProperty("imageFileId", out var image) && image.ValueKind != JsonValueKind.Null)
+            {
+                Assert.NotEqual(Guid.Empty, image.GetGuid());
             }
         }
     }
