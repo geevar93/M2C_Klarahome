@@ -87,6 +87,7 @@ public sealed class ContentModule : IModule
 
         // The single place a block is validated, and the single place one is resolved for rendering.
         services.AddScoped<PageBlockBinder>();
+        services.AddScoped<StorefrontTemplateFiller>();
         services.AddScoped<ContentRenderer>();
         services.AddScoped<PageComposer>();
         services.AddScoped<MenuComposer>();

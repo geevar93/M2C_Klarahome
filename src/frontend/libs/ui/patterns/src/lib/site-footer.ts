@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Icon, IconName } from '@klarahome/ui-primitives';
+import { Button, Icon, IconName } from '@klarahome/ui-primitives';
 
 import { NavItem, isInternalHref } from './navigation.model';
 
@@ -10,6 +10,14 @@ interface SocialLink {
   readonly label: string;
   readonly icon: IconName | null;
 }
+
+/**
+ * How the footer is arranged, chosen per store in the storefront designer.
+ *
+ * `columns` is the original. `slim` is a single row for a store with little to link to.
+ * `columnsNewsletter` is `columns` plus a sign-up column.
+ */
+export type FooterStyle = 'columns' | 'slim' | 'columnsNewsletter';
 
 /**
  * The footer.
@@ -29,10 +37,58 @@ interface SocialLink {
  */
 @Component({
   selector: 'kh-site-footer',
-  imports: [Icon, RouterLink],
+  imports: [Button, Icon, RouterLink],
   template: `
-    <footer [class.clears-sticky-bar]="clearsStickyBar()">
+    <footer [class.clears-sticky-bar]="clearsStickyBar()" [attr.data-style]="style()">
       <div class="kh-container">
+        @if (style() === 'slim') {
+        <div class="slim">
+          <p class="legal">© {{ year }} {{ storeName() }}. All rights reserved.</p>
+
+          @if (slimLinks().length > 0) {
+            <nav class="slim-links" aria-label="Footer">
+              <ul>
+                @for (item of slimLinks(); track item.href) {
+                  <li>
+                    @if (isInternal(item.href)) {
+                      <a [routerLink]="item.href">{{ item.label }}</a>
+                    } @else {
+                      <a
+                        [href]="item.href"
+                        [attr.target]="item.opensInNewTab ? '_blank' : null"
+                        rel="noopener"
+                        >{{ item.label }}</a
+                      >
+                    }
+                  </li>
+                }
+              </ul>
+            </nav>
+          }
+
+          @if (socialLinks().length > 0) {
+            <ul class="social" [attr.aria-label]="socialLabel()">
+              @for (link of socialLinks(); track link.href) {
+                <li>
+                  <a [href]="link.href" target="_blank" rel="noopener" [attr.aria-label]="link.label">
+                    @if (link.icon; as name) {
+                      <kh-icon [name]="name" />
+                    } @else {
+                      <span class="social-text">{{ link.label }}</span>
+                    }
+                  </a>
+                </li>
+              }
+            </ul>
+          }
+
+          @if (poweredBy(); as vendor) {
+            <p class="powered">
+              Powered by <span class="vendor">{{ vendor }}</span>
+            </p>
+          }
+        </div>
+        } @else {
         <div class="groups">
           <div class="brand">
             <p class="brand-name">{{ storeName() }}</p>
@@ -122,6 +178,33 @@ interface SocialLink {
           }
         </div>
 
+        @if (style() === 'columnsNewsletter') {
+          <!-- A full-width row above the copyright line, not a sixth column: a column squeezed the
+               field to the track width and wrapped it alone under the links. No newsletter mechanism
+               exists on the storefront or the API yet, so the control is drawn, disabled, with the
+               reason beside it. A disabled field with a stated reason is honest; a working-looking
+               field that drops the address is not. -->
+          <form class="newsletter" aria-labelledby="newsletter-title" (submit)="$event.preventDefault()">
+            <div class="newsletter-copy">
+              <h2 class="group-title" id="newsletter-title">Newsletter</h2>
+              <p class="newsletter-hint" id="newsletter-hint">Coming soon</p>
+            </div>
+            <div class="newsletter-controls">
+              <label class="kh-visually-hidden" for="newsletter-email">Email address</label>
+              <input
+                id="newsletter-email"
+                class="newsletter-field"
+                type="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                disabled
+                aria-describedby="newsletter-hint"
+              />
+              <button khButton variant="primary" type="submit" disabled>Join</button>
+            </div>
+          </form>
+        }
+
         <div class="bottom">
           <p class="legal">© {{ year }} {{ storeName() }}. All rights reserved.</p>
           @if (poweredBy(); as vendor) {
@@ -130,6 +213,7 @@ interface SocialLink {
             </p>
           }
         </div>
+        }
       </div>
     </footer>
   `,
@@ -363,16 +447,111 @@ interface SocialLink {
       color: var(--color-text-inverse);
     }
 
+    /* \`slim\`: one row. Copyright first, then the menu inline, then the profiles; it wraps rather
+       than overflows on a phone, where each part takes its own line. */
+    .slim {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-6);
+    }
+
+    .slim .legal {
+      margin-inline-end: auto;
+    }
+
+    .slim-links ul {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--space-1) var(--space-4);
+    }
+
+    footer[data-style='slim'] {
+      padding-block: var(--space-4);
+    }
+
+    footer[data-style='slim'].clears-sticky-bar {
+      padding-block-end: calc(var(--bottom-bar-height) + var(--space-4));
+    }
+
+    /* The sign-up row: the title and its note on the left, the field and Join inline on the right,
+       closed by the same hairline as the link columns. On a phone it stacks, with the field and
+       the button still on one line. */
+    .newsletter {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin: 0 0 var(--space-6);
+      padding-block-end: var(--space-6);
+      border-block-end: 1px solid var(--color-border-inverse);
+    }
+
+    .newsletter .group-title {
+      margin: 0;
+    }
+
+    .newsletter-controls {
+      display: flex;
+      gap: var(--space-2);
+      inline-size: 100%;
+    }
+
+    .newsletter-controls .newsletter-field {
+      flex: 1;
+      min-inline-size: 0;
+    }
+
+    @media (min-width: 768px) {
+      .newsletter {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-6);
+      }
+
+      .newsletter-controls {
+        inline-size: auto;
+        flex: 0 1 28rem;
+      }
+    }
+
+    .newsletter-field {
+      min-block-size: var(--touch-target-min);
+      padding-inline: var(--space-3);
+      border: 1px solid var(--color-border-inverse);
+      border-radius: var(--radius-md);
+      background: transparent;
+      color: var(--color-text-inverse);
+      font: inherit;
+      font-size: var(--text-sm);
+    }
+
+    .newsletter-field:disabled {
+      cursor: not-allowed;
+    }
+
+    .newsletter-hint {
+      margin: 0;
+      font-size: var(--text-xs);
+      color: color-mix(in srgb, var(--color-text-inverse) 75%, var(--color-surface-inverse));
+    }
+
     /* 1024px is the 'lg' breakpoint, where the sticky bar stops being fixed. */
     @media (min-width: 1024px) {
       footer.clears-sticky-bar {
         padding-block-end: var(--space-6);
+      }
+
+      footer[data-style='slim'].clears-sticky-bar {
+        padding-block-end: var(--space-4);
       }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SiteFooter {
+  /** The arrangement of the parts; the shell passes the store's chosen style. */
+  readonly style = input<FooterStyle>('columns');
   readonly storeName = input('Klara Home');
   /** The store's one-line description, from the branding settings. Empty hides it. */
   readonly tagline = input('');
@@ -402,6 +581,8 @@ export class SiteFooter {
       icon: socialIcon(item.href ?? ''),
     })),
   );
+  /** The `slim` row's menu: every footer item with an address, headings flattened into their children. */
+  protected readonly slimLinks = computed(() => flattenLinks(this.menu()));
   /** Hides the footer below the 'lg' breakpoint; a wide screen always shows it. */
   readonly hideOnMobile = input(false);
   /** The platform vendor's credit. Empty hides the line. */

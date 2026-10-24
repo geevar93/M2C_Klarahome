@@ -3,6 +3,14 @@ import { PlatformApiClient } from '@klarahome/data-access-api';
 import { FeatureFlags } from '@klarahome/util';
 import { Observable, catchError, of, shareReplay, tap } from 'rxjs';
 
+/** The header treatments the storefront can draw (docs/design/storefront-designer.md). */
+export type StoreHeaderStyle = 'inline' | 'centred' | 'search' | 'wordmark';
+/** The footer treatments the storefront can draw. */
+export type StoreFooterStyle = 'columns' | 'slim' | 'columnsNewsletter';
+
+const HEADER_STYLES: readonly StoreHeaderStyle[] = ['inline', 'centred', 'search', 'wordmark'];
+const FOOTER_STYLES: readonly StoreFooterStyle[] = ['columns', 'slim', 'columnsNewsletter'];
+
 /** The public branding section, as the shell reads it. Every field has a usable default. */
 export interface StoreBranding {
   readonly storeName: string;
@@ -13,6 +21,12 @@ export interface StoreBranding {
    * leaves the compiled `_tokens.scss` defaults in place. Applied by `ThemeService`, not read here.
    */
   readonly themeTokens: Readonly<Record<string, string>>;
+  /** The storefront template this store was started from. Informational; empty when unset. */
+  readonly templateId: string;
+  /** Falls back to `inline` when the API omits the field or sends a value this build does not know. */
+  readonly headerStyle: StoreHeaderStyle;
+  /** Falls back to `columns` for the same reasons. */
+  readonly footerStyle: StoreFooterStyle;
 }
 
 /**
@@ -37,13 +51,19 @@ export class StoreConfigService {
 
   /** Branding, with the defaults the API itself declares — never a blank header. */
   readonly branding: Signal<StoreBranding> = computed(() => {
-    const branding = (this.sections()['branding'] ?? {}) as Partial<StoreBranding> & {
-      themeTokens?: Readonly<Record<string, string>>;
-    };
+    // Typed loosely: the backend may predate the style fields, and an unknown value is dropped
+    // below rather than trusted.
+    const branding = (this.sections()['branding'] ?? {}) as Partial<
+      Record<'templateId' | 'headerStyle' | 'footerStyle', string>
+    > &
+      Partial<StoreBranding> & { themeTokens?: Readonly<Record<string, string>> };
     return {
       storeName: branding.storeName?.trim() || 'Klara Home',
       tagline: branding.tagline?.trim() || '',
       themeTokens: branding.themeTokens ?? {},
+      templateId: branding.templateId?.trim() || '',
+      headerStyle: HEADER_STYLES.find((style) => style === branding.headerStyle) ?? 'inline',
+      footerStyle: FOOTER_STYLES.find((style) => style === branding.footerStyle) ?? 'columns',
     };
   });
 

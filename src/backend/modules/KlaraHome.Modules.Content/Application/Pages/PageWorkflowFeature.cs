@@ -51,6 +51,27 @@ internal sealed record RollbackPageCommand(Guid Id, int Version) : ICommand<Page
 /// <param name="Version">A version to preview instead of the working copy, or null for the latter.</param>
 internal sealed record PreviewPageQuery(Guid Id, int? Version) : IQuery<StorePageResponse>;
 
+/// <summary>
+/// Renders a page's metadata with <em>these</em> blocks, as the storefront would. Nothing is saved.
+/// </summary>
+/// <remarks>
+/// The storefront designer's canvas. The editor holds the draft locally and asks for it to be
+/// rendered, debounced, after each change; the local copy stays the source of truth.
+/// </remarks>
+/// <param name="Id">The page whose title, SEO and metadata the render borrows.</param>
+/// <param name="Blocks">The blocks to render, in order, in the shape a page save carries.</param>
+internal sealed record PreviewDraftQuery(Guid Id, IReadOnlyList<BlockBody> Blocks) : IQuery<StorePageResponse>;
+
+/// <summary>Rules a draft preview has to satisfy.</summary>
+internal sealed class PreviewDraftQueryValidator : AbstractValidator<PreviewDraftQuery>
+{
+    public PreviewDraftQueryValidator()
+    {
+        RuleFor(query => query.Id).NotEmpty();
+        RuleFor(query => query.Blocks).NotNull();
+    }
+}
+
 /// <summary>Rules a transition has to satisfy.</summary>
 internal sealed class TransitionPageCommandValidator : AbstractValidator<TransitionPageCommand>
 {
@@ -88,11 +109,13 @@ internal sealed class TransitionPageCommandValidator : AbstractValidator<Transit
 /// </para>
 /// </remarks>
 /// <param name="context">The Content data context.</param>
+/// <param name="binder">Re-validates the blocks, strictly, before a page is published or scheduled.</param>
 /// <param name="renderer">Resolves images for the response.</param>
 /// <param name="scope">Who is asking, and what they may do.</param>
 /// <param name="clock">The sanctioned clock.</param>
 internal sealed class TransitionPageCommandHandler(
     ContentDbContext context,
+    PageBlockBinder binder,
     ContentRenderer renderer,
     ContentScope scope,
     IClock clock)
@@ -147,6 +170,28 @@ internal sealed class TransitionPageCommandHandler(
             if (incumbent)
             {
                 return Result.Failure<PageResponse>(ContentErrors.HomePageAlreadyPublished);
+            }
+        }
+
+        // A save accepts an incomplete draft (a hero with no picture yet); going live does not.
+        // Strict re-validation here is what turns "the editor has not finished" into a message
+        // naming the block, instead of a storefront rendering a hero with nothing in it. Custom
+        // HTML is left out of the re-check: it is gated by its own permission and flag at write
+        // time, and a publisher who may not write it must still be able to publish around it.
+        if (next is PageStatus.Published or PageStatus.Scheduled)
+        {
+            var snapshots = ContentProjection
+                .ReadSnapshot(ContentProjection.WriteSnapshot(page.Blocks))
+                .Where(snapshot => !string.Equals(snapshot.Type, nameof(BlockType.CustomHtml), StringComparison.Ordinal))
+                .ToList();
+
+            var strict = await binder
+                .BindSnapshotAsync(snapshots, scope.CanWriteCustomHtml, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (strict.IsFailure)
+            {
+                return Result.Failure<PageResponse>(strict.Error);
             }
         }
 
@@ -419,6 +464,69 @@ internal sealed class PreviewPageQueryHandler(
 
             page.Restore(version.Title, version.Seo.Clone(), bound.Value, now);
         }
+
+        var composed = await composer.ComposeAsync(page, now, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(composed);
+    }
+}
+
+/// <summary>Renders unsaved blocks against a page, exactly as the storefront would.</summary>
+/// <remarks>
+/// <para>
+/// Untracked for the same load-bearing reason as <see cref="PreviewPageQueryHandler"/>: applying the
+/// blocks mutates the entity in memory, and a tracked entity would be written by the next
+/// <c>SaveChanges</c> in the scope. The blocks are bound by <see cref="PageBlockBinder"/>, so a bad
+/// block is refused with the same 400 and the same field paths as a save.
+/// </para>
+/// <para>
+/// Bound in draft mode: a hero the editor has not picked a picture for yet, or a carousel with
+/// nothing chosen, renders rather than failing the preview. Everything else a save checks still
+/// applies. A block sent without an id gets a throwaway id for this render.
+/// </para>
+/// </remarks>
+/// <param name="context">The Content data context.</param>
+/// <param name="composer">Resolves and windows the blocks, exactly as the storefront read does.</param>
+/// <param name="binder">Validates the blocks.</param>
+/// <param name="scope">Who is asking.</param>
+/// <param name="clock">The sanctioned clock.</param>
+internal sealed class PreviewDraftQueryHandler(
+    ContentDbContext context,
+    PageComposer composer,
+    PageBlockBinder binder,
+    ContentScope scope,
+    IClock clock)
+    : IQueryHandler<PreviewDraftQuery, StorePageResponse>
+{
+    public async Task<Result<StorePageResponse>> HandleAsync(
+        PreviewDraftQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var page = await context.Pages
+            .AsNoTracking()
+            .Include(row => row.Blocks)
+            .FirstOrDefaultAsync(row => row.Id == query.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (page is null)
+        {
+            return Result.Failure<StorePageResponse>(ContentErrors.NotFound("page"));
+        }
+
+        var bound = await binder
+            .BindAsync(query.Blocks, scope.CanWriteCustomHtml, cancellationToken, allowIncomplete: true)
+            .ConfigureAwait(false);
+
+        if (bound.IsFailure)
+        {
+            return Result.Failure<StorePageResponse>(bound.Error);
+        }
+
+        var now = clock.UtcNow;
+
+        page.SyncBlocks(bound.Value, now);
 
         var composed = await composer.ComposeAsync(page, now, cancellationToken).ConfigureAwait(false);
 

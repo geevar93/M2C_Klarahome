@@ -75,6 +75,8 @@ export class ShellStore {
 
   readonly storeName = computed(() => this.config.branding().storeName);
   readonly tagline = computed(() => this.config.branding().tagline);
+  readonly headerStyle = computed(() => this.config.branding().headerStyle);
+  readonly footerStyle = computed(() => this.config.branding().footerStyle);
   /**
    * The announcement bar's banners.
    *

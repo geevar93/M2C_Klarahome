@@ -242,6 +242,11 @@ internal static class BlockCatalog
                     "width",
                     BlockFieldKind.Choice,
                     Choices: ["narrow", "wide", "full"]),
+                // Optional: how the column and its text sit. Absent means start.
+                new BlockField(
+                    "align",
+                    BlockFieldKind.Choice,
+                    Choices: ["start", "centre"]),
             ]),
 
         new(

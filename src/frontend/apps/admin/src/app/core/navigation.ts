@@ -105,6 +105,7 @@ export const NAV_SECTIONS = [
   'Inventory',
   'Promotions',
   'Storefront',
+  'Storefront tools',
   'Marketplace',
   'Your business',
   'Settings',
@@ -130,7 +131,7 @@ export const NAV_CATEGORIES: readonly {
   { key: 'home', label: 'Home', icon: 'home', sections: ['Home'] },
   { key: 'sell', label: 'Sell', icon: 'cart', sections: ['Orders'] },
   { key: 'catalogue', label: 'Catalogue', icon: 'package', sections: ['Products', 'Organise', 'Inventory'] },
-  { key: 'grow', label: 'Grow', icon: 'megaphone', sections: ['Promotions', 'Storefront'] },
+  { key: 'grow', label: 'Grow', icon: 'megaphone', sections: ['Promotions', 'Storefront', 'Storefront tools'] },
   { key: 'marketplace', label: 'Marketplace', icon: 'wallet', sections: ['Marketplace'] },
   { key: 'business', label: 'Business', icon: 'settings', sections: ['Your business', 'Settings', 'System'] },
 ];
@@ -324,12 +325,54 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   },
 
   // ---- Grow: Storefront -------------------------------------------------------------------------
-  // What shoppers see. The CMS screens, filed under the category named for what the merchant is doing
-  // with them rather than for the module that owns them.
+  // The storefront designer (docs/design/storefront-designer.md): one visible screen, and the three
+  // steps behind it - template, palette, editor - reached from its buttons. Platform staff only.
+  {
+    path: 'storefront',
+    label: 'Your storefront',
+    section: 'Storefront',
+    icon: 'grid',
+    permissions: ['content.content.manage'],
+    platformOnly: true,
+    load: () => import('../pages/storefront/overview.page').then((m) => m.StorefrontOverviewPage),
+  },
+  {
+    path: 'storefront/templates',
+    label: 'Choose a template',
+    section: 'Storefront',
+    permissions: ['content.content.manage'],
+    platformOnly: true,
+    hidden: true,
+    load: () => import('../pages/storefront/templates.page').then((m) => m.StorefrontTemplatesPage),
+  },
+  {
+    path: 'storefront/palette',
+    label: 'Choose a palette',
+    section: 'Storefront',
+    permissions: ['content.content.manage'],
+    platformOnly: true,
+    hidden: true,
+    load: () => import('../pages/storefront/palette.page').then((m) => m.StorefrontPalettePage),
+  },
+  {
+    path: 'storefront/editor',
+    label: 'Edit the home page',
+    section: 'Storefront',
+    permissions: ['content.content.manage'],
+    platformOnly: true,
+    hidden: true,
+    // Every block's fields are unsaved until Save draft, exactly as in the page composer.
+    guardUnsavedChanges: true,
+    load: () => import('../pages/storefront/editor.page').then((m) => m.StorefrontEditorPage),
+  },
+
+  // ---- Grow: Storefront tools -------------------------------------------------------------------
+  // The CMS screens behind the designer, for what it does not cover. Same paths as ever, filed
+  // under the category named for what the merchant is doing with them.
   {
     path: 'content/pages',
     label: 'Pages',
-    section: 'Storefront',
+    section: 'Storefront tools',
     icon: 'edit',
     permissions: ['content.content.manage'],
     platformOnly: true,
@@ -338,7 +381,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/pages/:id',
     label: 'Page',
-    section: 'Storefront',
+    section: 'Storefront tools',
     permissions: ['content.content.manage'],
     platformOnly: true,
     hidden: true,
@@ -350,7 +393,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/menus',
     label: 'Menus',
-    section: 'Storefront',
+    section: 'Storefront tools',
     icon: 'menu',
     permissions: ['content.content.manage'],
     platformOnly: true,
@@ -359,7 +402,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/menus/:id',
     label: 'Menu',
-    section: 'Storefront',
+    section: 'Storefront tools',
     permissions: ['content.content.manage'],
     platformOnly: true,
     hidden: true,
@@ -370,7 +413,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/banners',
     label: 'Banners',
-    section: 'Storefront',
+    section: 'Storefront tools',
     icon: 'info',
     permissions: ['content.content.manage'],
     platformOnly: true,
@@ -379,7 +422,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/collections',
     label: 'Collections',
-    section: 'Storefront',
+    section: 'Storefront tools',
     icon: 'filter',
     permissions: ['content.content.manage'],
     platformOnly: true,
@@ -388,7 +431,7 @@ export const DESTINATIONS: readonly AdminDestination[] = [
   {
     path: 'content/collections/:id',
     label: 'Collection',
-    section: 'Storefront',
+    section: 'Storefront tools',
     permissions: ['content.content.manage'],
     platformOnly: true,
     hidden: true,

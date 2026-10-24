@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Grid } from '@klarahome/ui-layout';
@@ -25,18 +26,44 @@ import { ProductCarousel } from './product-carousel';
  */
 @Component({
   selector: 'kh-cms-block-renderer',
-  imports: [Button, Disclosure, Grid, ProductCarousel, ProductImage, Rating, RouterLink],
+  imports: [Button, Disclosure, Grid, NgTemplateOutlet, ProductCarousel, ProductImage, Rating, RouterLink],
   template: `
     @for (block of visibleBlocks(); track block.id; let first = $first) {
       @switch (block.kind) {
         @case ('hero') {
-          <!-- Text over the photograph, not stacked above it: a stacked CSS grid (every child in
-               the same cell) rather than \`position: absolute\`, so the box's height is the taller of
-               the image's own aspect ratio and whatever the copy actually needs — a long headline,
-               a subheadline and a CTA never get clipped or overlap, they just make the box taller
-               and the photo crops a little further instead. -->
-          <section class="hero" [attr.data-align]="block.align">
-            @if (block.image) {
+          <!-- Three openers, chosen by what the block has, not by a template flag:
+                 - a picture and \`align=centre\`: full-bleed, the picture is the ground and the scrim
+                   sits under the copy (\`bleed\`);
+                 - a picture and \`align=left|right\`: a split card, copy on one side and the picture
+                   at 4:5 on the other (\`split\`);
+                 - no picture: a compact, light panel in ink text with a primary CTA (\`plain\`), never
+                   a tall dark slab with nothing in it.
+               The overlay layout is a stacked CSS grid (every child in the same cell) rather than
+               \`position: absolute\`, so the box's height is the taller of its aspect ratio and what
+               the copy needs: a long headline never gets clipped, it just makes the box taller. -->
+          <section
+            class="hero"
+            [class.hero--unbled]="!fullBleed()"
+            [attr.data-align]="block.align"
+            [attr.data-layout]="block.image ? (block.align === 'centre' ? 'bleed' : 'split') : 'plain'"
+          >
+            <ng-template #heroCopy let-cta="cta">
+              <h2>{{ block.headline }}</h2>
+              @if (block.subheadline) {
+                <p>{{ block.subheadline }}</p>
+              }
+              @if (block.ctaHref && block.ctaLabel) {
+                <a khButton [variant]="cta" [routerLink]="block.ctaHref">{{ block.ctaLabel }}</a>
+              }
+            </ng-template>
+
+            @if (!block.image) {
+              <div class="hero-plain">
+                <div class="hero-copy">
+                  <ng-container *ngTemplateOutlet="heroCopy; context: { cta: 'primary' }" />
+                </div>
+              </div>
+            } @else if (block.align === 'centre') {
               <div class="hero-media">
                 <kh-product-image
                   class="hero-image"
@@ -46,28 +73,21 @@ import { ProductCarousel } from './product-carousel';
                 />
                 <div class="scrim" aria-hidden="true"></div>
                 <div class="hero-copy">
-                  <h2>{{ block.headline }}</h2>
-                  @if (block.subheadline) {
-                    <p>{{ block.subheadline }}</p>
-                  }
-                  @if (block.ctaHref && block.ctaLabel) {
-                    <a khButton variant="inverse" [routerLink]="block.ctaHref">{{ block.ctaLabel }}</a>
-                  }
+                  <ng-container *ngTemplateOutlet="heroCopy; context: { cta: 'inverse' }" />
                 </div>
               </div>
             } @else {
-              <!-- No photograph: the same copy, on the same dark surface the scrim above guarantees
-                   contrast against — a merchandiser who has not uploaded an image yet still gets a
-                   deliberate hero, not a blank strip. -->
-              <div class="hero-media hero-media--flat">
+              <div class="hero-split">
                 <div class="hero-copy">
-                  <h2>{{ block.headline }}</h2>
-                  @if (block.subheadline) {
-                    <p>{{ block.subheadline }}</p>
-                  }
-                  @if (block.ctaHref && block.ctaLabel) {
-                    <a khButton variant="inverse" [routerLink]="block.ctaHref">{{ block.ctaLabel }}</a>
-                  }
+                  <ng-container *ngTemplateOutlet="heroCopy; context: { cta: 'primary' }" />
+                </div>
+                <div class="hero-pic">
+                  <kh-product-image
+                    class="hero-image"
+                    [source]="block.image"
+                    [priority]="first && prioritiseFirst()"
+                    sizes="(min-width: 768px) 42vw, 100vw"
+                  />
                 </div>
               </div>
             }
@@ -75,32 +95,49 @@ import { ProductCarousel } from './product-carousel';
         }
 
         @case ('bannerGrid') {
-          <section>
+          <section class="banners" [attr.data-count]="block.items.length === 1 ? 'single' : 'multi'">
             @if (block.heading) {
               <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
-            <kh-grid [fixedColumns]="block.columns" minColumnWidth="14rem" [gap]="3">
+            <!-- Never more columns than banners: one banner is a single full-width banner and two are
+                 two halves, whatever the block's \`columns\` says. -->
+            <kh-grid
+              [fixedColumns]="fit(block.columns, block.items.length)"
+              minColumnWidth="14rem"
+              [gap]="3"
+            >
               @for (item of block.items; track $index) {
+                <!-- A banner without a picture is a tinted tile carrying its caption in the display
+                     face. No placeholder glyph and no "No image" wording: that is an editor state and
+                     belongs in the admin canvas, not on a page a shopper can see. -->
                 @if (item.href) {
-                  <a class="banner" [routerLink]="item.href">
-                    <kh-product-image
-                      [source]="item.image"
-                      ratio="4 / 3"
-                      sizes="(min-width: 768px) 33vw, 100vw"
-                    />
+                  <a class="banner" [class.banner--flat]="!item.image" [routerLink]="item.href">
+                    @if (item.image) {
+                      <span class="pic">
+                        <kh-product-image
+                          [source]="item.image"
+                          [placeholder]="item.caption"
+                          sizes="(min-width: 768px) 50vw, 100vw"
+                        />
+                      </span>
+                    }
                     @if (item.caption) {
-                      <span>{{ item.caption }}</span>
+                      <span class="label">{{ item.caption }}</span>
                     }
                   </a>
                 } @else {
-                  <div class="banner">
-                    <kh-product-image
-                      [source]="item.image"
-                      ratio="4 / 3"
-                      sizes="(min-width: 768px) 33vw, 100vw"
-                    />
+                  <div class="banner" [class.banner--flat]="!item.image">
+                    @if (item.image) {
+                      <span class="pic">
+                        <kh-product-image
+                          [source]="item.image"
+                          [placeholder]="item.caption"
+                          sizes="(min-width: 768px) 50vw, 100vw"
+                        />
+                      </span>
+                    }
                     @if (item.caption) {
-                      <span>{{ item.caption }}</span>
+                      <span class="label">{{ item.caption }}</span>
                     }
                   </div>
                 }
@@ -120,6 +157,7 @@ import { ProductCarousel } from './product-carousel';
             style="margin-block: 0"
             [heading]="block.heading || 'Featured'"
             [products]="block.products"
+            [limit]="block.limit ?? null"
             [viewAllHref]="block.viewAllHref"
             (opened)="productOpened.emit($event)"
           />
@@ -130,20 +168,25 @@ import { ProductCarousel } from './product-carousel';
             @if (block.heading) {
               <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
-            <kh-grid [fixedColumns]="block.columns" minColumnWidth="7rem" [gap]="3">
+            <kh-grid
+              [fixedColumns]="fit(block.columns, block.items.length)"
+              minColumnWidth="7rem"
+              [gap]="3"
+            >
               @for (tile of block.items; track tile.href) {
-                <!-- With a photograph: the image and its caption. Without one: a compact, flat tile
-                     that carries the label once. A square placeholder with the name printed inside
-                     it and again beneath it was a tall empty box saying the same thing twice. -->
+                <!-- With a photograph: the image and its caption beneath. Without one: a tinted tile
+                     that carries the label once, in the display face. -->
                 <a class="tile" [class.tile--flat]="!tile.image" [routerLink]="tile.href">
                   @if (tile.image) {
-                    <kh-product-image
-                      [source]="tile.image"
-                      [placeholder]="tile.label"
-                      sizes="(min-width: 768px) 20vw, 45vw"
-                    />
+                    <span class="pic">
+                      <kh-product-image
+                        [source]="tile.image"
+                        [placeholder]="tile.label"
+                        sizes="(min-width: 768px) 25vw, 45vw"
+                      />
+                    </span>
                   }
-                  <span>{{ tile.label }}</span>
+                  <span class="label">{{ tile.label }}</span>
                 </a>
               }
             </kh-grid>
@@ -151,7 +194,7 @@ import { ProductCarousel } from './product-carousel';
         }
 
         @case ('richText') {
-          <section class="rich" [attr.data-width]="block.width">
+          <section class="rich" [attr.data-width]="block.width" [attr.data-align]="block.align ?? 'start'">
             @if (block.heading) {
               <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
@@ -175,7 +218,9 @@ import { ProductCarousel } from './product-carousel';
             @if (block.heading) {
               <h2 class="kh-section-heading">{{ block.heading }}</h2>
             }
-            <kh-grid minColumnWidth="16rem" [gap]="3">
+            <!-- Two quotes are two columns and three are three; four make two pairs, not a row of three
+                 and an orphan. -->
+            <kh-grid [fixedColumns]="quoteColumns(block.items.length)" minColumnWidth="16rem" [gap]="3">
               @for (item of block.items; track item.quote) {
                 <figure class="quote">
                   <blockquote>{{ item.quote }}</blockquote>
@@ -241,8 +286,39 @@ import { ProductCarousel } from './product-carousel';
       overflow-wrap: anywhere;
     }
 
+    /* Two bands in a row read as one surface: the second pulls up over the flex gap and the touching
+       corners square off, so the seam is the tint continuing rather than two rounded cards a gap
+       apart. A band under a hero or a bare block keeps the full section gap above it (the gap is
+       the flex gap, and nothing here reduces it). */
+    .banded + .banded {
+      margin-block-start: calc(-1 * var(--space-section));
+      border-start-start-radius: 0;
+      border-start-end-radius: 0;
+    }
+
+    .banded:has(+ .banded) {
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+    }
+
     .hero {
       min-width: 0;
+      /* One corner radius for every hero layout; the full-bleed one has none. */
+      --hero-radius: var(--radius-lg);
+    }
+
+    /* Full-bleed: edge to edge of the viewport, out of the page container the renderer sits in. The
+       renderer cannot know what wraps it, so it breaks out with the viewport arithmetic rather than
+       negative margins sized to a container; \`body\` clips the sub-pixel overshoot a scrollbar's
+       width would cause. The admin canvas turns it off (\`fullBleed\`) because a framed block must
+       stay inside its frame. */
+    .hero[data-layout='bleed'] {
+      --hero-radius: 0;
+    }
+
+    .hero[data-layout='bleed']:not(.hero--unbled) {
+      inline-size: 100vw;
+      margin-inline: calc(50% - 50vw);
     }
 
     /* No \`overflow\` here, deliberately. A box with an \`aspect-ratio\` only grows past that ratio to
@@ -255,17 +331,17 @@ import { ProductCarousel } from './product-carousel';
     .hero-media {
       position: relative;
       display: grid;
-      border-radius: var(--radius-lg);
+      border-radius: var(--hero-radius);
       /* The floor, not the ceiling: 4/5 keeps a hero that is nearly all copy from being a 200px-tall
-         strip on a 360px phone (16/9 at 360px is ~202px — not enough room for a headline, a
-         subheadline and a CTA without the text already crowding the photo before a merchant has
-         typed a word). Widens to the landscape crop from 'md', where there is width to spend on it. */
+         strip on a 360px phone. Widens to a landscape crop from 'md', capped to the viewport so the
+         call to action is on screen without scrolling at any desktop size. */
       aspect-ratio: 4 / 5;
     }
 
     @media (min-width: 768px) {
       .hero-media {
-        aspect-ratio: 16 / 9;
+        aspect-ratio: 21 / 9;
+        max-block-size: 80dvh;
       }
     }
 
@@ -292,26 +368,6 @@ import { ProductCarousel } from './product-carousel';
       border-radius: inherit;
     }
 
-    /* A flat, no-photograph hero gets the same dark surface the scrim guarantees contrast against,
-       so the copy reads identically either way. Sized generously rather than aspect-ratio-locked:
-       there is no photograph's proportions to respect, only the copy's own rhythm. */
-    .hero-media--flat {
-      /* Still a (single-cell) grid, not flex: \`.hero-copy\`'s \`justify-self\`/\`align-self\` below is
-         how both this branch and the photograph branch position the copy, and \`justify-self\` is not
-         reliably a flex-item property. */
-      align-items: center;
-      aspect-ratio: auto;
-      min-block-size: 18rem;
-      padding: var(--space-8) var(--space-6);
-      background: var(--color-surface-inverse);
-    }
-
-    @media (min-width: 768px) {
-      .hero-media--flat {
-        min-block-size: 22rem;
-      }
-    }
-
     /* The scrim. Guarantees WCAG AA for --color-text-on-image against a *worst-case pure-white*
        photograph — verified, not assumed: --color-surface-inverse (ink-900) has a relative
        luminance of ~0.0099, and blending it at 92% over a pure-white background (linear-light, per
@@ -326,44 +382,20 @@ import { ProductCarousel } from './product-carousel';
     }
 
     /* The scrim is a desktop layer only. Below 'md' the copy is a full-width block at the bottom of
-       the box and carries its own backing (\`.hero-copy::before\`, below), so the top of the
-       photograph is left alone instead of being washed flat to guarantee the text underneath it. */
+       the box and carries its own backing (\`.hero-media .hero-copy::before\`, below), so the top of
+       the photograph is left alone instead of being washed flat to guarantee the text under it. */
     .scrim {
       display: none;
     }
 
-    /* From 'md' the gradient follows \`align\`: darkest under the copy, fading out on the side
-       nothing sits on. The copy is \`max-inline-size: 38%\` of the box, so the 92% plateau stops at
-       exactly 38% (62% for \`right\`, 31–69% for \`centre\`) — the copy's own edge, which is also
-       beyond the edge of its text (the padding sits inside those 38%). Every pixel of text therefore
-       still sits on the full 92% tint, and the 9.8:1 worst-case arithmetic above holds unchanged;
-       only the part of the photograph *beside* the copy is released, fading to nothing by 64% (36%,
-       15–85%). Every stop is a percentage of the box, matched to \`.hero-copy\`'s own percentage
-       width below, not a fixed length, so the relationship holds at any width in this tier. */
+    /* From 'md' the full-bleed hero is centred, so the gradient is darkest under the copy and fades
+       out either side. The copy is \`max-inline-size: 38%\` of the box, so the 92% plateau runs from
+       31% to 69% — the copy's own edges, which are also beyond the edge of its text (the padding
+       sits inside those 38%). Every pixel of text therefore still sits on the full 92% tint, and the
+       9.8:1 worst-case arithmetic above holds unchanged. */
     @media (min-width: 768px) {
       .scrim {
         display: block;
-      }
-
-      .hero[data-align='left'] .scrim {
-        background: linear-gradient(
-          to right,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 0%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 38%,
-          transparent 64%
-        );
-      }
-
-      .hero[data-align='right'] .scrim {
-        background: linear-gradient(
-          to left,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 0%,
-          color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) 38%,
-          transparent 64%
-        );
-      }
-
-      .hero[data-align='centre'] .scrim {
         background: linear-gradient(
           to right,
           transparent 15%,
@@ -374,82 +406,15 @@ import { ProductCarousel } from './product-carousel';
       }
     }
 
+    /* The copy, in every layout: a column, with the CTA at its own width. The overlay, split and
+       plain layouts each set the colour, padding and alignment around it. */
     .hero-copy {
-      position: relative;
-      z-index: 1;
       display: flex;
       flex-direction: column;
-      /* Phone: the copy sits at the bottom of the box so the top of the photograph shows. */
-      align-self: end;
-      justify-self: start;
-      /* The height of the fade above the copy on a phone, inside the copy's own box (see
-         \`::before\`) — it must be padding, not a negative offset, because the box grows to fit the
-         copy and a fade hanging above it would paint outside the hero once the copy is long. */
-      --hero-fade: var(--space-10);
-      /* The CTA keeps its own width, as it does in a centred or right-aligned hero, instead of
-         stretching across the whole copy column — a 400px button on a desktop left-aligned hero. */
       align-items: flex-start;
       gap: var(--space-3);
-      max-inline-size: 100%;
-      padding: calc(var(--space-6) + var(--hero-fade)) var(--space-5) var(--space-6);
-      color: var(--color-text-on-image);
+      min-inline-size: 0;
       text-align: start;
-    }
-
-    /* Phone backing. A bottom-up gradient on the copy's own box rather than a percentage of the
-       hero: the copy's height varies with what an editor types, and a box-relative "opaque to 60%"
-       stops covering the first line of a long headline. This one is opaque (the same 92% tint, so
-       the same 9.8:1) exactly as far up as the copy goes, and the \`--hero-fade\` strip above it —
-       which holds no text — is what fades into the photograph. z-index -1 stays above the photo
-       and below the text because \`.hero-copy\` is its own stacking context. */
-    .hero-copy::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-      background: linear-gradient(
-        to top,
-        color-mix(in srgb, var(--color-surface-inverse) 92%, transparent) calc(100% - var(--hero-fade)),
-        transparent 100%
-      );
-    }
-
-    @media (min-width: 768px) {
-      .hero-copy {
-        /* The scrim's plateau above ends exactly at this 38%, so the whole copy box (text and its
-           padding) sits on the guaranteed-opaque zone at every width from here up, because both are
-           the same kind of value (a percentage of the box). */
-        max-inline-size: 38%;
-        align-self: center;
-        --hero-fade: 0px;
-        padding: var(--space-8);
-      }
-
-      .hero-copy::before {
-        display: none;
-      }
-    }
-
-    .hero-media--flat .hero-copy {
-      align-self: center;
-      padding: 0;
-    }
-
-    .hero-media--flat .hero-copy::before {
-      display: none;
-    }
-
-    .hero[data-align='centre'] .hero-copy {
-      justify-self: center;
-      text-align: center;
-      align-items: center;
-    }
-
-    .hero[data-align='right'] .hero-copy {
-      justify-self: end;
-      text-align: end;
-      align-items: flex-end;
     }
 
     .hero-copy h2 {
@@ -465,10 +430,161 @@ import { ProductCarousel } from './product-carousel';
       margin: 0;
     }
 
+    /* The overlay copy (full-bleed). */
+    .hero-media .hero-copy {
+      position: relative;
+      z-index: 1;
+      /* Phone: the copy sits at the bottom of the box so the top of the photograph shows. */
+      align-self: end;
+      justify-self: center;
+      align-items: center;
+      text-align: center;
+      /* The height of the fade above the copy on a phone, inside the copy's own box (see
+         \`::before\`) — it must be padding, not a negative offset, because the box grows to fit the
+         copy and a fade hanging above it would paint outside the hero once the copy is long. */
+      --hero-fade: var(--space-10);
+      max-inline-size: 100%;
+      padding: calc(var(--space-6) + var(--hero-fade)) var(--space-5) var(--space-6);
+      color: var(--color-text-on-image);
+    }
+
+    /* Phone backing. A bottom-up gradient on the copy's own box rather than a percentage of the
+       hero: the copy's height varies with what an editor types, and a box-relative "opaque to 60%"
+       stops covering the first line of a long headline. This one is opaque (the same 92% tint, so
+       fully opaque, so nothing of the photograph shows behind the text or the call to action; 9.8:1 is the floor and this is higher) exactly as far up as the copy goes, and the \`--hero-fade\` strip above it —
+       which holds no text — is what fades into the photograph. z-index -1 stays above the photo
+       and below the text because \`.hero-copy\` is its own stacking context. */
+    .hero-media .hero-copy::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: 0 0 var(--hero-radius) var(--hero-radius);
+      background: linear-gradient(
+        to top,
+        var(--color-surface-inverse) calc(100% - var(--hero-fade)),
+        transparent 100%
+      );
+    }
+
+    @media (min-width: 768px) {
+      .hero-media .hero-copy {
+        /* The scrim's plateau above ends exactly at this 38%, so the whole copy box (text and its
+           padding) sits on the guaranteed-opaque zone at every width from here up, because both are
+           the same kind of value (a percentage of the box). */
+        max-inline-size: 38%;
+        align-self: center;
+        --hero-fade: 0px;
+        padding: var(--space-8);
+      }
+
+      .hero-media .hero-copy::before {
+        display: none;
+      }
+    }
+
     /* The ink ring is unreadable against the same ink the scrim is built from — the inverse ring,
        same as \`.kh-band--inverse\` (_base.scss) uses for the same reason on the footer. */
-    .hero-copy :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    .hero-media .hero-copy :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
       outline-color: var(--color-focus-ring-inverse);
+    }
+
+    /* The split card: a light panel, copy on one side and the picture at 4:5 on the other. On a
+       phone the picture comes first and is cropped shorter (4:3), so the headline is on screen
+       with it; from 'md' the picture column is 42% of the card, and the card is as tall as the picture's 4:5 at
+       that width. */
+    .hero-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: hidden;
+      border-radius: var(--hero-radius);
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .hero-split .hero-copy {
+      justify-content: center;
+      padding: var(--space-6) var(--space-5);
+    }
+
+    .hero-pic {
+      display: grid;
+      order: -1;
+      aspect-ratio: 4 / 3;
+      min-width: 0;
+    }
+
+    @media (min-width: 768px) {
+      .hero-split {
+        grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+      }
+
+      .hero-split .hero-copy {
+        padding: var(--space-8);
+        max-inline-size: 36ch;
+      }
+
+      .hero-split .hero-copy h2 {
+        font-size: var(--text-display-md);
+      }
+
+      .hero-pic {
+        order: 0;
+        aspect-ratio: 4 / 5;
+        max-block-size: 36rem;
+      }
+
+      /* Mirrored when the block asks for the copy on the right. */
+      .hero[data-align='right'] .hero-split {
+        grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+      }
+
+      .hero[data-align='right'] .hero-pic {
+        order: -1;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .hero-split .hero-copy {
+        padding-inline: var(--space-10);
+      }
+
+      .hero-split .hero-copy h2 {
+        font-size: var(--text-display-lg);
+      }
+    }
+
+    /* No picture: a short light panel on the surface role, ink text, primary CTA. Content-sized, so
+       it is as tall as its copy and about 240px at desktop; there is no ink slab to fill. */
+    .hero-plain {
+      display: grid;
+      align-items: center;
+      padding: var(--space-6) var(--space-5);
+      border-radius: var(--hero-radius);
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    @media (min-width: 768px) {
+      .hero-plain {
+        padding: var(--space-8);
+      }
+    }
+
+    .hero-plain .hero-copy {
+      max-inline-size: 40rem;
+    }
+
+    .hero[data-align='centre'] .hero-plain .hero-copy {
+      justify-self: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .hero[data-align='right'] .hero-plain .hero-copy {
+      justify-self: end;
+      align-items: flex-end;
+      text-align: end;
     }
 
     .banner,
@@ -481,53 +597,104 @@ import { ProductCarousel } from './product-carousel';
       min-width: 0;
       color: var(--color-text);
       text-decoration: none;
-      font-size: var(--text-sm);
       text-align: center;
     }
 
-    /* The image-less category tile: a short raised chip rather than a square. Depth comes from the
-       soft shadow, not a darker border, and the lift is shadow-only so a grid does not shuffle. */
-    .tile--flat {
-      justify-content: center;
-      min-block-size: 5rem;
-      padding: var(--space-3) var(--space-4);
-      background: var(--color-surface-raised);
-      border: 1px solid var(--color-border-subtle);
+    /* The picture fills a fixed-aspect box and is cropped to it (\`object-fit: cover\`), never drawn
+       at its intrinsic width centred in a tinted box. The image is laid over the box rather than
+       sizing it, so the aspect ratio below is the whole story: tiles 4:3, a banner pair 3:2, a
+       single banner 4:3 on a phone and 21:9 (capped at 420px) from 'md'. */
+    .pic {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
+      background: var(--color-surface-sunken);
+    }
+
+    .pic kh-product-image {
+      --kh-image-block-size: 100%;
+      --kh-image-fit: cover;
+      position: absolute;
+      inset: 0;
+      contain: size;
+    }
+
+    .banner .pic {
+      aspect-ratio: 3 / 2;
+    }
+
+    .banners[data-count='single'] .banner .pic {
+      aspect-ratio: 4 / 3;
+    }
+
+    @media (min-width: 768px) {
+      .banners[data-count='single'] .banner .pic {
+        aspect-ratio: 21 / 9;
+        max-block-size: 420px;
+        inline-size: 100%;
+      }
+    }
+
+    /* The caption is the primary label: the display face at the card-title size, under the picture.
+       There is no second, smaller label. */
+    .label {
       font-family: var(--font-display);
-      font-size: var(--text-base);
+      font-size: var(--text-lg);
       font-weight: var(--weight-display);
       letter-spacing: var(--tracking-display);
+      line-height: var(--leading-tight);
+    }
+
+    /* The image-less banner and category tile: one tinted tile, the caption set in the display face
+       inside it. Same shape and radius as the photographed ones, so a grid that mixes the two keeps
+       its rhythm; the lift is shadow-only so a grid does not shuffle. */
+    .banner--flat,
+    .tile--flat {
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 4 / 3;
+      padding: var(--space-4);
+      background: var(--color-surface-sunken);
+      border-radius: var(--radius-lg);
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: var(--weight-display);
+      letter-spacing: var(--tracking-display);
+      line-height: var(--leading-tight);
       transition:
         box-shadow var(--duration-base) var(--ease-standard),
         transform var(--duration-base) var(--ease-standard);
     }
 
+    a.banner--flat:hover,
     .tile--flat:hover {
       box-shadow: var(--shadow-md);
       transform: translateY(-2px);
     }
 
-    /* Three width tiers, all centred the same way — \`narrow\` and \`wide\` inset from the full-width
-       blocks around them symmetrically rather than hugging the left edge with a growing gap on the
-       right, which is what a bare \`max-inline-size\` with no \`margin-inline\` would do. \`full\` needs
-       no rule of its own: with neither set it already fills \`khContainer\`, same as every other
-       block. \`narrow\` is the reading measure — the same token \`kh-prose\`/\`khContainer\`'s own
-       narrow size use, not a second literal for this component to drift out of step with if the
-       token ever changes. \`wide\` is the new middle tier: a merchandising page with a wide
-       photograph or a table that still should not run the full 1280px a listing page needs. */
-    .rich[data-width='narrow'],
-    .rich[data-width='wide'] {
-      margin-inline: auto;
-    }
-
+    /* Rich text has two presentations. \`start\` (the default) sits at the page gutter on the reading
+       measure, left-aligned like the content around it. \`centre\` centres the column *and* its text,
+       so the paragraph and the margins either side of it agree. \`full\` needs no width rule: with
+       neither set it already fills \`khContainer\`. \`narrow\` is the reading measure — the same token
+       \`kh-prose\` uses. \`wide\` is the middle tier for a page with a wide photograph or a table. */
     .rich[data-width='narrow'] {
       max-inline-size: var(--measure);
     }
 
     .rich[data-width='wide'] {
       max-inline-size: var(--container-wide);
+    }
+
+    .rich[data-align='centre'] {
+      margin-inline: auto;
+      text-align: center;
+    }
+
+    .rich[data-align='centre'] .kh-section-heading::after {
+      inset-inline-start: 50%;
+      transform: translateX(-50%);
     }
 
     /* \`.rich-body\` itself is fine as a scoped style — Angular renders this \`<div>\`, so it carries
@@ -594,6 +761,21 @@ export class CmsBlockRenderer {
   );
   /** Whether the first block may claim the LCP image. False for a page that has its own. */
   readonly prioritiseFirst = input(true);
+  /**
+   * Whether a centred hero with a picture runs edge to edge of the viewport. True on the
+   * storefront; the admin canvas turns it off because a block drawn inside a frame must stay in it.
+   */
+  readonly fullBleed = input(true);
 
   readonly productOpened = output<ProductCardView>();
+
+  /** A grid never has more columns than it has cells, so two tiles are two halves, not two thirds. */
+  protected fit(columns: number, count: number): number {
+    return Math.max(1, Math.min(columns, count));
+  }
+
+  /** Quote columns: one to three across, and four make two pairs rather than three and an orphan. */
+  protected quoteColumns(count: number): number {
+    return count === 4 ? 2 : Math.max(1, Math.min(3, count));
+  }
 }

@@ -219,6 +219,8 @@ export type CmsBlockView =
       readonly id: string;
       readonly heading: string | null;
       readonly viewAllHref: string | null;
+      /** The most products to show; absent or null means all of them. */
+      readonly limit?: number | null;
       readonly products: readonly ProductCardView[];
     }
   | {
@@ -238,6 +240,8 @@ export type CmsBlockView =
       readonly heading: string | null;
       readonly html: string;
       readonly width: 'narrow' | 'wide' | 'full';
+      /** `start` sits at the page gutter, `centre` centres the column and its text. Absent means `start`. */
+      readonly align?: 'start' | 'centre';
     }
   | {
       readonly kind: 'faq';

@@ -80,6 +80,7 @@ export class CmsBlockMapper {
           id,
           heading: optional(config['heading']),
           viewAllHref: optional(config['viewAllHref']),
+          limit: positiveInt(config['limit']),
           products: block.products.map((product) => this.catalog.productCardToCard(product)),
         };
 
@@ -105,6 +106,7 @@ export class CmsBlockMapper {
           heading: optional(config['heading']),
           html: text(config['body']),
           width: width(config['width']),
+          align: textAlign(config['align']),
         };
 
       case 'Faq':
@@ -197,4 +199,15 @@ function align(value: unknown): 'left' | 'centre' | 'right' {
 function width(value: unknown): 'narrow' | 'wide' | 'full' {
   const written = text(value);
   return written === 'wide' || written === 'full' ? written : 'narrow';
+}
+
+/** A positive whole number, or null: a `limit` left blank or typed as nonsense means "all of them". */
+function positiveInt(value: unknown): number | null {
+  const parsed = numeric(value);
+  return parsed !== null && parsed >= 1 ? Math.floor(parsed) : null;
+}
+
+/** The rich-text column's presentation. Anything but `centre` (including a block saved before the field existed) is `start`. */
+function textAlign(value: unknown): 'start' | 'centre' {
+  return text(value) === 'centre' ? 'centre' : 'start';
 }

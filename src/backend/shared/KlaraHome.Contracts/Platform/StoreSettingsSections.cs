@@ -77,6 +77,15 @@ public sealed record BrandingSettings : ISettingsSection<BrandingSettings>
     /// </remarks>
     public IReadOnlyDictionary<string, string> ThemeTokens { get; init; } =
         new Dictionary<string, string>();
+
+    /// <summary>The storefront template last applied from Grow, or empty. Informational: it names a catalogue id and changes nothing by itself.</summary>
+    public string TemplateId { get; init; } = string.Empty;
+
+    /// <summary>The header treatment: <c>inline</c>, <c>centred</c>, <c>search</c> or <c>wordmark</c>. The default reproduces the original header.</summary>
+    public string HeaderStyle { get; init; } = "inline";
+
+    /// <summary>The footer treatment: <c>columns</c>, <c>slim</c> or <c>columnsNewsletter</c>. The default reproduces the original footer.</summary>
+    public string FooterStyle { get; init; } = "columns";
 }
 
 /// <summary>

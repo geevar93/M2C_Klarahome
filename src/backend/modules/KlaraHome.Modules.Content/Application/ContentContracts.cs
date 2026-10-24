@@ -685,3 +685,27 @@ internal sealed record SeoConfigResponse(
     string TwitterCardType,
     string RobotsUrl,
     string SitemapUrl);
+
+/// <summary>
+/// A storefront template, as the Grow &gt; Storefront designer lists it.
+/// </summary>
+/// <remarks>
+/// The catalogue is static data in the Content module (<c>StorefrontTemplateCatalog</c>). The blocks
+/// are not listed here: a template is previewed through <c>GET /storefront-templates/{id}/preview</c>,
+/// which returns them filled from the live catalogue and resolved the way the storefront would.
+/// </remarks>
+/// <param name="Id">The stable key, also stored in <c>branding.templateId</c>.</param>
+/// <param name="Name">What the merchant sees.</param>
+/// <param name="Suits">The kind of store it suits.</param>
+/// <param name="Description">How it feels, in a sentence or two.</param>
+/// <param name="HeaderStyle">The header treatment: <c>inline</c>, <c>centred</c>, <c>search</c> or <c>wordmark</c>.</param>
+/// <param name="FooterStyle">The footer treatment: <c>columns</c>, <c>slim</c> or <c>columnsNewsletter</c>.</param>
+/// <param name="PaletteIds">The curated theme preset ids offered with it.</param>
+internal sealed record StorefrontTemplateResponse(
+    string Id,
+    string Name,
+    string Suits,
+    string Description,
+    string HeaderStyle,
+    string FooterStyle,
+    IReadOnlyList<string> PaletteIds);
